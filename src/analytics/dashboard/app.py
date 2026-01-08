@@ -2,7 +2,7 @@ import streamlit as st
 import plotly.express as px
 from pathlib import Path
 from utils.data_loader import SpotifyDataLoader
-from analytics.features.analysis_functions import get_top_artists, get_raw_df
+from analytics.features.analysis_functions import get_top_artists, get_top_tracks, get_raw_df, get_monthly_listening_trend
 
 st.set_page_config(page_title="Spotify AI Analytics", page_icon="🎵", layout="wide")
 
@@ -51,12 +51,13 @@ def main():
             # Create Plotly figure
             fig = px.bar(
                 top_artists_df.head(10).to_pandas(), 
-                x="minutes_played_sum", 
+                x="minutes_played", 
                 y="artist",
                 orientation='h',
                 title="Top 5 Artists (Minutes Played)",
-                labels={"minutes_played_sum": "Minutes Listened", "artist": "Artist"},
-                color="minutes_played_sum",
+                labels={"minutes_played": "Minutes Listened", "artist": "Artist"},
+                hover_data=["total_tracks_played", "unique_listened_tracks", "ratio_uniq_over_total", "avg_played_min_of_track"],
+                color="minutes_played",
                 color_continuous_scale="Viridis"
             )
             fig.update_layout(yaxis={'categoryorder':'total ascending'})
@@ -71,12 +72,66 @@ def main():
         else:
             st.info("No data found for the selected date range.")
 
+    st.header("Top 5 Tracks by Listening Time")
+    
+    with st.spinner("Calculating top tracks..."):
+        # TODO: add input so that user can filter artists for quering top trakcs
+        top_tracks_df = get_top_tracks(loader, k=None, start_date=start_date, end_date=end_date)
+        
+        if not top_tracks_df.is_empty():
+            # Create Plotly figure
+            fig = px.bar(
+                top_tracks_df.head(10).to_pandas(), 
+                x="play_count", 
+                y="track",
+                orientation='h',
+                title="Top 5 Tracks (Times Played)",
+                labels={"track": "Track", "play_count": "Times Played", "minutes_played": "Total listening time (Minutes)", "artist": "Artist", "album": "Album"},
+                hover_data=["minutes_played", "artist", "album", ],
+                color="artist"
+            )
+            fig.update_layout(yaxis={'categoryorder':'total ascending'})
+            st.plotly_chart(fig, width="stretch")
+            
+            # Show table view
+            st.subheader("Data Table: `get_top_tracks`")
+            st.dataframe(top_tracks_df.to_pandas().set_axis(
+                    range(1, len(top_tracks_df)+1), axis=0
+                    ).head(100),
+                    width="stretch", )
+        else:
+            st.info("No data found for the selected date range.")
+
+    # Monthly Trend Section
+    st.header("Monthly Listening Trend")
+    with st.spinner("Calculating monthly trend..."):
+        trend_df = get_monthly_listening_trend(loader, start_date=start_date, end_date=end_date)
+        
+        if not trend_df.is_empty():
+            fig_trend = px.bar(
+                trend_df.to_pandas(),
+                x="month_label",
+                y="total_minutes",
+                title="Monthly Listening Time (Minutes)",
+                labels={"month_label": "Month", "total_minutes": "Minutes Played"},
+                hover_data=["year", "month", "total_tracks_played", "unique_listened_tracks"],
+                color="total_minutes",
+                color_continuous_scale="Viridis"
+            )
+            fig_trend.update_layout(xaxis_tickangle=-45,
+                                    xaxis_tickformat="%Y",
+                                    # xaxis_dtick="M6",
+                                    xaxis_title="Month",)
+            st.plotly_chart(fig_trend, use_container_width=True)
+        else:
+            st.info("No trend data found for the selected date range.")
+
     # playground
     st.header("Raw Data Preview")    
-    with st.spinner("Calculating top artists..."):
+    with st.spinner("Loading raw data..."):
         raw_df = get_raw_df(loader, limit=100, start_date=start_date, end_date=end_date)
         st.subheader("Table ")
-        if not top_artists_df.is_empty():
+        if not raw_df.is_empty():
             st.dataframe(raw_df.to_pandas().set_axis(
                     range(1, len(raw_df)+1), axis=0
                 ),
@@ -89,6 +144,10 @@ def main():
 # y axis: listenlingtime (or normalized to proportion of total listening time) / rank 
 # lines: favrotite artists / tracks (this may not work)
 # lines can be selectively shown or not
+
+# Listening Trend: Daytime (moring/afternoon/evening/night) analysis
+
+# Listening Trend: Week time analysis
 
 
 
