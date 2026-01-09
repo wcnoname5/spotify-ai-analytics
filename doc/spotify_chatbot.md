@@ -34,6 +34,14 @@ python examples/main.py
 
 This will invoke the agent with a sample query like *"Show me my top 5 artists and tracks from January 2024"* and print the structured analysis.
 
+### Local GUI
+
+To launch a local Streamlit-based GUI for interacting with the chatbot, run:
+
+```bash
+uv run streamlit run src/app/main_gui.py
+```
+
 ## Graph Workflow
 
 The chatbot is built using **LangGraph**, orchestrating a specialized multi-step process to ensure data accuracy and conversational quality.
