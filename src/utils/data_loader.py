@@ -24,7 +24,7 @@ class SpotifyDataLoader:
         12. shuffle: Boolean
         13. skipped: Boolean
         14. year: Int32
-        15. month: Int8
+        15. month: str
         16. weekday: str
         17. hour: Int8
         18. date: Date
@@ -45,17 +45,28 @@ class SpotifyDataLoader:
             self.data_dir = Path(directory).resolve()
             
         self.file_pattern = file_pattern
-        # logging pattern
+        # intialize logging pattern
         self._logger_prefix = (
             f"{self.__class__.__module__}."
             f"{self.__class__.__name__}"
         )
         # initialize df
-        self.df: Optional[pl.DataFrame] = None
+        self._df: pl.DataFrame | None = None
         self.initialize_data()
 
     def _get_logger(self, method_name: str):
         return logging.getLogger(f"{self._logger_prefix}.{method_name}")
+    
+    @property
+    def df(self) -> Optional[pl.DataFrame]:
+        # TODO: can use cache in future improvements
+        return self._df
+    
+    @property
+    def lazy(self) -> pl.LazyFrame:
+        if self._df is None:
+            raise RuntimeError("Data not loaded")
+        return self._df.lazy()
 
     def initialize_data(self) -> None:
         """
@@ -65,9 +76,9 @@ class SpotifyDataLoader:
         logger.info("Processing raw JSON data into structured DataFrame")
         df = self._read_json_files(self.data_dir, self.file_pattern)
         if df.is_empty():
-            self.df = pl.DataFrame()
+            self._df = pl.DataFrame()
         else:
-            self.df = self._preprocess(df)
+            self._df = self._preprocess(df)
     
     def _read_json_files(self, directory: Path, pattern: str = "Streaming*.json") -> pl.DataFrame:
         """Read JSON files in a directory matching the pattern into a Polars DataFrame."""
@@ -112,11 +123,12 @@ class SpotifyDataLoader:
             pl.col("master_metadata_track_name").is_not_null()
         )
         # Optional: return final columns names and types in loggings
+        # TODO: use pydantic model to check if the columns are with correct data type
         return (
             working_df
             .select([
             pl.col("ts").str.strptime(pl.Datetime, format="%+").dt.replace_time_zone("UTC").dt.convert_time_zone("Asia/Taipei").alias("timestamp"),
-            pl.col("ts").cast(pl.Utf8).alias("ts"),
+            pl.col("ts").cast(pl.Utf8).alias("ts"), # this seems unnecessary?
             pl.col("ms_played").cast(pl.Duration("ms")),
             pl.col("master_metadata_track_name").alias("track"),
             pl.col("master_metadata_album_artist_name").alias("artist"),
@@ -132,18 +144,22 @@ class SpotifyDataLoader:
             .filter(pl.col("ms_played") > 0)
             .with_columns(
                 year = pl.col("timestamp").dt.year(),
-                month = pl.col("timestamp").dt.month(),
+                month = pl.col("timestamp").dt.strftime("%b"), # 簡寫
                 weekday = pl.col("timestamp").dt.strftime("%a"),
                 hour = pl.col("timestamp").dt.hour(),
                 date = pl.col("timestamp").dt.date(),
             )
         )
 
+    # Methods:
     def get_summary(self) -> Dict[str, Any]:
         """
         Get a summary of the loaded data.
+        should consider how to merge with `get_summary_by_time` in analysis_functions in the future:
+        problem: start_date and end_date type should be date or string
+            - LLM may fit latter
         """
-        if self.df is None or self.df.is_empty():
+        if self._df is None or self._df.is_empty():
             return {
                 'total_records': 0,
                 'total_listening_time': 0,
@@ -154,22 +170,22 @@ class SpotifyDataLoader:
             }
 
         summary = {
-            'total_records': self.df.height, # total listening records
+            'total_records': self._df.height, # total listening records
             'total_listening_time': 0, # in minutes
-            'columns': list(self.df.columns), 
+            'columns': list(self._df.columns), 
             'date_range': None, # start and end dates{'start': ..., 'end': ...}
             'unique_tracks': None,
             'unique_artists': None
         }
-        if 'ms_played' in self.df.columns:
+        if 'ms_played' in self._df.columns:
             # Use Polars duration methods for unit conversion
-            total_minutes = self.df.select(
+            total_minutes = self._df.select(
                 pl.col('ms_played').sum().dt.total_minutes()
             ).item()
             summary['total_listening_time'] = int(total_minutes)
 
-        if 'date' in self.df.columns:
-            arr = self.df.select(pl.col('date')).to_series()
+        if 'date' in self._df.columns:
+            arr = self._df.select(pl.col('date')).to_series()
             summary['date_range'] = {
                 'start': str(arr.min()),
                 'end': str(arr.max())
@@ -177,11 +193,11 @@ class SpotifyDataLoader:
 
         track_identifier = 'track_uri' # use track URI for uniqueness ()
         if track_identifier:
-            summary['unique_tracks'] = int(self.df.select(pl.col(track_identifier).n_unique()).item())
+            summary['unique_tracks'] = int(self._df.select(pl.col(track_identifier).n_unique()).item())
 
         artist_col_name = 'artist'
         if artist_col_name:
-            summary['unique_artists'] = int(self.df.select(pl.col(artist_col_name).n_unique()).item())
+            summary['unique_artists'] = int(self._df.select(pl.col(artist_col_name).n_unique()).item())
 
         return summary
 
@@ -215,10 +231,10 @@ class SpotifyDataLoader:
             Polars DataFrame with filtered, selected, and sorted data.
         """
 
-        if self.df is None or self.df.is_empty():
+        if self._df is None or self._df.is_empty():
             return pl.DataFrame()
 
-        df = self.df
+        df = self._df
 
         if where is not None:
             if isinstance(where, list):
@@ -281,10 +297,10 @@ class SpotifyDataLoader:
             Polars DataFrame with aggregated results.
         """
 
-        if self.df is None or self.df.is_empty():
+        if self._df is None or self._df.is_empty():
             return pl.DataFrame()
 
-        df = self.df
+        df = self._df
 
         # Apply filters
         if where is not None:
@@ -348,15 +364,16 @@ class SpotifyDataLoader:
     def create_text_documents(self) -> List[str]:
         """
         Create text documents for RAG indexing.
+        deprecating
         """
-        if self.df is None:
+        if self._df is None:
             self.initialize_data()
-        if self.df is None or self.df.is_empty():
+        if self._df is None or self._df.is_empty():
             return []
 
         documents: List[str] = []
 
-        for row in self.df.iter_rows(named=True):
+        for row in self._df.iter_rows(named=True):
             track = row.get('track', 'Unknown Track')
             artist = row.get('artist', 'Unknown Artist')
             album = row.get('album', None)
@@ -378,4 +395,4 @@ class SpotifyDataLoader:
 
     def get_listening_history_df(self) -> pl.DataFrame:
         """Return the processed listening history DataFrame."""
-        return self.df if self.df is not None else pl.DataFrame()
+        return self._df if self._df is not None else pl.DataFrame()

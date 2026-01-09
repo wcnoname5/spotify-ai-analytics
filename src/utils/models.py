@@ -23,7 +23,7 @@ class Track(pydantic.BaseModel):
     shuffle: bool
     skipped: bool
     year: int
-    month: int
-    weekday: str
+    month: str # TODO: specify it is '%b' Jan, Feb...
+    weekday: str #  TODO: specify it is '%a' Mon, Tue, ...
     hour: int
     date: date
