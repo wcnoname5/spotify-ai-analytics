@@ -15,6 +15,25 @@ Also provide a dashboard module that handles data loading, preprocessing, and in
 
     4. `other`: It jusct catch all other annoying queries that are not related to the data
 
+## Quick Start
+
+1. Install dependencies:
+```bash
+uv sync
+```
+
+2. Run the application:
+```bash
+uv run streamlit run src/app/main_page.py
+```
+
+## Project Structure
+- `src/app/main_page.py`: Main entry point for the Streamlit GUI.
+- `src/app/chatbot_page.py`: Chatbot interface.
+- `src/app/dashboard.py`: Analytics dashboard.
+- `src/spotify_agent/`: LangGraph implementation of the AI agent.
+- `src/dataloader/`: Data reading and processing logic.
+
 ## Note:
 
 Project is under active development. The dashboard module is still being built out, and more analysis functions will be added over time. Contributions and feedback are welcome!

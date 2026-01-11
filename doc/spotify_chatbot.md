@@ -39,7 +39,7 @@ This will invoke the agent with a sample query like *"Show me my top 5 artists a
 To launch a local Streamlit-based GUI for interacting with the chatbot, run:
 
 ```bash
-uv run streamlit run src/app/main_gui.py
+uv run streamlit run src/app/main_page.py
 ```
 
 ## Graph Workflow

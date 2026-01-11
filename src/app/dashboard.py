@@ -5,8 +5,8 @@ from dataloader import (
     get_summary_by_time, 
     get_raw_df
 )
-from analytics.dashboard.track_artist import render_track_artist_analysis
-from analytics.dashboard.time_analysis import render_time_analysis
+from app.track_analysis import render_track_artist_analysis
+from app.time_analysis import render_time_analysis
 
 # return loader as a global instance (cached resource)
 @st.cache_resource
