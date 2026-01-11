@@ -19,7 +19,7 @@ def render_track_artist_analysis(loader, start_date, end_date, show_tables):
         gap="medium",
     ):
         # Place filters at the top of the section for better interactive flow
-        top_k = st.select_slider("Top results (k)",
+        top_k = st.select_slider("Top results to display:",
                                 options=list(range(5, 26)), value=5,
                                 )
         st.text_input(

@@ -1,13 +1,22 @@
 import polars as pl
-from typing import Literal, Optional, Dict
+from typing import Literal, Optional, Dict, TypedDict
 from datetime import date
 from utils.data_loader import SpotifyDataLoader
+
+class SummaryStats(TypedDict):
+    total_records: int
+    total_listening_time: int  # in minutes
+    columns: list[str]
+    date_range: Optional[Dict[str, str]]  # {'start': 'YYYY-MM-DD', 'end': 'YYYY-MM-DD'}
+    unique_tracks: int
+    unique_artists: int
+    
 
 def get_summary_by_time(
     loader: SpotifyDataLoader,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None
-)-> Dict:
+)-> SummaryStats:
     filters = []
     if start_date:
         filters.append(pl.col("date") >= start_date)
@@ -21,41 +30,38 @@ def get_summary_by_time(
             'total_listening_time': 0,
             'columns': [],
             'date_range': None,
-            'unique_tracks': None,
-            'unique_artists': None
+            'unique_tracks': 0,
+            'unique_artists': 0
         }
 
-    summary = {
-        'total_records': df.height, # total listening records
-        'total_listening_time': 0, # in minutes
-        'columns': list(df.columns), 
-        'date_range': None, # start and end dates{'start': ..., 'end': ...}
-        'unique_tracks': None,
-        'unique_artists': None
-    }
+    # Perform calculations in a single selection for optimal performance
+    metrics = []
     if 'ms_played' in df.columns:
-        # Use Polars duration methods for unit conversion
-        total_minutes = df.select(
-            pl.col('ms_played').sum().dt.total_minutes()
-        ).item()
-        summary['total_listening_time'] = int(total_minutes)
-
+        metrics.append(pl.col('ms_played').sum().dt.total_minutes().alias('total_min'))
     if 'date' in df.columns:
-        arr = df.select(pl.col('date')).to_series()
-        summary['date_range'] = {
-            'start': str(arr.min()),
-            'end': str(arr.max())
-        }
+        metrics.extend([
+            pl.col('date').min().alias('start_date'),
+            pl.col('date').max().alias('end_date')
+        ])
+    if 'track_uri' in df.columns:
+        metrics.append(pl.col('track_uri').n_unique().alias('unique_tracks'))
+    if 'artist' in df.columns:
+        metrics.append(pl.col('artist').n_unique().alias('unique_artists'))
 
-    track_identifier = 'track_uri' # use track URI for uniqueness ()
-    if track_identifier:
-        summary['unique_tracks'] = int(df.select(pl.col(track_identifier).n_unique()).item())
+    results = df.select(metrics).to_dicts()[0]
 
-    artist_col_name = 'artist'
-    if artist_col_name:
-        summary['unique_artists'] = int(df.select(pl.col(artist_col_name).n_unique()).item())
+    return {
+        'total_records': df.height,
+        'total_listening_time': int(results.get('total_min') or 0),
+        'columns': list(df.columns),
+        'date_range': {
+            'start': str(results['start_date']),
+            'end': str(results['end_date'])
+        } if results.get('start_date') else None,
+        'unique_tracks': int(results.get('unique_tracks', 0)),
+        'unique_artists': int(results.get('unique_artists', 0))
+    }
 
-    return summary
 
 def get_top_artists(
     loader: SpotifyDataLoader,
