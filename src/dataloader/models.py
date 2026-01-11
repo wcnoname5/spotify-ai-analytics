@@ -48,7 +48,7 @@ class JsonTrackRecord(BaseModel):
     reason_end: Literal[*REASON_END]
     shuffle: bool
     skipped: bool
-    offline: bool
+    offline: Optional[bool] = None
     offline_timestamp: Optional[int] = None # not sure what this field does
     incognito_mode: Optional[bool] = None
 
