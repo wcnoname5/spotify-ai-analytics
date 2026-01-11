@@ -5,38 +5,32 @@ import logging
 import polars as pl
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Literal
+from pydantic import ValidationError
 from config.settings import PROJECT_ROOT
+from .models import JsonTrackRecord, Track, MONTHS, WEEKDAYS
 
 class SpotifyDataLoader:
-    """Loads and processes Spotify listening history from JSON files.
-    cols:
-        1. timestamp: Datetime(time_unit='us', time_zone='Asia/Taipei')
-        2. ts: String
-        3. ms_played: Duration(time_unit='ms')
-        4. track: String
-        5. artist: String
-        6. album: String
-        7. track_uri: String
-        8. conn_country: String
-        9. platform: String
-        10. reason_start: String
-        11. reason_end: String
-        12. shuffle: Boolean
-        13. skipped: Boolean
-        14. year: Int32
-        15. month: str
-        16. weekday: str
-        17. hour: Int8
-        18. date: Date
+    """
+    Loads and processes Spotify listening history from JSON files.
+    The schema of the processed DataFrame matches the `Track` Pydantic model.
+    See `src/dataloader/models.py` for full field definitions.
     """
     
-    def __init__(self, directory: Path, file_pattern: str = "Streaming*.json"):
+    def __init__(
+        self, 
+        directory: Path, 
+        file_pattern: str = "Streaming*.json",
+        strict_validation: bool = False,
+        timezone: str = "Asia/Taipei"
+    ):
         """
         Initialize the data loader.
         
         Args:
             directory: Path to directory containing Spotify JSON files
             file_pattern: Glob pattern for files to load (default: "Streaming*.json")
+            strict_validation: If True, raises ValidationError on failed sample validation.
+            timezone: Timezone for timestamp conversion (default: "Asia/Taipei").
         """
         # Resolve path relative to PROJECT_ROOT if it's not absolute
         if not Path(directory).is_absolute():
@@ -45,6 +39,9 @@ class SpotifyDataLoader:
             self.data_dir = Path(directory).resolve()
             
         self.file_pattern = file_pattern
+        self.strict_validation = strict_validation
+        self.timezone = timezone
+
         # intialize logging pattern
         self._logger_prefix = (
             f"{self.__class__.__module__}."
@@ -56,10 +53,11 @@ class SpotifyDataLoader:
 
     def _get_logger(self, method_name: str):
         return logging.getLogger(f"{self._logger_prefix}.{method_name}")
-    
+
+    # methods to get dataframes    
     @property
     def df(self) -> Optional[pl.DataFrame]:
-        # TODO: can use cache in future improvements
+        # TODO: can use cache in future improvements?
         return self._df
     
     @property
@@ -109,47 +107,118 @@ class SpotifyDataLoader:
             return combined_df
 
     def _preprocess(self, df: pl.DataFrame) -> pl.DataFrame:
-        """Normalize Spotify history to the standard schema."""
-        working_df = df
+        """
+        Normalize Spotify history to the standard schema with staged validation.
+        """
+        logger = self._get_logger('_preprocess')
+        initial_count = df.height
+        logger.info(f"Starting preprocessing of {initial_count} raw records")
 
-        # Handle different column naming conventions
+        # --- Stage 1: Cleanup & Raw Validation ---
+        working_df = df
         if "ms_played" not in working_df.columns and "msPlayed" in working_df.columns:
             working_df = working_df.rename({"msPlayed": "ms_played"})
-        logger = self._get_logger('_preprocess')
-        logger.info("Filtering out records without valid track metadata")
-        # Filter out records that don't have track metadata (likely podcasts or other media)
-        # Keep only records with valid track names
+        
+        # Validate raw data sample
+        if not working_df.is_empty():
+            # Filter non-nulls for raw validation sample
+            raw_sample_pool = working_df.filter(pl.col("master_metadata_track_name").is_not_null())
+            self._validate_sample(raw_sample_pool, JsonTrackRecord, sample_size=10)
+
+        # --- Stage 2: Filtering ---
+        logger.info("Filtering records: removing null tracks and zero playtime")
         working_df = working_df.filter(
-            pl.col("master_metadata_track_name").is_not_null()
+            (pl.col("master_metadata_track_name").is_not_null()) &
+            (pl.col("ms_played") > 0)
         )
-        # Optional: return final columns names and types in loggings
-        # TODO: use pydantic model to check if the columns are with correct data type
-        return (
+        filtered_count = working_df.height
+        logger.info(f"Filtered records: {initial_count} -> {filtered_count} (Dropped {initial_count - filtered_count})")
+
+        # --- Stage 3: Transformation ---
+        # Note: timezone conversion is configurable via self.timezone
+        processed_df = (
             working_df
             .select([
-            pl.col("ts").str.strptime(pl.Datetime, format="%+").dt.replace_time_zone("UTC").dt.convert_time_zone("Asia/Taipei").alias("timestamp"),
-            pl.col("ts").cast(pl.Utf8).alias("ts"), # this seems unnecessary?
-            pl.col("ms_played").cast(pl.Duration("ms")),
-            pl.col("master_metadata_track_name").alias("track"),
-            pl.col("master_metadata_album_artist_name").alias("artist"),
-            pl.col("master_metadata_album_album_name").alias("album"),
-            pl.col("spotify_track_uri").alias("track_uri"),
-            pl.col("conn_country"),
-            pl.col("platform"),
-            pl.col("reason_start"),
-            pl.col("reason_end"),
-            pl.col("shuffle"),
-            pl.col("skipped")
+                pl.col("ts").str.strptime(
+                        pl.Datetime,
+                        format="%+"
+                    ).dt.replace_time_zone(
+                        "UTC"
+                    ).dt.convert_time_zone(
+                        self.timezone
+                    ).alias("timestamp"),
+                pl.col("ts").cast(pl.Utf8).alias("ts"), 
+                pl.col("ms_played").cast(pl.Duration("ms")),
+                pl.col("master_metadata_track_name").alias("track"),
+                pl.col("master_metadata_album_artist_name").alias("artist"),
+                pl.col("master_metadata_album_album_name").alias("album"),
+                pl.col("spotify_track_uri").alias("track_uri"),
+                pl.col("conn_country"),
+                pl.col("platform"),
+                pl.col("reason_start"),
+                pl.col("reason_end"),
+                pl.col("shuffle"),
+                pl.col("skipped")
             ])
-            .filter(pl.col("ms_played") > 0)
             .with_columns(
                 year = pl.col("timestamp").dt.year(),
-                month = pl.col("timestamp").dt.strftime("%b"), # 簡寫
-                weekday = pl.col("timestamp").dt.strftime("%a"),
+                # Use pl.Enum for month and weekday for:
+                # 1. Memory Efficiency: Stores as integers internally, strings only for display.
+                # 2. Performance: Faster grouping, filtering, and sorting than strings.
+                # 3. Logical Sorting: Ensures 'Jan' < 'Feb' and 'Mon' < 'Tue' instead of alphabetical.
+                # 4. Data Integrity: Strictly enforces that only values in our constants are allowed.
+                month = pl.col("timestamp").dt.strftime("%b").cast(pl.Enum(MONTHS)), 
+                weekday = pl.col("timestamp").dt.strftime("%a").cast(pl.Enum(WEEKDAYS)),
                 hour = pl.col("timestamp").dt.hour(),
                 date = pl.col("timestamp").dt.date(),
             )
         )
+
+        # --- Stage 4: Processed Validation ---
+        if not processed_df.is_empty():
+            self._validate_sample(processed_df, Track, sample_size=10)
+                
+        logger.info("Preprocessing complete")
+        return processed_df
+    
+    # Validation helper
+    def _validate_sample(self, df: pl.DataFrame, model_class: Any, sample_size: int = 1):
+        """
+        Validate a sample of the data against a Pydantic model.
+        
+        Args:
+            df: Polars DataFrame to sample from
+            model_class: Pydantic model class to validate against
+            sample_size: Number of records to sample (default: 10)
+        """
+        logger = self._get_logger('_validate_sample')
+        if df.is_empty():
+            return
+
+        # Take a sample (use head if df is small, otherwise sample)
+        sample_df = df.head(sample_size) if df.height <= sample_size else df.sample(n=sample_size)
+        records = sample_df.to_dicts()
+        
+        errors = []
+        for i, record in enumerate(records):
+            try:
+                model_class.model_validate(record)
+            except ValidationError as e:
+                # Capture the first few errors for the log
+                error_details = e.errors()[0]
+                msg = f"Row {i} | Field: {error_details['loc']} | Error: {error_details['msg']}"
+                errors.append(msg)
+        
+        if errors:
+            err_msg = f"Validation failed for {model_class.__name__} in {len(errors)}/{len(records)} sampled rows:\n" + "\n".join(errors[:5])
+            if self.strict_validation:
+                logger.error(err_msg)
+                raise ValidationError(err_msg)
+            else:
+                logger.warning(err_msg)
+        else:
+            logger.info(f"Successfully validated {len(records)} rows against {model_class.__name__}")
+
 
     # Methods:
     def get_summary(self) -> Dict[str, Any]:
@@ -254,9 +323,6 @@ class SpotifyDataLoader:
 
         return df
 
-    # Current metrics has problem if one want's more than one metrics of a column
-    # e.g., {track: mean, track: count} since dict only accept unique keys
-    # but let's keep it now. 
     def aggregate_table(
         self,
         group_by: list[str],
@@ -393,6 +459,7 @@ class SpotifyDataLoader:
 
         return documents
 
+    # This method seems can be replaced by property df
     def get_listening_history_df(self) -> pl.DataFrame:
         """Return the processed listening history DataFrame."""
         return self._df if self._df is not None else pl.DataFrame()

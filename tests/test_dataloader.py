@@ -198,26 +198,16 @@ def test_aggregate_table(temp_spotify_data):
     assert 'num_plays' in result.columns
 
 @pytest.mark.unit
-def test_create_text_documents(temp_spotify_data):
-    """Test 5: Does create_text_documents work?"""
-    logger.info("\n" + "=" * 80)
-    logger.info("TEST 5: create_text_documents() Method")
-    logger.info("=" * 80)
-    
-    loader = SpotifyDataLoader(temp_spotify_data)
-    documents = loader.create_text_documents()
-    assert len(documents) == 3
-
-@pytest.mark.unit
 def test_required_files_exist():
     """Test that required files exist."""
+    # TODO: Update the list below if project structure changes
     project_root = Path(__file__).parent.parent
-    
     required_files = [
-        "requirements.txt",
+        "pyproject.toml",
+        # "requirements.txt", # Uncomment if this file is used in the project
         "README.md",
-        "setup.py",
-        "src/utils/data_loader.py",
+        # "setup.py",
+        "src/dataloader/data_loader.py",
         "src/spotify_agent/__init__.py",
         "src/spotify_agent/utils.py",
         "src/spotify_agent/state.py",
