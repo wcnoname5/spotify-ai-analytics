@@ -4,6 +4,14 @@ import plotly.express as px
 import textwrap
 from analytics.features.analysis_functions import get_top_artists, get_top_tracks
 
+@st.cache_data
+def _get_top_artists_cached(_loader, k, start_date, end_date):
+    return get_top_artists(_loader, k=k, start_date=start_date, end_date=end_date)
+
+@st.cache_data
+def _get_top_tracks_cached(_loader, k, artist, start_date, end_date):
+    return get_top_tracks(_loader, k=k, artist=artist, start_date=start_date, end_date=end_date)
+
 def wrap_text(text, width=20):
     """Wrap text with newline characters if it exceeds width."""
     if not text:
@@ -37,7 +45,7 @@ def render_track_artist_analysis(loader, start_date, end_date, show_tables):
         
         with col1:
             with st.spinner("Calculating top artists..."):
-                top_artists_df = get_top_artists(loader, k=top_k, start_date=start_date, end_date=end_date)
+                top_artists_df = _get_top_artists_cached(loader, k=top_k, start_date=start_date, end_date=end_date)
                 
                 if not top_artists_df.is_empty():
                     # Apply text wrapping to artist names for display
@@ -89,7 +97,7 @@ def render_track_artist_analysis(loader, start_date, end_date, show_tables):
         with col2:
             with st.spinner("Calculating top tracks..."):
                 artist_filter = st.session_state.get("artist_filter", "")
-                top_tracks_df = get_top_tracks(
+                top_tracks_df = _get_top_tracks_cached(
                     loader, 
                     k=top_k, 
                     artist=artist_filter if artist_filter else None, 
