@@ -6,7 +6,7 @@ import polars as pl
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Literal
 from pydantic import ValidationError
-from config.settings import PROJECT_ROOT
+from config.settings import settings
 from .models import JsonTrackRecord, Track, MONTHS, WEEKDAYS
 
 class SpotifyDataLoader:
@@ -18,7 +18,7 @@ class SpotifyDataLoader:
     
     def __init__(
         self, 
-        directory: Path, 
+        directory: Optional[Path] = None, 
         file_pattern: str = "Streaming*.json",
         strict_validation: bool = False,
         timezone: str = "Asia/Taipei"
@@ -27,14 +27,13 @@ class SpotifyDataLoader:
         Initialize the data loader.
         
         Args:
-            directory: Path to directory containing Spotify JSON files
+            directory: Path to directory containing Spotify JSON files. If None, uses settings.spotify_data_path.
             file_pattern: Glob pattern for files to load (default: "Streaming*.json")
             strict_validation: If True, raises ValidationError on failed sample validation.
             timezone: Timezone for timestamp conversion (default: "Asia/Taipei").
         """
-        # Resolve path relative to PROJECT_ROOT if it's not absolute
-        if not Path(directory).is_absolute():
-            self.data_dir = (PROJECT_ROOT / directory).resolve()
+        if directory is None:
+            self.data_dir = settings.spotify_data_path
         else:
             self.data_dir = Path(directory).resolve()
             
@@ -49,7 +48,8 @@ class SpotifyDataLoader:
         )
         # initialize df
         self._df: pl.DataFrame | None = None
-        self.initialize_data()
+        self._is_initialized: bool = False
+        # NOTE: Lazy loading - initialize_data() is called on first access via the df property
 
     def _get_logger(self, method_name: str):
         return logging.getLogger(f"{self._logger_prefix}.{method_name}")
@@ -57,12 +57,15 @@ class SpotifyDataLoader:
     # methods to get dataframes    
     @property
     def df(self) -> Optional[pl.DataFrame]:
-        # TODO: can use cache in future improvements?
+        """Lazy loading: initialize data on first access."""
+        if not self._is_initialized:
+            self.initialize_data()
+            self._is_initialized = True
         return self._df
     
     @property
     def lazy(self) -> pl.LazyFrame:
-        if self._df is None:
+        if self.df is None:  # Use the property to trigger lazy initialization
             raise RuntimeError("Data not loaded")
         return self._df.lazy()
 
@@ -228,7 +231,10 @@ class SpotifyDataLoader:
         problem: start_date and end_date type should be date or string
             - LLM may fit latter
         """
-        if self._df is None or self._df.is_empty():
+        # Triggers lazy loading
+        df = self.df
+        
+        if df is None or df.is_empty():
             return {
                 'total_records': 0,
                 'total_listening_time': 0,
@@ -239,22 +245,22 @@ class SpotifyDataLoader:
             }
 
         summary = {
-            'total_records': self._df.height, # total listening records
+            'total_records': df.height, # total listening records
             'total_listening_time': 0, # in minutes
-            'columns': list(self._df.columns), 
+            'columns': list(df.columns), 
             'date_range': None, # start and end dates{'start': ..., 'end': ...}
             'unique_tracks': None,
             'unique_artists': None
         }
-        if 'ms_played' in self._df.columns:
+        if 'ms_played' in df.columns:
             # Use Polars duration methods for unit conversion
-            total_minutes = self._df.select(
+            total_minutes = df.select(
                 pl.col('ms_played').sum().dt.total_minutes()
             ).item()
             summary['total_listening_time'] = int(total_minutes)
 
-        if 'date' in self._df.columns:
-            arr = self._df.select(pl.col('date')).to_series()
+        if 'date' in df.columns:
+            arr = df.select(pl.col('date')).to_series()
             summary['date_range'] = {
                 'start': str(arr.min()),
                 'end': str(arr.max())
@@ -262,11 +268,11 @@ class SpotifyDataLoader:
 
         track_identifier = 'track_uri' # use track URI for uniqueness ()
         if track_identifier:
-            summary['unique_tracks'] = int(self._df.select(pl.col(track_identifier).n_unique()).item())
+            summary['unique_tracks'] = int(df.select(pl.col(track_identifier).n_unique()).item())
 
         artist_col_name = 'artist'
         if artist_col_name:
-            summary['unique_artists'] = int(self._df.select(pl.col(artist_col_name).n_unique()).item())
+            summary['unique_artists'] = int(df.select(pl.col(artist_col_name).n_unique()).item())
 
         return summary
 
@@ -299,11 +305,11 @@ class SpotifyDataLoader:
         Returns:
             Polars DataFrame with filtered, selected, and sorted data.
         """
+        # Triggers lazy loading
+        df = self.df
 
-        if self._df is None or self._df.is_empty():
+        if df is None or df.is_empty():
             return pl.DataFrame()
-
-        df = self._df
 
         if where is not None:
             if isinstance(where, list):
@@ -362,11 +368,11 @@ class SpotifyDataLoader:
         Returns:
             Polars DataFrame with aggregated results.
         """
+        # Triggers lazy loading
+        df = self.df
 
-        if self._df is None or self._df.is_empty():
+        if df is None or df.is_empty():
             return pl.DataFrame()
-
-        df = self._df
 
         # Apply filters
         if where is not None:
@@ -432,14 +438,15 @@ class SpotifyDataLoader:
         Create text documents for RAG indexing.
         deprecating
         """
-        if self._df is None:
-            self.initialize_data()
-        if self._df is None or self._df.is_empty():
+        # Triggers lazy loading
+        df = self.df
+        
+        if df is None or df.is_empty():
             return []
 
         documents: List[str] = []
 
-        for row in self._df.iter_rows(named=True):
+        for row in df.iter_rows(named=True):
             track = row.get('track', 'Unknown Track')
             artist = row.get('artist', 'Unknown Artist')
             album = row.get('album', None)
@@ -458,8 +465,3 @@ class SpotifyDataLoader:
             documents.append(doc_text)
 
         return documents
-
-    # This method seems can be replaced by property df
-    def get_listening_history_df(self) -> pl.DataFrame:
-        """Return the processed listening history DataFrame."""
-        return self._df if self._df is not None else pl.DataFrame()

@@ -6,10 +6,10 @@ from typing import Dict, Any, Optional, List
 from langchain_core.messages import ToolMessage, AIMessage, BaseMessage
 
 from .state import AgentState
-from .utils import get_resources
+from utils.agent_utils import get_resources
 from .schemas import IntentPlan, ToolPlan
 from .prompts import INTENT_PARSER_SYSTEM_PROMPT
-from config.settings import PROJECT_ROOT 
+from config.settings import settings 
 
 
 # Global placeholders for lazy initialization

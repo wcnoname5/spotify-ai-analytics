@@ -16,7 +16,7 @@ def render_chatbot():
         st.subheader("Chat Interface")
         
         # Display chat history in a scrollable container
-        chat_container = st.container(height=600)
+        chat_container = st.container(height=500)
         with chat_container:
             for message in st.session_state.messages:
                 if isinstance(message, HumanMessage):
@@ -35,7 +35,7 @@ def render_chatbot():
                     st.markdown(prompt)
 
             # Invoke agent
-            with st.spinner("Agent is thinking..."):
+            with st.spinner("🔍 Agent is thinking... (Accessing data on first query)"):
                 try:
                     # Compile the graph
                     app = build_app()

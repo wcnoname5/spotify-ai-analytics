@@ -1,5 +1,5 @@
 import streamlit as st
-from pathlib import Path
+from config.settings import settings
 from dataloader import (
     SpotifyDataLoader,
     get_summary_by_time, 
@@ -11,10 +11,12 @@ from app.time_analysis import render_time_analysis
 # return loader as a global instance (cached resource)
 @st.cache_resource
 def get_loader():
-    # Assuming data is in the default data/spotify_history directory
-    # TODO: load path from config/settings or .env
-    data_dir = Path("data/spotify_history")
-    loader = SpotifyDataLoader(data_dir)
+    """
+    Cached loader that returns a singleton instance across page reruns.
+    Data is loaded lazily on first access.
+    """
+    # Use path from centralized settings
+    loader = SpotifyDataLoader(settings.spotify_data_path)
     return loader
 
 # Cached wrapper for summary by time (using hash table)
@@ -125,5 +127,6 @@ def render_dashboard():
                 st.info("No data found for the selected date range.")
 
 if __name__ == "__main__":
+    # This is for standalone debugging only
     st.set_page_config(page_title="Spotify AI Analytics", page_icon="🎵", layout="wide")
     render_dashboard()

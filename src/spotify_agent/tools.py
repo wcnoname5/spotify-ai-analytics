@@ -294,23 +294,33 @@ class SpotifyQueryTools:
 # Ideally, load your data here or in a config file
 # If data loading is heavy, do this inside a "initialize_tools" function
 
-def initialize_tools():
+def initialize_tools(loader: Optional[SpotifyDataLoader] = None):
     """
     Factory function to create the toolset.
-    Uses SPOTIFY_DATA_PATH from environment variables.
-    """
-    import os
-    from pathlib import Path
-    from dotenv import load_dotenv
-    from config.settings import DEFAULT_DATA_PATH
     
-    load_dotenv()
-    data_path = os.getenv("SPOTIFY_DATA_PATH", str(DEFAULT_DATA_PATH))
+    Args:
+        loader: Optional SpotifyDataLoader instance. If provided, uses it instead of creating new.
+                This allows sharing a cached loader from the UI with the Agent.
+    
+    Returns:
+        List of LangChain tools.
+    """
+    from config.settings import settings
+    
     logger = logging.getLogger(f'{__name__}.initialize_tools')
+    
+    # If loader is provided (injected), use it
+    if loader is not None:
+        logger.info("Using injected SpotifyDataLoader instance")
+        tool_service = SpotifyQueryTools(loader)
+        return tool_service.get_tools()
+    
+    # Otherwise, create a new instance (original behavior for CLI/scripts)
+    data_path = settings.spotify_data_path
     logger.info(f"Initializing SpotifyQueryTools with data path: {data_path}")
 
     # 1. Load Data
-    loader = SpotifyDataLoader(Path(data_path))
+    loader = SpotifyDataLoader(data_path)
     
     # 2. Init Service
     tool_service = SpotifyQueryTools(loader)

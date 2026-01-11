@@ -8,7 +8,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from spotify_agent.utils import get_llm
+from utils.agent_utils import get_llm
 
 @pytest.mark.llm
 def test_llm_connection():
