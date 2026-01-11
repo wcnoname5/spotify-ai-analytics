@@ -2,7 +2,7 @@ import streamlit as st
 import polars as pl
 import plotly.express as px
 import textwrap
-from analytics.features.analysis_functions import get_top_artists, get_top_tracks
+from dataloader import get_top_artists, get_top_tracks
 
 @st.cache_data
 def _get_top_artists_cached(_loader, k, start_date, end_date):

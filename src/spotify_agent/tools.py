@@ -7,7 +7,7 @@ import polars as pl
 from typing import Optional, Any, List, Dict
 from langchain_core.tools import tool
 from spotify_agent.schemas import ToolFreeQueryArgs, ToolFreeAggrgateArgs
-from utils.data_loader import SpotifyDataLoader
+from dataloader import SpotifyDataLoader
 
 
 class SpotifyQueryTools:

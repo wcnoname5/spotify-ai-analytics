@@ -1,7 +1,7 @@
 import polars as pl
 from typing import Literal, Optional, Dict, TypedDict
 from datetime import date
-from utils.data_loader import SpotifyDataLoader
+from dataloader.data_loader import SpotifyDataLoader
 
 class SummaryStats(TypedDict):
     total_records: int

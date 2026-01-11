@@ -18,11 +18,11 @@ load_dotenv()
 data_path = os.getenv("SPOTIFY_DATA_PATH", "data/spotify_history")
 # Try importing directly, fall back to path manipulation if not installed
 try:
-    from utils.data_loader import SpotifyDataLoader
+    from dataloader import SpotifyDataLoader
 except ImportError:
     # Add src to path as fallback (not recommended for production)
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-    from utils.data_loader import SpotifyDataLoader
+    from dataloader import SpotifyDataLoader
 
 
 def demo_data_loading():

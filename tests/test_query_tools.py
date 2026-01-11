@@ -4,7 +4,7 @@ import pytest
 import polars as pl
 
 from spotify_agent.tools import SpotifyQueryTools, initialize_tools
-from utils.data_loader import SpotifyDataLoader
+from dataloader import SpotifyDataLoader
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

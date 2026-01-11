@@ -1,7 +1,7 @@
 import streamlit as st
 from pathlib import Path
-from utils.data_loader import SpotifyDataLoader
-from analytics.features.analysis_functions import (
+from dataloader import (
+    SpotifyDataLoader,
     get_summary_by_time, 
     get_raw_df
 )

@@ -1,6 +1,6 @@
 import streamlit as st
 import plotly.express as px
-from analytics.features.analysis_functions import get_monthly_listening_trend, get_weekly_listening_trend
+from dataloader import get_monthly_listening_trend, get_weekly_listening_trend
 
 @st.cache_data
 def _get_monthly_listening_trend_cached(_loader, start_date, end_date):

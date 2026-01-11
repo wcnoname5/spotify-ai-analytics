@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from utils.data_loader import SpotifyDataLoader
+from dataloader import SpotifyDataLoader
 
 @pytest.fixture
 def temp_spotify_data():
