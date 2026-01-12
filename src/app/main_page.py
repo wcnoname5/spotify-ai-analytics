@@ -1,6 +1,7 @@
 import streamlit as st
+from dataloader import SpotifyDataLoader
 from app.chatbot_page import render_chatbot
-from app.dashboard import render_dashboard, get_loader
+from app.dashboard import render_dashboard
 from utils.agent_utils import inject_shared_loader
 from utils.loggings import setup_logging
 from config.settings import settings
@@ -11,6 +12,16 @@ setup_logging()
 # Set page configuration
 st.set_page_config(layout="wide", page_title="Spotify AI Analytics", page_icon="🎵")
 
+# return loader as a global instance (cached resource)
+@st.cache_resource
+def get_loader():
+    """
+    Cached loader that returns a singleton instance across page reruns.
+    Data is loaded lazily on first access.
+    """
+    # Use path from centralized settings
+    loader = SpotifyDataLoader(settings.spotify_data_path)
+    return loader
 
 def main():
     st.title("Spotify AI Analytics Agent")
@@ -42,7 +53,8 @@ def main():
         render_chatbot()
     elif page == "Dashboard":
         st.divider()
-        render_dashboard()
+        # inject global loader instance into dashboard
+        render_dashboard(loader)
 
 
 if __name__ == "__main__":

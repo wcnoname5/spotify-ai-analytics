@@ -1,4 +1,3 @@
-import os
 import json
 import logging
 from datetime import datetime
@@ -9,11 +8,7 @@ from .state import AgentState
 from utils.agent_utils import get_resources
 from .schemas import IntentPlan, ToolPlan
 from .prompts import INTENT_PARSER_SYSTEM_PROMPT
-from config.settings import settings 
 
-
-# Global placeholders for lazy initialization
-# (Moved to utils.py)
 
 def intent_parser(state: AgentState) -> Dict[str, Any]:
     """Parse the user's intent and generate a strategic execution plan (without tool args)."""

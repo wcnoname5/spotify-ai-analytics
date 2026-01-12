@@ -1,23 +1,10 @@
 import streamlit as st
-from config.settings import settings
 from dataloader import (
-    SpotifyDataLoader,
     get_summary_by_time, 
     get_raw_df
 )
 from app.track_analysis import render_track_artist_analysis
 from app.time_analysis import render_time_analysis
-
-# return loader as a global instance (cached resource)
-@st.cache_resource
-def get_loader():
-    """
-    Cached loader that returns a singleton instance across page reruns.
-    Data is loaded lazily on first access.
-    """
-    # Use path from centralized settings
-    loader = SpotifyDataLoader(settings.spotify_data_path)
-    return loader
 
 # Cached wrapper for summary by time (using hash table)
 # use start_date& end_date to generate cache keys (fingerprint)
@@ -28,7 +15,7 @@ def get_loader():
 def _get_summary_by_time_cached(_loader, start_date=None, end_date=None):
     return get_summary_by_time(_loader, start_date=start_date, end_date=end_date)
 
-def render_dashboard():
+def render_dashboard(loader):
     st.title("Analytics Dashboard for Spotify Data")
 
     # Initialize session state for filtering
@@ -39,7 +26,6 @@ def render_dashboard():
     if "applied_end_date" not in st.session_state:
         st.session_state.applied_end_date = None
     
-    loader = get_loader()
     summary = loader.get_summary()
     
     if summary['total_records'] == 0:
