@@ -4,11 +4,11 @@ import plotly.express as px
 import textwrap
 from dataloader import get_top_artists, get_top_tracks
 
-@st.cache_data
+@st.cache_data(ttl= 15, max_entries=5)
 def _get_top_artists_cached(_loader, k, start_date, end_date):
     return get_top_artists(_loader, k=k, start_date=start_date, end_date=end_date)
 
-@st.cache_data
+@st.cache_data(ttl= 15, max_entries=5)
 def _get_top_tracks_cached(_loader, k, artist, start_date, end_date):
     return get_top_tracks(_loader, k=k, artist=artist, start_date=start_date, end_date=end_date)
 

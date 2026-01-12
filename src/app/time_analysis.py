@@ -1,16 +1,17 @@
+import datetime
 import streamlit as st
 import plotly.express as px
 from dataloader import get_monthly_listening_trend, get_weekly_listening_trend
 
-@st.cache_data
-def _get_monthly_listening_trend_cached(_loader, start_date, end_date):
+@st.cache_data(ttl= 15, max_entries=5)
+def _get_monthly_listening_trend_cached(_loader, start_date: datetime.date, end_date: datetime.date):
     return get_monthly_listening_trend(_loader, start_date=start_date, end_date=end_date)
 
-@st.cache_data
-def _get_weekly_listening_trend_cached(_loader, start_date, end_date):
+@st.cache_data(ttl= 15, max_entries=5)
+def _get_weekly_listening_trend_cached(_loader, start_date: datetime.date, end_date: datetime.date):
     return get_weekly_listening_trend(_loader, start_date=start_date, end_date=end_date)
 
-def render_time_analysis(loader, start_date, end_date, show_tables):
+def render_time_analysis(loader, start_date: datetime.date, end_date: datetime.date, show_tables):
     st.header("Time-based Trends & Patterns")
     
     # Define Row 2 with fixed height for symmetry
@@ -32,19 +33,31 @@ def render_time_analysis(loader, start_date, end_date, show_tables):
                         title="Monthly Listening Time",
                         labels={
                             "year":"Year",
-                            "month_label": "Month", "total_minutes": "Minutes Played"
+                            "month_label": "Time",
+                            "total_minutes": "Minutes Played",
+                            "total_tracks_played": "Tracks Played",
+                            "unique_listened_tracks": "Unique Tracks"
                         },
-                        hover_data=["year", "month", "total_tracks_played", "unique_listened_tracks"],
+                        hover_data={
+                            "month_label": "|%Y-%m",
+                            "total_tracks_played": True,
+                            "unique_listened_tracks": True
+                            },
                         color="total_minutes",
                         color_continuous_scale="Viridis"
                     )
                     fig_trend.update_layout(
-                        xaxis_tickangle=-45,
-                        xaxis_tickformat="%Y",
-                        xaxis_dtick="M6",
-                        xaxis_title="Month",
+                        xaxis = dict(
+                            title="",
+                            tickangle=0,
+                        ),
+                        # xaxis_title="Time",
                         coloraxis_showscale=False,
                         height=row_height
+                    )
+                    fig_trend.update_xaxes(
+                        tickformat="%b\n%Y",
+                        dtick= "M6"
                     )
                     st.plotly_chart(fig_trend, width="stretch")
                     

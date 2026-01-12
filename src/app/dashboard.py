@@ -24,7 +24,7 @@ def get_loader():
 # Upon activation, it would check if fingerprint exists
 # if yes, it would use figerprint to retrieve cached result
 # else it would perform a new query and cache the result
-@st.cache_data
+@st.cache_data(ttl= 15, max_entries=5)
 def _get_summary_by_time_cached(_loader, start_date=None, end_date=None):
     return get_summary_by_time(_loader, start_date=start_date, end_date=end_date)
 
@@ -34,6 +34,10 @@ def render_dashboard():
     # Initialize session state for filtering
     if "artist_filter" not in st.session_state:
         st.session_state.artist_filter = ""
+    if "applied_start_date" not in st.session_state:
+        st.session_state.applied_start_date = None
+    if "applied_end_date" not in st.session_state:
+        st.session_state.applied_end_date = None
     
     loader = get_loader()
     summary = loader.get_summary()
@@ -49,7 +53,7 @@ def render_dashboard():
     
     date_range = full_summary['date_range']
     if date_range:
-        st.caption(f"Full Data Range: {date_range['start']} to {date_range['end']}")
+        st.caption(f"Data Ranged From {date_range['start']} to {date_range['end']}")
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total Tracks", f"{full_summary['total_records']:,}")
@@ -71,11 +75,33 @@ def render_dashboard():
             # Convert to date objects
             min_d = datetime.date.fromisoformat(min_date_str)
             max_d = datetime.date.fromisoformat(max_date_str)
-            with st.container(horizontal=True, gap="large"):
-                start_date = st.date_input("Start Date", value=min_d, min_value=min_d, max_value=max_d)
-                end_date = st.date_input("End Date", value=max_d, min_value=min_d, max_value=max_d)
             
-            # Optimization: Check if filters are active
+            # Place inputs and apply button in columns
+            col1, col2, col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
+            with col1:
+                input_start = st.date_input(
+                    "Start Date",
+                    value=st.session_state.applied_start_date or min_d,
+                    min_value=min_d,
+                    max_value=max_d
+                    )
+            with col2:
+                input_end = st.date_input(
+                    "End Date", 
+                    value=st.session_state.applied_end_date or max_d, 
+                    min_value=min_d, 
+                    max_value=max_d
+                )
+
+            with col3:
+                if st.button("Apply Filters", width="content"):
+                    st.session_state.applied_start_date = input_start
+                    st.session_state.applied_end_date = input_end
+                    st.rerun()
+            
+            # Logic uses confirmed dates from session state
+            start_date = st.session_state.applied_start_date or min_d
+            end_date = st.session_state.applied_end_date or max_d
             is_filtered = (start_date > min_d) or (end_date < max_d)
         else:
             start_date = None
@@ -95,7 +121,7 @@ def render_dashboard():
     
     date_range_f = time_summary['date_range']
     if date_range_f and is_filtered:
-        st.caption(f"Filtered Range: {date_range_f['start']} to {date_range_f['end']}")
+        st.caption(f"First/Last Records within filtered range: {date_range_f['start']} to {date_range_f['end']}")
 
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Tracks Listened", f"{time_summary['total_records']:,}")
