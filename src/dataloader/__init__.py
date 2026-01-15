@@ -7,7 +7,9 @@ The package include:
 from .data_loader import SpotifyDataLoader
 from .analysis_functions import (
     SummaryStats,
-    get_summary_by_time,
+    query_data,
+    aggregate_table,
+    get_summary,
     get_top_artists,
     get_top_tracks,
     get_monthly_listening_trend,

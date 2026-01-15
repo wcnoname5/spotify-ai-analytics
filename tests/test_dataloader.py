@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from dataloader import SpotifyDataLoader
+from dataloader import SpotifyDataLoader, get_summary, query_data, aggregate_table
 
 @pytest.fixture
 def temp_spotify_data():
@@ -121,11 +121,11 @@ def test_loader_initialization(temp_spotify_data):
 def test_get_summary(temp_spotify_data):
     """Test 2: Does get_summary work?"""
     logger.info("\n" + "=" * 80)
-    logger.info("TEST 2: get_summary() Method")
+    logger.info("TEST 2: get_summary() logic")
     logger.info("=" * 80)
     
     loader = SpotifyDataLoader(temp_spotify_data)
-    summary = loader.get_summary()
+    summary = get_summary(loader.df)
     
     # Validate summary structure
     required_keys = ['total_records', 'columns', 'date_range', 'unique_tracks', 'unique_artists']
@@ -139,17 +139,18 @@ def test_get_summary(temp_spotify_data):
 def test_query_data(temp_spotify_data):
     """Test 3: Does query_data work?"""
     logger.info("\n" + "=" * 80)
-    logger.info("TEST 3: query_data() Method")
+    logger.info("TEST 3: query_data() logic")
     logger.info("=" * 80)
     
     loader = SpotifyDataLoader(temp_spotify_data)
     
     # Test 3a: Basic query with limit
-    result = loader.query_data(limit=2)
+    result = query_data(loader.df, limit=2)
     assert result.height == 2
     
     # Test 3b: Query with filtering
-    result = loader.query_data(
+    result = query_data(
+        loader.df,
         where=pl.col('artist') == 'Test Artist 1',
         select=['track', 'artist', 'ms_played']
     )
@@ -160,13 +161,14 @@ def test_query_data(temp_spotify_data):
 def test_aggregate_table(temp_spotify_data):
     """Test 4: Does aggregate_table work?"""
     logger.info("\n" + "=" * 80)
-    logger.info("TEST 4: aggregate_table() Method")
+    logger.info("TEST 4: aggregate_table() logic")
     logger.info("=" * 80)
     
     loader = SpotifyDataLoader(temp_spotify_data)
     
     # Test 4a: Aggregate by artist - total listening time
-    result = loader.aggregate_table(
+    result = aggregate_table(
+        loader.df,
         group_by=['artist'],
         metrics={'ms_played': 'sum'},
         sort_by='ms_played_sum',
@@ -176,7 +178,8 @@ def test_aggregate_table(temp_spotify_data):
     assert 'ms_played_sum' in result.columns
 
     # Test 4b: Aggregate by artist - multiple metrics
-    result = loader.aggregate_table(
+    result = aggregate_table(
+        loader.df,
         group_by=['artist'],
         metrics={
             'track': [('count', 'num_plays'), ('n_unique', 'unique_tracks')],
@@ -188,8 +191,9 @@ def test_aggregate_table(temp_spotify_data):
     assert 'ms_played_sum' in result.columns
     assert result.height == 2
 
-    # Test 4c: Alias collision warning (manual check of logs if needed, but here just ensure it runs)
-    result = loader.aggregate_table(
+    # Test 4c: Alias collision warning
+    result = aggregate_table(
+        loader.df,
         group_by=['artist'],
         metrics={
             'track': [('count', 'num_plays'), ('count', 'num_plays')]
@@ -208,8 +212,9 @@ def test_required_files_exist():
         "README.md",
         # "setup.py",
         "src/dataloader/data_loader.py",
+        "src/dataloader/analysis_functions.py",
         "src/spotify_agent/__init__.py",
-        "src/spotify_agent/utils.py",
+        "src/utils/agent_utils.py",
         "src/spotify_agent/state.py",
         "src/spotify_agent/tools.py",
         "src/spotify_agent/nodes.py",

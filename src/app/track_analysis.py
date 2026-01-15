@@ -5,12 +5,12 @@ import textwrap
 from dataloader import get_top_artists, get_top_tracks
 
 @st.cache_data(ttl= 15, max_entries=5)
-def _get_top_artists_cached(_loader, k, start_date, end_date):
-    return get_top_artists(_loader, k=k, start_date=start_date, end_date=end_date)
+def _get_top_artists_cached(df, k, start_date, end_date):
+    return get_top_artists(df, k=k, start_date=start_date, end_date=end_date)
 
 @st.cache_data(ttl= 15, max_entries=5)
-def _get_top_tracks_cached(_loader, k, artist, start_date, end_date):
-    return get_top_tracks(_loader, k=k, artist=artist, start_date=start_date, end_date=end_date)
+def _get_top_tracks_cached(df, k, artist, start_date, end_date):
+    return get_top_tracks(df, k=k, artist=artist, start_date=start_date, end_date=end_date)
 
 def wrap_text(text, width=20):
     """Wrap text with newline characters if it exceeds width."""
@@ -45,7 +45,7 @@ def render_track_artist_analysis(loader, start_date, end_date, show_tables):
         
         with col1:
             with st.spinner("Calculating top artists..."):
-                top_artists_df = _get_top_artists_cached(loader, k=top_k, start_date=start_date, end_date=end_date)
+                top_artists_df = _get_top_artists_cached(loader.df, k=top_k, start_date=start_date, end_date=end_date)
                 
                 if not top_artists_df.is_empty():
                     # Apply text wrapping to artist names for display
@@ -98,7 +98,7 @@ def render_track_artist_analysis(loader, start_date, end_date, show_tables):
             with st.spinner("Calculating top tracks..."):
                 artist_filter = st.session_state.get("artist_filter", "")
                 top_tracks_df = _get_top_tracks_cached(
-                    loader, 
+                    loader.df, 
                     k=top_k, 
                     artist=artist_filter if artist_filter else None, 
                     start_date=start_date, 

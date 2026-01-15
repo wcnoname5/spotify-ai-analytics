@@ -7,7 +7,7 @@ import polars as pl
 from typing import Optional, Any, List, Dict
 from langchain_core.tools import tool
 from spotify_agent.schemas import ToolFreeQueryArgs, ToolFreeAggrgateArgs
-from dataloader import SpotifyDataLoader
+from dataloader import SpotifyDataLoader, analysis_functions
 
 
 class SpotifyQueryTools:
@@ -56,7 +56,7 @@ class SpotifyQueryTools:
         """
         logger = self._get_logger('get_summary_stats')
         logger.info("Getting listening history summary statistics")
-        summary = self.loader.get_summary()
+        summary = analysis_functions.get_summary(self.loader.df)
         summary.pop("columns", None)  # Remove raw data from summary
         return summary
     
@@ -87,16 +87,9 @@ class SpotifyQueryTools:
             where.append(pl.col("date") >= pl.lit(start_date).str.to_date())
         if end_date:
             where.append(pl.col("date") <= pl.lit(end_date).str.to_date())
-        # Check limit to avoid overwhelming LLM
-        self._check_limit(limit)
-        where = []
-        if start_date:
-            # Convert string to date for comparison
-            where.append(pl.col("date") >= pl.lit(start_date).str.to_date())
-        if end_date:
-            where.append(pl.col("date") <= pl.lit(end_date).str.to_date())
 
-        result = self.loader.aggregate_table(
+        result = analysis_functions.aggregate_table(
+            self.loader.df,
             group_by=["artist"],
             metrics={"ms_played": ("sum", "total_ms")},
             where=where if where else None,
@@ -143,7 +136,8 @@ class SpotifyQueryTools:
         if end_date:
             where.append(pl.col("date") <= pl.lit(end_date).str.to_date())
             
-        result = self.loader.aggregate_table(
+        result = analysis_functions.aggregate_table(
+            self.loader.df,
             group_by=["track", "artist"],
             metrics={"track": ("count", "play_count")},
             where=where,
@@ -170,7 +164,8 @@ class SpotifyQueryTools:
         if group_by not in valid_groups:
             group_by = "hour"
         
-        result = self.loader.aggregate_table(
+        result = analysis_functions.aggregate_table(
+            self.loader.df,
             group_by=[group_by],
             metrics={"ms_played": ("sum", "total_ms"), "track": ("count", "num_plays")},
             sort_by="total_ms",
@@ -215,7 +210,8 @@ class SpotifyQueryTools:
                 logger.error(f"Error evaluating where expression: {e}")
                 raise ValueError(f"Invalid filter expression: {where}")
 
-        result = self.loader.query_data(
+        result = analysis_functions.query_data(
+            self.loader.df,
             where=where_expr,
             select=select,
             limit=limit,
@@ -269,7 +265,8 @@ class SpotifyQueryTools:
             else:
                 processed_metrics[col] = spec
 
-        result = self.loader.aggregate_table(
+        result = analysis_functions.aggregate_table(
+            df=self.loader.df,
             group_by=group_by,
             metrics=processed_metrics,
             where=where_expr,

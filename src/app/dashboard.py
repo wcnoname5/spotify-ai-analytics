@@ -1,6 +1,6 @@
 import streamlit as st
 from dataloader import (
-    get_summary_by_time, 
+    get_summary, 
     get_raw_df
 )
 from app.track_analysis import render_track_artist_analysis
@@ -12,8 +12,8 @@ from app.time_analysis import render_time_analysis
 # if yes, it would use figerprint to retrieve cached result
 # else it would perform a new query and cache the result
 @st.cache_data(ttl= 15, max_entries=5)
-def _get_summary_by_time_cached(_loader, start_date=None, end_date=None):
-    return get_summary_by_time(_loader, start_date=start_date, end_date=end_date)
+def _get_summary_cached(df, start_date=None, end_date=None):
+    return get_summary(df, start_date=start_date, end_date=end_date)
 
 def render_dashboard(loader):
     st.title("Analytics Dashboard for Spotify Data")
@@ -26,7 +26,7 @@ def render_dashboard(loader):
     if "applied_end_date" not in st.session_state:
         st.session_state.applied_end_date = None
     
-    summary = loader.get_summary()
+    summary = get_summary(loader.df)
     
     if summary['total_records'] == 0:
         st.warning("No Spotify history data found. Please check your data/spotify_history folder.")
@@ -103,7 +103,7 @@ def render_dashboard(loader):
         time_summary = full_summary
     else:
         with st.spinner("Calculating filtered summary..."):
-            time_summary = _get_summary_by_time_cached(loader, start_date=start_date, end_date=end_date)
+            time_summary = _get_summary_cached(loader.df, start_date=start_date, end_date=end_date)
     
     date_range_f = time_summary['date_range']
     if date_range_f and is_filtered:
@@ -128,7 +128,7 @@ def render_dashboard(loader):
         st.divider() # horizontal line
         st.header("Raw Data Preview")
         with st.spinner("Loading raw data..."):
-            raw_df = get_raw_df(loader, limit=100, start_date=start_date, end_date=end_date)
+            raw_df = get_raw_df(loader.df, limit=100, start_date=start_date, end_date=end_date)
             if not raw_df.is_empty():
                 st.dataframe(raw_df.to_pandas().set_axis(
                         range(1, len(raw_df)+1), axis=0

@@ -18,11 +18,11 @@ load_dotenv()
 data_path = os.getenv("SPOTIFY_DATA_PATH", "data/spotify_history")
 # Try importing directly, fall back to path manipulation if not installed
 try:
-    from dataloader import SpotifyDataLoader
+    from dataloader import SpotifyDataLoader, get_summary, query_data, aggregate_table
 except ImportError:
     # Add src to path as fallback (not recommended for production)
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-    from dataloader import SpotifyDataLoader
+    from dataloader import SpotifyDataLoader, get_summary, query_data, aggregate_table
 
 
 def demo_data_loading():
@@ -38,7 +38,7 @@ def demo_data_loading():
     print(f"Loading Spotify data from: {data_path}")
     
     # Display summary
-    summary = loader.get_summary()
+    summary = get_summary(loader.df)
     print("\n📊 Data Summary:")
     print("-" * 70)
     print(f"  Total listening records: {summary['total_records']:,}")
@@ -54,7 +54,8 @@ def demo_data_loading():
     # where pattern
     print("\n🎵 Sample Listening History (The Smiths, between 2021 and 2023):")
     print("-" * 70)
-    df_sample = loader.query_data(
+    df_sample = query_data(
+        loader.df,
         where=[pl.col('artist') == 'The Smiths',
                pl.col('year').is_between(2021, 2023)],
         select=['timestamp', 'track', 'artist', 'ms_played', 'reason_end'],
@@ -70,7 +71,8 @@ def demo_data_loading():
     
     # Most played artists by play count
     print("\n  Top 10 Artists (by play count):")
-    artist_counts = loader.aggregate_table(
+    artist_counts = aggregate_table(
+        loader.df,
         group_by=['artist'],
         metrics={'track': ('count', 'total_listening_counts')},
         sort_by='total_listening_counts',
@@ -81,7 +83,8 @@ def demo_data_loading():
     
     # Most played artists by total listening time
     print("\n  Top 10 Artists (by total listening time):")
-    artist_time = loader.aggregate_table(
+    artist_time = aggregate_table(
+        loader.df,
         group_by=['artist'],
         metrics={'ms_played': 'sum'},
         sort_by='ms_played_sum',

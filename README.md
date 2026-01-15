@@ -17,53 +17,49 @@ The application uses `Streamlit` as a unified interface, displaying two primary 
 For setup and execution details, see the [How to Run](#how-to-run) section.
 
 ## System Architecture
-The system is built on a modular architecture that separates data ingestion, visualization, and AI orchestration.
+The system is built on a modular architecture that separates data ingestion, computational logic, and AI orchestration.
 
-1. **DataLoader**: Ingests raw Spotify JSON files, validates fields, and stores data in optimized `polars.DataFrame` structures.
-2. **Dashboard**: Provides a visual layer using `Plotly` to render interactive charts and trend analysis.
-3. **AI Agent**: Uses **LangGraph** to coordinate multi-step reasoning, tool execution, and contextual response generation.
+1. **DataLoader (`data_loader.py`)**: Responsible for file discovery, JSON parsing, and staged validation. It focuses strictly on data preparation and schema enforcement, exposing clean `polars.DataFrame` structures for analysis.
+2. **Analysis Core (`analysis_functions.py`)**: A "pure" functional layer containing all computational logic. It is decoupled from both data storage and UI, accepting DataFrames as input and returning structured analytics for both the Dashboard and the Agent.
+3. **AI Agent (`tools.py` & `graph.py`)**: Orchestrates multi-step reasoning using **LangGraph**. It wraps the Analysis Core into structured tools, allowing the LLM to query and synthesize data into natural language responses.
+4. **Dashboard**: Provides a visual layer using `Plotly` and `Streamlit` to render interactive charts based on metrics derived from the Analysis Core.
 
 ```mermaid
 flowchart TD
     %% Node Definitions
+    
+    subgraph UI ["User Interface (Streamlit)"]
+        Chat["LLM Chatbot Interface"]
+        Dash["Interactive Dashboard"]
+    end
+
     JSON[("Spotify History<br/>(JSON Files)")]
     JSON@{shape: docs}
     
-    subgraph UI ["User Interface (Streamlit)"]
-        Chat["AI Chatbot \<br> Interface"]
-        Dash["Dashboard"]
-    end
-    subgraph Data_Process ["Data Pipeline"]
+    subgraph Data ["Data Layer"]
         DL[("DataLoader")]
+        AF["analysis_functions.py"]
     end
     
-    LLM["LLM Agent"]
-    
-
     %% Flows based on drawing
-    JSON -->|load & preprocess| Data_Process
-    Data_Process --> Dash
-    
-    UserInput([User Input]) --> Chat
-    Chat --User Input--> LLM
-    %% make below two line dashed
-    LLM == "tool calls" ==> Data_Process
-    Data_Process =="Queried data"==> LLM
-    
-    LLM --> Response([Final Response])
+    JSON -->|load & validate| DL
+    DL <-->|Query| AF
+        
+    AF ===>|provide DataFrame| UI
 
-    %% Styling to mimic the drawing's focus
-    style JSON fill:#ff5b,stroke:#333,stroke-width:2px
+    %% Styling 
+    style JSON fill:#fa29,stroke:#333,stroke-width:2px,size:10S0px
     style UI fill:#285
-    style DL fill:#bbf,stroke:#333,stroke-width:2px
-    style LLM fill:#dfd,stroke:#333,stroke-width:2px
+    %% style Logic fill:#f9f,stroke:#333,stroke-width:2px
+    style Data fill:#bbf,stroke:#333,stroke-width:2px
+    %% style LLM fill:#dfd,stroke:#333,stroke-width:2px
 ```
 
-### Data Pipeline
-The data pipeline focuses on performance and reliability using `Polars` and `Pydantic`. An customized data loader `SpotifyDataLoader` handles ingestion and validation.
-- **Ingestion**: Efficiently reads multiple Spotify history JSON files into `Polars.DataFrame`.
-- **Validation**: Uses Pydantic models to ensure data follows Spotify extended history.
-- **Analysis Logic**: Core analysis functions are centralized in `analysis_functions.py`, offering a clean endpoint for both the Dashboard and the AI Agent.
+### Data Pipeline & Analysis Logic
+The project implements a strict separation between data state, computational logic, and orchestration:
+- **State Management**: `SpotifyDataLoader` handles the I/O and schema enforcement using `Polars` and `Pydantic`.
+- **Functional Analysis**: Centralized in `analysis_functions.py`, offering a clean, class-independent endpoint for both the Dashboard and the AI Agent.
+- **Tool Orchestration**: `SpotifyQueryTools` in `tools.py` acts as the bridge, translating LLM intents into specific calls to the Analysis Core while managing data truncation for context windows.
 
 ### Visualization & Dashboard
 The dashboard offers a no-code way to explore your data through interactive visualizations.
@@ -75,31 +71,33 @@ The dashboard offers a no-code way to explore your data through interactive visu
 The chatbot is built using **LangGraph**, orchestrating a specialized three-stage process to ensure accurate data retrieval and high-quality conversation.
 
 ```mermaid
-
 graph TD
-
-    subgraph Tooling [External Tools]
-        DL[(Data_Loader)]
+    subgraph Tooling [SpotifyQueryTools]
+        DL[(DataLoader)]
     end
 
-    A(User Input) --> B[Intent Parser]
-    B --> C{Intent Type}
-    D[Data Fetch] <-->|tool calls| DL[(Data_Loader)]
-    C -->|factual_query/\<br>insight_analysis/\<br>recommendation| D
-    C -->|other| E(Direct Response)
-    %%DL[(Data_Loader)] -->|retrieved data| D 
-    D--> F[Analyst]
-    F --> G(Final Response)
+    A([User Input]) --> Intent[Intent Parser]
+    Intent -->|Parse Intent Type| C{Intent Type}
+    D[Data Fetch] <-->|tool calls| Tooling
+    C -->|factual_query| D
+    C -->|insight_analysis| D
+    C -->|recommendation| D
+    C -->|other| E([Direct Response])
+    D --> F[Analyst]
+    F --> G([Final Response])
     E --> G
 
-style D fill: #5b2
+style Intent fill: #7f68,stroke:#333,stroke-width:3px
+style D fill: #5bf,stroke:#333,stroke-width:2px
+style F fill: #1caa,stroke:#333,stroke-width:2px
+style Tooling fill: #f9f
 ```
 
 #### Components and Nodes
 
 - **Intent Parser**: Classifies user requests into categories: `factual_query`, `insight_analysis`, or `recommendation` to define the execution strategy.
-- **Data Fetch**: Translates the strategy into specific tool calls, managing argument generation and data truncation to fit LLM context windows.
-- **Analyst**: Synthesizes retrieved data into a final response using personas tailored to the user's intent.
+- **Data Fetch**: Translates the strategy into specific tool calls via `SpotifyQueryTools`. It leverages the **Analysis Core** for all computations while managing data volume to fit LLM context windows.
+- **Analyst**: Synthesizes retrieved data (as JSON or text) into a final response using personas tailored to the user's intent.
 
 
 ## How to Run

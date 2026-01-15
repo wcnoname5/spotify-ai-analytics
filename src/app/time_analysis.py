@@ -4,12 +4,12 @@ import plotly.express as px
 from dataloader import get_monthly_listening_trend, get_weekly_listening_trend
 
 @st.cache_data(ttl= 15, max_entries=5)
-def _get_monthly_listening_trend_cached(_loader, start_date: datetime.date, end_date: datetime.date):
-    return get_monthly_listening_trend(_loader, start_date=start_date, end_date=end_date)
+def _get_monthly_listening_trend_cached(df, start_date: datetime.date, end_date: datetime.date):
+    return get_monthly_listening_trend(df, start_date=start_date, end_date=end_date)
 
 @st.cache_data(ttl= 15, max_entries=5)
-def _get_weekly_listening_trend_cached(_loader, start_date: datetime.date, end_date: datetime.date):
-    return get_weekly_listening_trend(_loader, start_date=start_date, end_date=end_date)
+def _get_weekly_listening_trend_cached(df, start_date: datetime.date, end_date: datetime.date):
+    return get_weekly_listening_trend(df, start_date=start_date, end_date=end_date)
 
 def render_time_analysis(loader, start_date: datetime.date, end_date: datetime.date, show_tables):
     st.header("Time-based Trends & Patterns")
@@ -23,7 +23,7 @@ def render_time_analysis(loader, start_date: datetime.date, end_date: datetime.d
         
         with col1:
             with st.spinner("Calculating monthly trend..."):
-                trend_df = _get_monthly_listening_trend_cached(loader, start_date=start_date, end_date=end_date)
+                trend_df = _get_monthly_listening_trend_cached(loader.df, start_date=start_date, end_date=end_date)
 
                 if not trend_df.is_empty():
                     fig_trend = px.bar(
@@ -70,7 +70,7 @@ def render_time_analysis(loader, start_date: datetime.date, end_date: datetime.d
         # Weekly Listening Trend Section
         with col2:
             with st.spinner("Calculating weekly trend..."):
-                weekly_df = _get_weekly_listening_trend_cached(loader, start_date=start_date, end_date=end_date)
+                weekly_df = _get_weekly_listening_trend_cached(loader.df, start_date=start_date, end_date=end_date)
                 
                 if not weekly_df.is_empty():
                     # Define daytime colors (using standard hex or rgba)
