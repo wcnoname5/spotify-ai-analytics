@@ -1,14 +1,14 @@
 # Copilot Instructions
 
 ## Project Scope
-- This is a local-only Python project for experimenting with AI agents and LangGraph.
-- Do NOT suggest cloud deployment, Docker, Kubernetes, CI/CD pipelines, or remote services unless explicitly requested.
-- Assume the project is run locally by a single developer.
+- This project analyzes Spotify listening history using AI agents and LangGraph.
+- It is designed to run both locally and as a deployed application on **Streamlit Cloud**.
+- Assume the project is run by a developer or used by end-users via the cloud.
 
 ## Python Environment
 - Use `venv` for virtual environments.
 - Use `uv` to manage and pin Python versions.
-- The project is structured as a package with `src/` as the root. Use absolute imports (e.g., `from spotify_agent...` or `from utils...`).
+- The project's source code is in `src/`. Use absolute imports (e.g., `from spotify_agent...`, `from utils...`, `from app...`).
 - Do not use `sys.path` hacks in tests or scripts; assume the package is installed in the environment.
 - Do not suggest conda, poetry, or pipenv.
 
@@ -20,18 +20,18 @@
   - `@pytest.mark.llm`: Tests that invoke real LLMs or external AI services.
 - Mock LLM calls and external APIs in `unit` and most `integration` tests.
 - Focus tests on tools, state transitions, and graph logic.
-- Do not test Streamlit UI components.
+- Do not test Streamlit UI components (in `src/app/`).
 
 ## Agent Architecture
 - The project contains a single agent.
-- Agent logic lives in the `agent/` package.
-- Separate concerns into individual files (not folders):
-  - tools
-  - state definitions
-  - nodes
-  - graph construction
+- Agent logic lives in the `src/spotify_agent/` package.
+- Separate concerns into individual files:
+  - `tools.py`
+  - `state.py` (state definitions)
+  - `nodes.py`
+  - `graph.py` (graph construction)
 - Prefer LangGraph for agent orchestration.
-- Define agent state explicitly using typed dictionaries or dataclasses.
+- Define agent state explicitly using typed dictionaries or dataclasses in `state.py`.
 - Avoid monolithic agent implementations.
 
 ## Coding Style
@@ -41,8 +41,8 @@
 - Keep agent logic deterministic where possible.
 
 ## UI
-- Streamlit is used only for a minimal local UI.
-- UI code lives in `ui/`, not inside `agent/`.
+- Streamlit is used for the interactive UI, supporting both local execution and Streamlit Cloud deployment.
+- UI code lives in `src/app/`, not inside `spotify_agent/`.
 - Agent modules must not depend on Streamlit or UI-related libraries.
 - Use Plotly for interactive visualizations when needed.
 

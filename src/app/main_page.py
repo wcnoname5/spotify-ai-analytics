@@ -11,7 +11,7 @@ from utils.agent_utils import (
     reset_resources, 
     resolve_api_key, 
     resolve_data_loader,
-    is_cloud
+    validate_api_key,
 )
 from utils.loggings import setup_logging
 from config.settings import settings
@@ -33,6 +33,19 @@ def handle_zip_upload(uploaded_file):
     st.session_state["temp_dir"] = tmp_path
     
     with zipfile.ZipFile(uploaded_file, "r") as zip_ref:
+        # Quick Validation of file names
+        file_list = zip_ref.namelist()
+        valid_files = [f for f in file_list if "Streaming_History_Audio_" in f and f.endswith(".json")]
+        
+        if not valid_files:
+            # Clean up the directory since we won't use it
+            shutil.rmtree(tmp_path, ignore_errors=True)
+            del st.session_state["temp_dir"]
+            raise ValueError(
+                "No valid Spotify history files (e.g., 'Streaming_History_Audio_*.json') found in the ZIP. "
+                "Did you request the **Extended streaming history**?"
+            )
+            
         zip_ref.extractall(tmp_path)
     
     return SpotifyDataLoader(pathlib.Path(tmp_path))
@@ -42,10 +55,6 @@ def main():
 
     # Resolve Data
     loader, data_source = resolve_data_loader()
-    
-    # Inject loader into agent utilities
-    if loader:
-        inject_shared_loader(loader)
     
     # Check if we have data records
     has_data = loader is not None and not loader.df.is_empty()
@@ -84,13 +93,31 @@ def main():
             st.rerun()
 
         # API Key Resolution and UI
-        _, key_source = resolve_api_key(provider)
+        api_key, key_source = resolve_api_key(provider)
         session_key_name = "gemini_api_key" if provider == "Gemini" else "openai_api_key"
         input_key_name = f"input_{session_key_name}"
         
+        # Validation
+        validation_status = "unchecked"
+        if api_key:
+            validation_status = validate_api_key(provider, api_key)
+
         # Display current status
         if key_source == "session":
-            st.success(f"{provider} API key: Using session override")
+            if validation_status == "valid":
+                st.success(f"✅ {provider} API key: Active")
+            elif validation_status == "invalid":
+                st.error(f"❌ {provider} API key: Invalid key")
+            elif validation_status == "network_error":
+                st.warning(f"⚠️ {provider} API key: Network issue")
+                if st.button("Retry Validation"):
+                    # Clearing auth cache from session state
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("auth_cache_"):
+                            del st.session_state[k]
+                    reset_resources()
+                    st.rerun()
+
             if st.button("Clear Custom Key"):
                 if session_key_name in st.session_state:
                     del st.session_state[session_key_name]
@@ -98,18 +125,33 @@ def main():
                     st.session_state[input_key_name] = ""
                 reset_resources()
                 st.rerun()
+        # read local .env key
         elif key_source == "env":
-            st.info(f"{provider} API key: Using .env configuration")
+            if validation_status == "valid":
+                st.success(f"✅ {provider} API key: Using .env")
+            elif validation_status == "invalid":
+                st.error(f"❌ {provider} API key: .env key invalid")
+            elif validation_status == "network_error":
+                st.warning(f"⚠️ {provider} API key: .env connection issue")
+                if st.button("Retry Validation"):
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("auth_cache_"):
+                            del st.session_state[k]
+                    reset_resources()
+                    st.rerun()
         else:
             st.warning(f"{provider} API key: Not configured")
         
-        # Always allow override
-        # We don't use the return value directly to avoid instant rerun on every interaction
-        # Instead we check if the value in session state changed
+        
+        if st.session_state.get(input_key_name):
+            help_text = f"Enter a {provider} API key to set the configuration."
+        else:
+            help_text = f"Enter a {provider} API key to override the current configuration."
+        # Flied to enter API key
         st.text_input(
-            f"{provider} API Key Override",
+            f"{provider} API Key",
             type="password",
-            help=f"Enter a {provider} API key to override the current configuration.",
+            help=help_text,
             key=input_key_name
         )
         
@@ -123,18 +165,23 @@ def main():
 
         # Data Management
         st.subheader("Data Management")
-        if data_source != "none":
-            st.info(f"Using data from: {data_source}")
+        if data_source != "none" and has_data:
+            st.success(f"✅ Data Ready: {data_source}")
+        elif data_source != "none" and not has_data:
+            st.warning("⚠️ Data source found but contains no records.")
+        else:
+            st.info("ℹ️ No data loaded. Please upload your history.")
         
         uploaded_file = st.file_uploader("Upload Spotify History (.zip)", type="zip")
-        
+
         if uploaded_file is not None:
             if st.button("Process Uploaded Data"):
                 with st.spinner("Extracting and processing data..."):
                     try:
                         # Shared loader is injected here
-                        st.session_state["loader"] = handle_zip_upload(uploaded_file)
-                        inject_shared_loader(st.session_state["loader"])
+                        loader_obj = handle_zip_upload(uploaded_file)
+                        st.session_state["loader"] = loader_obj
+                        inject_shared_loader(loader_obj)
                         
                         # Reset Chat History for new data
                         if "messages" in st.session_state:
@@ -142,18 +189,24 @@ def main():
                         
                         st.success("Data loaded successfully!")
                         st.rerun()
+                    except ValueError as ve:
+                        st.error(f"{ve}")
+                        st.markdown("[How to get the right data?](https://support.spotify.com/us/article/understanding-your-data/)")
                     except Exception as e:
                         st.error(f"Error processing zip: {e}")
         st.divider()
         if st.button("Reset Session / Clear Data", type="primary"):
             # Clear all overrides
-            for key in ["loader", "gemini_api_key", "openai_api_key", "messages"]:
+            for key in ["loader", "gemini_api_key", "openai_api_key", "messages", "input_gemini_api_key", "input_openai_api_key"]:
                 if key in st.session_state:
                     del st.session_state[key]
+            
             if "temp_dir" in st.session_state:
                 shutil.rmtree(st.session_state["temp_dir"], ignore_errors=True)
                 del st.session_state["temp_dir"]
+                
             reset_resources()
+            st.success("Session reset successfully.")
             st.rerun()
 
     

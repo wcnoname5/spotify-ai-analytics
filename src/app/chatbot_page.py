@@ -1,10 +1,26 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage
 from spotify_agent.graph import build_app
+from utils.agent_utils import resolve_api_key, validate_api_key
 
 def render_chatbot():
     st.header("Spotify Data Chatbot")
-    # Create two columns (Left for Chat, Right for Visualizations)
+    
+    # Check for API Key early to warn user
+    provider = st.session_state.get("model_provider", "Gemini")
+    api_key, _ = resolve_api_key(provider)
+    validation_status = validate_api_key(provider, api_key) if api_key else "unchecked"
+    
+    can_chat = True
+    if not api_key:
+        st.warning(f"⚠️ **{provider} API key not found.** You can still see the interface, but the agent won't be able to respond until you configure it in the sidebar.")
+        can_chat = False
+    elif validation_status == "invalid":
+        st.error(f"❌ **Invalid {provider} API key.** The agent cannot function with an invalid key. Please update it in the sidebar.")
+        can_chat = False
+    elif validation_status == "network_error":
+        st.warning(f"⚠️ **{provider} Connection error.** I'm having trouble reaching the AI service. Please check your network or try again later.")
+        can_chat = False
 
     # Initialize session state for messages if not exists
     if "messages" not in st.session_state:
@@ -22,7 +38,7 @@ def render_chatbot():
                     st.markdown(message.content)
 
     # Chat input at the bottom of the left column
-    if prompt := st.chat_input("How can I help you with your Spotify data?"):
+    if prompt := st.chat_input("How can I help you with your Spotify data?", disabled=not can_chat):
         # Add user message to history
         st.session_state.messages.append(HumanMessage(content=prompt))
         with chat_container:
@@ -32,8 +48,11 @@ def render_chatbot():
         # Invoke agent
         with st.spinner("🔍 Agent is thinking... (Accessing data on first query)"):
             try:
-                # Compile the graph
-                app = build_app()
+                # Compile and cache the graph in session state
+                if "agent_app" not in st.session_state:
+                    st.session_state["agent_app"] = build_app()
+                
+                app = st.session_state["agent_app"]
                 
                 # Configuration for the graph (thread_id for state management)
                 config = {"configurable": {"thread_id": "streamlit_session"}}
