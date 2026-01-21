@@ -21,7 +21,7 @@ This project is a Python application for analyzing personalized Spotify streamin
 Interactive agent built with LangGraph that understands natural language queries.
 - Query historical facts (e.g., "What were my top 5 artists in 2023?").
 - Analyze listening taste (e.g., "How my musical taste for last 6 month?").
-- Get recommendations based on specific timeframes or genres found in your history.
+- Get recommendations based on specific timeframes or genres found in your history (e.g., "Recommend some new artists for me according to my preference in last year.").
 
 ### Interactive Dashboard
 Visual summary of streaming data using Plotly.

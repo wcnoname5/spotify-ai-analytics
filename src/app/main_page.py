@@ -76,7 +76,6 @@ def main():
 
         st.divider()
         st.header("Settings")
-        st.markdown("Configure AI model and data options first to enable the app.")
         # Model Configuration
         st.subheader("AI Configuration")
         provider = st.radio(
@@ -212,14 +211,23 @@ def main():
     
     # Main Content Area
     if not has_data:
-        st.info("👋 Welcome! Please upload your Spotify data export (.zip) in the sidebar to get started.")
+        st.info("👋 Welcome! Please upload your Spotify data export (.zip) and in the sidebar to get started.")
         st.markdown("""
-        ### How to get your data:
+        This is a Spotify AI Analytics app, equipped with an LLM based chatbot and interactive dashboard to provide insights on your listening habits.
+        To enable the full functionality, please upload your personal streaming history and configure AI model API key in the sidebar.
+        
+        ### Get your data:
         1. Go to your [Spotify Account Privacy Settings](https://www.spotify.com/account/privacy/).
         2. Request your **Extended streaming history**.
         3. Wait for Spotify to email you the download link (usually takes a few days).
-        4. Upload the resulting `.zip` file here.
+        4. Upload the resulting `.zip` file in the sidebar.
+        
+        ### AI model API key:
+        - We currently support OpenAI or Gemini API key.
+        - You can generate one at [OpenAI Platform](https://platform.openai.com/docs/quickstart) or at [Gemini API](https://aistudio.google.com).
         """)
+        st.caption("*Note:* API usage is subject to the provider's pricing and quota limits. Please monitor your own usage.")
+
         return
 
     # Render the selected page

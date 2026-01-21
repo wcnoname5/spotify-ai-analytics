@@ -5,6 +5,12 @@ from utils.agent_utils import resolve_api_key, validate_api_key
 
 def render_chatbot():
     st.header("Spotify Data Chatbot")
+    st.markdown("""
+        The chatbot is specialized in the following requests:
+        1. Query historical facts (e.g., "What were my top 5 artists in 2023?").
+        2. Analyze listening taste (e.g., "How my musical taste for last 6 month?").
+        3. Provide recommendations based on specific timeframes in your history (e.g., "Recommend some new artists for me according to my preference in last year.").     
+    """)
     
     # Check for API Key early to warn user
     provider = st.session_state.get("model_provider", "Gemini")
@@ -21,13 +27,14 @@ def render_chatbot():
     elif validation_status == "network_error":
         st.warning(f"⚠️ **{provider} Connection error.** I'm having trouble reaching the AI service. Please check your network or try again later.")
         can_chat = False
+    # Create two columns (Left for Chat, Right for Visualizations)
 
     # Initialize session state for messages if not exists
     if "messages" not in st.session_state:
         st.session_state.messages = []
     
     # Display chat history in a scrollable container
-    chat_container = st.container(height=400)
+    chat_container = st.container(height=600)
     with chat_container:
         for message in st.session_state.messages:
             if isinstance(message, HumanMessage):
@@ -38,7 +45,7 @@ def render_chatbot():
                     st.markdown(message.content)
 
     # Chat input at the bottom of the left column
-    if prompt := st.chat_input("How can I help you with your Spotify data?", disabled=not can_chat):
+    if prompt := st.chat_input("What are my top 5 tracks in last year?", disabled=not can_chat):
         # Add user message to history
         st.session_state.messages.append(HumanMessage(content=prompt))
         with chat_container:
