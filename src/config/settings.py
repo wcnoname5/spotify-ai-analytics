@@ -52,5 +52,4 @@ class Settings(BaseSettings):
 # Initialize settings
 settings = Settings()
 
-# Run path validation on startup
-settings.validate_paths()
+# Paths are validated lazily during resolution in agent_utils.py

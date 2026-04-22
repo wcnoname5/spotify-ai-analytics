@@ -9,12 +9,21 @@ from utils.agent_utils import get_resources
 from .schemas import IntentPlan, ToolPlan
 from .prompts import INTENT_PARSER_SYSTEM_PROMPT
 
+logger = logging.getLogger(__name__)
+
 
 def intent_parser(state: AgentState) -> Dict[str, Any]:
     """Parse the user's intent and generate a strategic execution plan (without tool args)."""
     llm, _, _ = get_resources()
-    logger = logging.getLogger(f'{__name__}.intent_parser')
     logger.info(f"Planning for input: {state['input']}")
+
+    if llm is None:
+        error_msg = "⚠️ **Initialization Error**: I couldn't initialize the AI model. Please check your API key in the sidebar."
+        return {
+            "intent": "other",
+            "messages": [AIMessage(content=error_msg)],
+            "final_response": error_msg
+        }
     
     # Use the structured output LLM to generate a strategic plan
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -148,8 +157,11 @@ def data_fetch(state: AgentState) -> Dict[str, Any]:
 
 def analyst_node(state: AgentState) -> Dict[str, Any]:
     """Generate the final response based on tool results and conversation history."""
+    # If we already have a final response (e.g., from missing API key check), return it
+    if state.get("final_response"):
+        return {"final_response": state["final_response"]}
+
     llm, _, _ = get_resources()
-    logger = logging.getLogger(f'{__name__}.analyst_node')
     
     intent = state.get("intent", "other")
     plan = state.get("plan")

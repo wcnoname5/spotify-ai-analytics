@@ -84,7 +84,8 @@ class SpotifyDataLoader:
     def _read_json_files(self, directory: Path, pattern: str = "Streaming*.json") -> pl.DataFrame:
         """Read JSON files in a directory matching the pattern into a Polars DataFrame."""
         logger = self._get_logger('_read_json_files')
-        json_files = list(directory.glob(pattern))
+        # Use rglob to recursively find files matching the pattern
+        json_files = list(directory.rglob(pattern))
         logger.info(f"Found {len(json_files)} JSON files matching '{pattern}' in {directory}")
         if not json_files:
             logger.warning(f"No JSON files found in {directory}")

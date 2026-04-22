@@ -1,9 +1,32 @@
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage
 from spotify_agent.graph import build_app
+from utils.agent_utils import resolve_api_key, validate_api_key
 
 def render_chatbot():
     st.header("Spotify Data Chatbot")
+    st.markdown("""
+        The chatbot is specialized in the following requests:
+        1. Query historical facts (e.g., "What were my top 5 artists in 2023?").
+        2. Analyze listening taste (e.g., "How my musical taste for last 6 month?").
+        3. Provide recommendations based on specific timeframes in your history (e.g., "Recommend some new artists for me according to my preference in last year.").     
+    """)
+    
+    # Check for API Key early to warn user
+    provider = st.session_state.get("model_provider", "Gemini")
+    api_key, _ = resolve_api_key(provider)
+    validation_status = validate_api_key(provider, api_key) if api_key else "unchecked"
+    
+    can_chat = True
+    if not api_key:
+        st.warning(f"⚠️ **{provider} API key not found.** You can still see the interface, but the agent won't be able to respond until you configure it in the sidebar.")
+        can_chat = False
+    elif validation_status == "invalid":
+        st.error(f"❌ **Invalid {provider} API key.** The agent cannot function with an invalid key. Please update it in the sidebar.")
+        can_chat = False
+    elif validation_status == "network_error":
+        st.warning(f"⚠️ **{provider} Connection error.** I'm having trouble reaching the AI service. Please check your network or try again later.")
+        can_chat = False
     # Create two columns (Left for Chat, Right for Visualizations)
 
     # Initialize session state for messages if not exists
@@ -11,7 +34,7 @@ def render_chatbot():
         st.session_state.messages = []
     
     # Display chat history in a scrollable container
-    chat_container = st.container(height=400)
+    chat_container = st.container(height=600)
     with chat_container:
         for message in st.session_state.messages:
             if isinstance(message, HumanMessage):
@@ -22,7 +45,7 @@ def render_chatbot():
                     st.markdown(message.content)
 
     # Chat input at the bottom of the left column
-    if prompt := st.chat_input("How can I help you with your Spotify data?"):
+    if prompt := st.chat_input("What are my top 5 tracks in last year?", disabled=not can_chat):
         # Add user message to history
         st.session_state.messages.append(HumanMessage(content=prompt))
         with chat_container:
@@ -32,8 +55,11 @@ def render_chatbot():
         # Invoke agent
         with st.spinner("🔍 Agent is thinking... (Accessing data on first query)"):
             try:
-                # Compile the graph
-                app = build_app()
+                # Compile and cache the graph in session state
+                if "agent_app" not in st.session_state:
+                    st.session_state["agent_app"] = build_app()
+                
+                app = st.session_state["agent_app"]
                 
                 # Configuration for the graph (thread_id for state management)
                 config = {"configurable": {"thread_id": "streamlit_session"}}
