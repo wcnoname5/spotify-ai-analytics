@@ -204,6 +204,41 @@ CREATE TABLE spotify_tokens (
 -- data/ltm.db          → managed by SqliteStore  (do not touch manually)
 ```
 
+### 4.5 `packages/core/db/pipeline.py` (BUILT — Phase 1)
+
+Four plain Python functions, independently importable by MCP tools:
+
+| Function | Purpose |
+|---|---|
+| `init_history_db(db_path)` | Create `data/history.db` with `listening_history` + `sync_state` tables |
+| `import_json_to_db(json_dir, db_path)` | Bulk load `Streaming*.json` exports; returns `{inserted, skipped}` |
+| `sync_api_to_db(db_path, tokens_db_path, user_id, client_id, fernet_key)` | Fetch 50 most recent plays from API, upsert; returns `{inserted, cursor_ms}` |
+| `open_inspect_shell(db_path)` | Print SQL cheatsheet, launch `sqlite3` interactive shell |
+
+Dedup key: `SHA1(track_uri + ":" + played_at_iso)` stored as `id TEXT PRIMARY KEY`.
+Cursor: `sync_state` table row `('last_played_at_ms', <unix_ms_int>)` persists API sync position.
+Tokens DB (`data/tokens.db`) is untouched — owned by `spotify_client/token_store.py`.
+`SpotifyClient` handles token auto-refresh internally.
+
+### DB Quick-Start (human user)
+
+```bash
+# 1. Initialize DB
+uv run python scripts/init_db.py
+
+# 2. Trigger OAuth (first time only — opens browser)
+uv run python scripts/init_db.py --auth
+
+# 3. Bulk-import local JSON export
+uv run python scripts/import_json.py --dir data/spotify_history
+
+# 4. Sync latest plays from Spotify
+uv run python scripts/sync_api.py --user-id <your_spotify_user_id>
+
+# 5. Inspect interactively
+uv run python scripts/inspect_db.py
+```
+
 ---
 
 ## 5. MCP Server Spec (`apps/mcp/`)
