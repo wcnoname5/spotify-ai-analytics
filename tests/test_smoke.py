@@ -60,3 +60,17 @@ def test_build_app_returns_compiled_graph():
         assert callable(getattr(app, "invoke", None)), "App missing callable invoke method"
 
         logger.info("✓ build_app() returns a valid compiled graph object")
+
+
+@pytest.mark.unit
+def test_packages_build_app_with_injection():
+    """Verify new packages/ build_app(llm, tools) signature works."""
+    from spotify_core.agent.graph import build_app as pkg_build_app
+    from unittest.mock import MagicMock
+
+    mock_llm = MagicMock()
+    mock_tool = MagicMock()
+    mock_tool.name = "test_tool"
+
+    app = pkg_build_app(mock_llm, [mock_tool])
+    assert callable(getattr(app, "invoke", None)), "packages/ build_app must return compiled graph"
