@@ -36,5 +36,18 @@ where = ["src"]
 [dependency-groups]
 dev = [
     "deptry>=0.24.0",
+    "hatchling>=1.25",
     "pytest>=9.0.2",
 ]
+
+[tool.uv.workspace]
+members = [
+    "packages/core",
+    "packages/dataloader",
+    "apps/mcp",
+    "apps/web",
+]
+
+[tool.uv.sources]
+spotify-core = { workspace = true }
+spotify-dataloader = { workspace = true }
