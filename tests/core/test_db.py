@@ -3,7 +3,7 @@ import pytest
 import sqlite3
 from pathlib import Path
 from spotify_core.db.migrations import init_db, get_connection
-from spotify_core.db.schema import ALL_DDL, LISTENING_HISTORY_DDL, SPOTIFY_TOKENS_DDL
+from spotify_core.db.schema import ALL_DDL, LISTENING_HISTORY_DDL, SPOTIFY_TOKENS_DDL, HISTORY_DDL, SYNC_STATE_DDL
 
 
 @pytest.mark.unit
@@ -109,3 +109,38 @@ def test_get_connection_row_factory(tmp_path):
         assert row["track_id"] == "t3"
     finally:
         conn.close()
+
+
+@pytest.mark.unit
+def test_history_ddl_contains_sync_state(tmp_path):
+    """HISTORY_DDL creates sync_state table."""
+    db_path = tmp_path / "test.db"
+    with sqlite3.connect(db_path) as conn:
+        for ddl in HISTORY_DDL:
+            conn.execute(ddl)
+    with sqlite3.connect(db_path) as conn:
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(sync_state)")}
+    assert {"key", "value"}.issubset(cols)
+
+
+@pytest.mark.unit
+def test_init_history_db_creates_tables(tmp_path):
+    """init_history_db creates listening_history and sync_state."""
+    from spotify_core.db.migrations import init_history_db
+    db_path = tmp_path / "history.db"
+    init_history_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+    assert "listening_history" in tables
+    assert "sync_state" in tables
+
+
+@pytest.mark.unit
+def test_init_history_db_idempotent(tmp_path):
+    """Calling init_history_db twice does not raise."""
+    from spotify_core.db.migrations import init_history_db
+    db_path = tmp_path / "history.db"
+    init_history_db(db_path)
+    init_history_db(db_path)
