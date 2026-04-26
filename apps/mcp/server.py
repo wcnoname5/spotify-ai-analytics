@@ -156,7 +156,7 @@ def get_top_tracks(
 @mcp.tool()
 def get_listening_summary() -> dict:
     """Return a summary of local listening history (total plays, date range, unique artists/tracks).
-
+    Note: played_at is in ISO format in UTC time, so it may not matches current time zone.
     Returns:
         {
             "total_plays": int,
@@ -320,6 +320,7 @@ def remember_preference(key: str, value: str, user_id: str = DEFAULT_USER_ID) ->
     Returns:
         {"status": "saved", "key": str, "value": str}.
     """
+    # TODO: can add more structured types later, but for now we can just store everything as strings and let the agent handle parsing/formatting
     from spotify_core.memory import get_store, get_user_namespace
     ns = get_user_namespace(user_id, "preferences")
     with get_store(LTM_DB) as store:

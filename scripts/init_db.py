@@ -7,6 +7,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from spotify_core.db.pipeline import init_history_db
 
 
@@ -42,13 +45,17 @@ def main():
         from spotify_core.spotify_client.auth import run_pkce_flow
         from spotify_core.spotify_client.token_store import save_tokens
 
+        if not Path(args.tokens_db).exists():
+            from spotify_core.db.migrations import init_tokens_db
+            logging.info("Tokens DB not found at %s, initializing a new one", args.tokens_db)
+            init_tokens_db(args.tokens_db)
+
         client_id = os.environ.get("SPOTIFY_CLIENT_ID")
         fernet_key_str = os.environ.get("TOKEN_ENCRYPT_KEY")
         if not client_id:
             logger.error("SPOTIFY_CLIENT_ID not set in environment")
             sys.exit(1)
         if not fernet_key_str:
-            # TODO: we could auto-generate and save this on first run instead of requiring the user to do it manually
             from cryptography.fernet import Fernet
             logger.info("DB build for the first time: Generating a new Fernet key for token encryption: %s", Fernet.generate_key().decode())
             logger.info("Set this value in your .env file as TOKEN_ENCRYPT_KEY to avoid generating a new one each time")
