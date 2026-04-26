@@ -6,7 +6,8 @@ from .schemas import IntentPlan
 class AgentState(TypedDict):
     input: str
     messages: Annotated[Sequence[BaseMessage], operator.add]
-    intent: Optional[Literal['factual_query', 'insight_analysis', 'recommendation', 'other']]
+    intent: Optional[Literal['factual_query', 'insight_analysis', 'recommendation', 'other',
+                             'playback_control', 'playlist_create', 'sync_history']]
     plan: Optional[IntentPlan]
     tool_results: List[Optional[Any]] # e.g., the queries and their results
     final_response: Optional[str]
