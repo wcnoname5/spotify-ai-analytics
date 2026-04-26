@@ -48,10 +48,14 @@ def main():
             logger.error("SPOTIFY_CLIENT_ID not set in environment")
             sys.exit(1)
         if not fernet_key_str:
-            logger.error(
-                "TOKEN_ENCRYPT_KEY not set — generate one with: "
-                'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
-            )
+            # TODO: we could auto-generate and save this on first run instead of requiring the user to do it manually
+            from cryptography.fernet import Fernet
+            logger.info("DB build for the first time: Generating a new Fernet key for token encryption: %s", Fernet.generate_key().decode())
+            logger.info("Set this value in your .env file as TOKEN_ENCRYPT_KEY to avoid generating a new one each time")
+            # logger.error(
+            #     "TOKEN_ENCRYPT_KEY not set — generate one with: "
+            #     'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+            # )
             sys.exit(1)
 
         fernet_key = fernet_key_str.encode()

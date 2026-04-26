@@ -21,7 +21,7 @@ import hashlib
 from typing import Optional, Tuple
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
-import google.generativeai as genai
+import google.generativeai as genai # TODO: change to google.genai
 from openai import OpenAI, AuthenticationError, APIConnectionError
 from spotify_agent.tools import initialize_tools
 from dataloader import SpotifyDataLoader

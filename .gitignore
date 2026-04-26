@@ -212,6 +212,8 @@ __marimo__/
 # Project specific
 # Vector database and user data
 data/vectordb/
+# sqlite databases and wal, shm files - ignore all but keep directory
+data/*.db*
 # Exclude user's actual Spotify data, but keep sample data
 data/spotify_history/*
 !data/spotify_history/sample_history.json
