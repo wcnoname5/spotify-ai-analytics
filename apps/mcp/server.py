@@ -16,6 +16,8 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from spotify_mcp.utils import enrich_auth_error, utc_iso_to_local
+from spotify_core.db.queries import is_history_empty
 
 load_dotenv()
 
@@ -67,7 +69,94 @@ except Exception as _e:
 # MCP Server
 # ------------------------------------------------------------------
 
+_EMPTY_DB_RESPONSE = {
+    "warning": "No listening history in the local database.",
+    "next_steps": [
+        "Option A — import Spotify JSON export (recommended, full history):",
+        "  1. Download from https://www.spotify.com/account/privacy/ (takes a few days)",
+        "  2. uv run python scripts/import_json.py --dir data/spotify_history",
+        "Option B — sync recent 50 plays from Spotify API (instant):",
+        "  uv run python scripts/sync_api.py --user-id <your_spotify_user_id>",
+    ],
+}
+
 mcp = FastMCP("spotify-analytics")
+
+
+@mcp.tool()
+def setup_check() -> dict:
+    """Diagnose the MCP server configuration. Call this first if something isn't working.
+
+    Returns a structured report of what is configured and what actions are still needed,
+    in the order they must be completed.
+
+    Returns:
+        {
+            "ready": bool,
+            "checks": dict[str, bool],
+            "actions_needed": list[str],
+            "message": str,
+        }
+    """
+    checks: dict[str, bool] = {}
+    actions: list[str] = []
+
+    checks["spotify_client_id"] = bool(CLIENT_ID)
+    if not CLIENT_ID:
+        actions.append(
+            "Set SPOTIFY_CLIENT_ID in .env\n"
+            "  → Create an app at https://developer.spotify.com/dashboard\n"
+            "  → Copy the Client ID into your .env file"
+        )
+
+    checks["token_encrypt_key"] = bool(FERNET_KEY)
+
+    if not FERNET_KEY:
+        # --auth also initializes the DB and auto-generates the key — one command covers everything.
+        actions.append(
+            "Run the init script — auto-generates TOKEN_ENCRYPT_KEY, initializes DB, and connects Spotify:\n"
+            "  uv run python scripts/init_db.py --auth --user-id <your_spotify_username>"
+        )
+    else:
+        db_exists = os.path.exists(DB_PATH)
+        checks["history_db_exists"] = db_exists
+
+        checks["tokens_exist"] = False
+        try:
+            from spotify_core.spotify_client.token_store import load_tokens
+            tokens = load_tokens(TOKENS_DB, DEFAULT_USER_ID, FERNET_KEY)
+            checks["tokens_exist"] = tokens is not None
+        except Exception:
+            pass
+
+        if not db_exists or not checks["tokens_exist"]:
+            actions.append(
+                "Initialize DB and connect Spotify account (one command, opens browser):\n"
+                "  uv run python scripts/init_db.py --auth --user-id <your_spotify_username>"
+            )
+        else:
+            has_data = not is_history_empty(DB_PATH)
+            checks["history_db_has_data"] = has_data
+            if not has_data:
+                actions.append(
+                    "Load listening history — choose one:\n"
+                    "  A) Full export: uv run python scripts/import_json.py --dir data/spotify_history\n"
+                    "     (download from https://www.spotify.com/account/privacy/)\n"
+                    "  B) Recent plays: uv run python scripts/sync_api.py --user-id <your_spotify_username>"
+                )
+
+    ready = len(actions) == 0
+    return {
+        "ready": ready,
+        "checks": checks,
+        "actions_needed": actions,
+        "message": (
+            "All set! MCP server is fully configured."
+            if ready
+            else f"{len(actions)} action(s) required to complete setup."
+        ),
+    }
+
 
 # ------------------------------------------------------------------
 # History sync tools
@@ -82,16 +171,20 @@ def sync_history(user_id: str = DEFAULT_USER_ID) -> dict:
         user_id: Spotify user ID whose history to sync. Defaults to SPOTIFY_USER_ID env var.
 
     Returns:
-        {"inserted": int, "cursor_ms": int}
+        {"inserted": int, "cursor_ms": int} or {"error": str, "requires_auth": bool, "auth_command": str}.
     """
-    from spotify_core.db.pipeline import sync_api_to_db
-    return sync_api_to_db(
-        db_path=DB_PATH,
-        tokens_db_path=TOKENS_DB,
-        user_id=user_id,
-        client_id=CLIENT_ID,
-        fernet_key=FERNET_KEY,
-    )
+    try:
+        from spotify_core.db.pipeline import sync_api_to_db
+        return sync_api_to_db(
+            db_path=DB_PATH,
+            tokens_db_path=TOKENS_DB,
+            user_id=user_id,
+            client_id=CLIENT_ID,
+            fernet_key=FERNET_KEY,
+        )
+    except Exception as exc:
+        logger.error("sync_history failed: %s", exc)
+        return enrich_auth_error({"error": str(exc)}, user_id)
 
 
 @mcp.tool()
@@ -128,7 +221,10 @@ def get_top_artists(
 
     Returns:
         List of {"artist_name": str, "total_ms": int, "play_count": int}.
+        If the DB is empty, returns [{"warning": ..., "next_steps": [...]}].
     """
+    if is_history_empty(DB_PATH):
+        return [_EMPTY_DB_RESPONSE]
     from spotify_core.db.queries import get_top_artists as _get_top_artists
     return _get_top_artists(DB_PATH, limit=limit, start_date=start_date, end_date=end_date)
 
@@ -148,7 +244,10 @@ def get_top_tracks(
 
     Returns:
         List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int}.
+        If the DB is empty, returns [{"warning": ..., "next_steps": [...]}].
     """
+    if is_history_empty(DB_PATH):
+        return [_EMPTY_DB_RESPONSE]
     from spotify_core.db.queries import get_top_tracks as _get_top_tracks
     return _get_top_tracks(DB_PATH, limit=limit, start_date=start_date, end_date=end_date)
 
@@ -156,18 +255,24 @@ def get_top_tracks(
 @mcp.tool()
 def get_listening_summary() -> dict:
     """Return a summary of local listening history (total plays, date range, unique artists/tracks).
-    Note: played_at is in ISO format in UTC time, so it may not matches current time zone.
+
     Returns:
         {
             "total_plays": int,
             "unique_tracks": int,
             "unique_artists": int,
-            "earliest_played_at": str | None,
-            "latest_played_at": str | None,
+            "earliest_played_at": str | None,  # local timezone ISO
+            "latest_played_at": str | None,    # local timezone ISO
         }
+        If the DB is empty, returns {"warning": ..., "next_steps": [...]}.
     """
+    if is_history_empty(DB_PATH):
+        return _EMPTY_DB_RESPONSE
     from spotify_core.db.queries import get_listening_summary as _summary
-    return _summary(DB_PATH)
+    result = dict(_summary(DB_PATH))
+    result["earliest_played_at"] = utc_iso_to_local(result.get("earliest_played_at"))
+    result["latest_played_at"] = utc_iso_to_local(result.get("latest_played_at"))
+    return result
 
 
 # ------------------------------------------------------------------
@@ -190,10 +295,14 @@ def get_now_playing(user_id: str = DEFAULT_USER_ID) -> dict:
     Returns:
         Dict with track info, or {"status": "nothing_playing"}.
     """
-    from spotify_core.agent.playback_tools import SpotifyPlaybackTools
-    with _make_client(user_id) as client:
-        tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
-        return tools.get_now_playing()
+    try:
+        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        with _make_client(user_id) as client:
+            tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+            return enrich_auth_error(tools.get_now_playing(), user_id)
+    except Exception as exc:
+        logger.error("get_now_playing failed: %s", exc)
+        return enrich_auth_error({"error": str(exc)}, user_id)
 
 
 @mcp.tool()
@@ -207,10 +316,14 @@ def play_track(uri: str, user_id: str = DEFAULT_USER_ID) -> dict:
     Returns:
         {"status": "playing", "uri": str} or {"error": str}.
     """
-    from spotify_core.agent.playback_tools import SpotifyPlaybackTools
-    with _make_client(user_id) as client:
-        tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
-        return tools.play_track(uri)
+    try:
+        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        with _make_client(user_id) as client:
+            tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+            return enrich_auth_error(tools.play_track(uri), user_id)
+    except Exception as exc:
+        logger.error("play_track failed: %s", exc)
+        return enrich_auth_error({"error": str(exc)}, user_id)
 
 
 @mcp.tool()
@@ -223,10 +336,14 @@ def pause_playback(user_id: str = DEFAULT_USER_ID) -> dict:
     Returns:
         {"status": "paused"} or {"error": str}.
     """
-    from spotify_core.agent.playback_tools import SpotifyPlaybackTools
-    with _make_client(user_id) as client:
-        tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
-        return tools.pause()
+    try:
+        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        with _make_client(user_id) as client:
+            tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+            return enrich_auth_error(tools.pause(), user_id)
+    except Exception as exc:
+        logger.error("pause_playback failed: %s", exc)
+        return enrich_auth_error({"error": str(exc)}, user_id)
 
 
 @mcp.tool()
@@ -239,10 +356,14 @@ def skip_track(user_id: str = DEFAULT_USER_ID) -> dict:
     Returns:
         {"status": "skipped"} or {"error": str}.
     """
-    from spotify_core.agent.playback_tools import SpotifyPlaybackTools
-    with _make_client(user_id) as client:
-        tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
-        return tools.skip()
+    try:
+        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        with _make_client(user_id) as client:
+            tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+            return enrich_auth_error(tools.skip(), user_id)
+    except Exception as exc:
+        logger.error("skip_track failed: %s", exc)
+        return enrich_auth_error({"error": str(exc)}, user_id)
 
 
 @mcp.tool()
@@ -256,10 +377,14 @@ def set_volume(volume_percent: int, user_id: str = DEFAULT_USER_ID) -> dict:
     Returns:
         {"status": "volume_set", "volume_percent": int} or {"error": str}.
     """
-    from spotify_core.agent.playback_tools import SpotifyPlaybackTools
-    with _make_client(user_id) as client:
-        tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
-        return tools.set_volume(volume_percent)
+    try:
+        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        with _make_client(user_id) as client:
+            tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+            return enrich_auth_error(tools.set_volume(volume_percent), user_id)
+    except Exception as exc:
+        logger.error("set_volume failed: %s", exc)
+        return enrich_auth_error({"error": str(exc)}, user_id)
 
 
 @mcp.tool()
@@ -273,10 +398,14 @@ def add_to_queue(uri: str, user_id: str = DEFAULT_USER_ID) -> dict:
     Returns:
         {"status": "queued", "uri": str} or {"error": str}.
     """
-    from spotify_core.agent.playback_tools import SpotifyPlaybackTools
-    with _make_client(user_id) as client:
-        tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
-        return tools.add_to_queue(uri)
+    try:
+        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        with _make_client(user_id) as client:
+            tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+            return enrich_auth_error(tools.add_to_queue(uri), user_id)
+    except Exception as exc:
+        logger.error("add_to_queue failed: %s", exc)
+        return enrich_auth_error({"error": str(exc)}, user_id)
 
 
 @mcp.tool()
@@ -297,10 +426,14 @@ def create_playlist(
     Returns:
         {"playlist_id": str, "url": str, "track_count": int} or {"error": str}.
     """
-    from spotify_core.agent.playback_tools import SpotifyPlaybackTools
-    with _make_client(user_id) as client:
-        tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
-        return tools.create_playlist(name, track_uris, description)
+    try:
+        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        with _make_client(user_id) as client:
+            tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+            return enrich_auth_error(tools.create_playlist(name, track_uris, description), user_id)
+    except Exception as exc:
+        logger.error("create_playlist failed: %s", exc)
+        return enrich_auth_error({"error": str(exc)}, user_id)
 
 
 # ------------------------------------------------------------------
