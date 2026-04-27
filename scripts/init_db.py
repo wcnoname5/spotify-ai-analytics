@@ -45,10 +45,9 @@ def main():
         from spotify_core.spotify_client.auth import run_pkce_flow
         from spotify_core.spotify_client.token_store import save_tokens
 
-        if not Path(args.tokens_db).exists():
-            from spotify_core.db.migrations import init_tokens_db
-            logging.info("Tokens DB not found at %s, initializing a new one", args.tokens_db)
-            init_tokens_db(args.tokens_db)
+        from spotify_core.db.migrations import init_tokens_db
+        # Always ensure tokens table exists in the specified tokens DB
+        init_tokens_db(args.tokens_db)
 
         client_id = os.environ.get("SPOTIFY_CLIENT_ID")
         fernet_key_str = os.environ.get("TOKEN_ENCRYPT_KEY")

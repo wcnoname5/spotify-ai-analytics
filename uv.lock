@@ -1833,6 +1833,10 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pytest" },
     { name = "python-dotenv" },
+    { name = "spotify-core" },
+    { name = "spotify-dataloader" },
+    { name = "spotify-mcp" },
+    { name = "spotify-web" },
     { name = "streamlit" },
 ]
 
@@ -1860,6 +1864,10 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "==2.12.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "python-dotenv", specifier = "==1.2.1" },
+    { name = "spotify-core", editable = "packages/core" },
+    { name = "spotify-dataloader", editable = "packages/dataloader" },
+    { name = "spotify-mcp", editable = "apps/mcp" },
+    { name = "spotify-web", editable = "apps/web" },
     { name = "streamlit", specifier = ">=1.52.2" },
 ]
 

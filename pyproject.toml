@@ -21,6 +21,11 @@ dependencies = [
     "pytest>=9.0.2",
     "python-dotenv==1.2.1",
     "streamlit>=1.52.2",
+    # workspace members — ensures uv sync at the root installs all transitive deps
+    "spotify-core",
+    "spotify-dataloader",
+    "spotify-mcp",
+    "spotify-web",
 ]
 
 [build-system]
@@ -51,3 +56,5 @@ members = [
 [tool.uv.sources]
 spotify-core = { workspace = true }
 spotify-dataloader = { workspace = true }
+spotify-mcp = { workspace = true }
+spotify-web = { workspace = true }
