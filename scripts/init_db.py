@@ -57,13 +57,21 @@ def main():
             sys.exit(1)
         if not fernet_key_str:
             from cryptography.fernet import Fernet
-            logger.info("DB build for the first time: Generating a new Fernet key for token encryption: %s", Fernet.generate_key().decode())
-            logger.info("Set this value in your .env file as TOKEN_ENCRYPT_KEY to avoid generating a new one each time")
-            # logger.error(
-            #     "TOKEN_ENCRYPT_KEY not set — generate one with: "
-            #     'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
-            # )
-            sys.exit(1)
+            new_key = Fernet.generate_key().decode()
+            env_path = Path(__file__).resolve().parent.parent / ".env"
+            if env_path.exists():
+                content = env_path.read_text()
+                import re as _re
+                if "TOKEN_ENCRYPT_KEY=" in content:
+                    content = _re.sub(r"TOKEN_ENCRYPT_KEY=\S*", f"TOKEN_ENCRYPT_KEY={new_key}", content)
+                else:
+                    content += f"\nTOKEN_ENCRYPT_KEY={new_key}\n"
+                env_path.write_text(content)
+                logger.info("Auto-generated TOKEN_ENCRYPT_KEY and saved to %s", env_path)
+            else:
+                logger.warning("No .env file found — add this line to your .env: TOKEN_ENCRYPT_KEY=%s", new_key)
+            fernet_key_str = new_key
+            os.environ["TOKEN_ENCRYPT_KEY"] = new_key
 
         fernet_key = fernet_key_str.encode()
         if not args.user_id:
