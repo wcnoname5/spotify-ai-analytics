@@ -135,3 +135,23 @@ def get_listening_summary(db_path: str) -> dict:
         return dict(row)
     finally:
         conn.close()
+
+
+def is_history_empty(db_path: str) -> bool:
+    """Return True if the DB file is missing, has no table, or has zero rows."""
+    import os
+    import sqlite3 as _sqlite3
+    if not os.path.exists(db_path):
+        return True
+    try:
+        conn = get_connection(db_path)
+        try:
+            row = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()
+            return row[0] == 0
+        except _sqlite3.OperationalError:
+            # Table doesn't exist yet
+            return True
+        finally:
+            conn.close()
+    except Exception:
+        return True

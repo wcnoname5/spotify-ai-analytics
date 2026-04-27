@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS listening_history (
     track_name   TEXT,
     artist_name  TEXT,
     album_name   TEXT,
-    played_at    DATETIME NOT NULL, // stored in ISO format (UTC)
+    played_at    DATETIME NOT NULL, -- stored in ISO format (UTC)
     ms_played    INTEGER,
     source       TEXT DEFAULT 'api' CHECK(source IN ('api', 'json_import'))
 );
