@@ -52,7 +52,9 @@ def handle_zip_upload(uploaded_file):
 
 def main():
     st.title("Spotify AI Analytics Agent")
-
+    st.warning(
+        "This app is still under construction and development. Current webpage is legacy version branch of this project."
+    )
     # Resolve Data
     loader, data_source = resolve_data_loader()
     
@@ -224,7 +226,7 @@ def main():
         
         ### AI model API key:
         - We currently support OpenAI or Gemini API key.
-        - You can generate one at [OpenAI Platform](https://platform.openai.com/docs/quickstart) or at [Gemini API](https://aistudio.google.com).
+        - You can generate one at [OpenAI Platform](https://platform.openai.com/docs/quickstart) or at [Google AI studio API](https://aistudio.google.com).
         """)
         st.caption("*Note:* API usage is subject to the provider's pricing and quota limits. Please monitor your own usage.")
 
