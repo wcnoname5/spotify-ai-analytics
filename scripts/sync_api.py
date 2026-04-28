@@ -15,6 +15,7 @@ load_dotenv()
 
 from _logging import setup_logging
 from spotify_core.db.pipeline import sync_api_to_db
+from src.config.settings import settings
 
 
 def main():
@@ -22,8 +23,9 @@ def main():
         description="Fetch recent plays from Spotify API and upsert into history.db"
     )
     parser.add_argument(
-        "--user-id", required=True,
-        help="Spotify user ID (same value used during --auth)"
+        "--user-id",
+        default=settings.spotify_user_id,
+        help="Spotify user ID (defaults to SPOTIFY_USER_ID from .env)",
     )
     parser.add_argument(
         "--db", default="data/history.db",
@@ -35,6 +37,11 @@ def main():
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
+
+    logger = logging.getLogger(__name__)
+    if not args.user_id:
+        logger.error("SPOTIFY_USER_ID not set in environment and --user-id was not provided")
+        sys.exit(1)
 
     setup_logging(args.verbose)
     logger = logging.getLogger(__name__)

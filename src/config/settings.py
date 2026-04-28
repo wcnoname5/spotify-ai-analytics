@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # Data Paths
     _default_data_path: Path = PROJECT_ROOT / "data" / "spotify_history"
     spotify_data_path: Path = Field(default=_default_data_path, alias="SPOTIFY_DATA_PATH")
+    spotify_user_id: str = Field(default="default", alias="SPOTIFY_USER_ID")
     # vector_db_path: Path = Field(default=PROJECT_ROOT / "data" / "vectordb", alias="VECTOR_DB_PATH")
 
     @field_validator("spotify_data_path", mode="before")

@@ -21,12 +21,13 @@ uv sync
 # 2. Set SPOTIFY_CLIENT_ID in .env (only key you need to find manually — see Section 2)
 cp .env.example .env
 
-# 3. Initialize DB + connect Spotify account (auto-generates TOKEN_ENCRYPT_KEY, opens browser)
-uv run python scripts/init_db.py --auth --user-id <your_spotify_username>
+# 3. Initialize DB, connect Spotify account, and optionally import your full history.
+#    Place your Streaming_History_Audio_*.json files in data/spotify_history/ first (optional).
+#    TOKEN_ENCRYPT_KEY would be auto-generated (no need to prepare manually)
+uv run python scripts/setup.py
 
-# 4. Load your listening history (choose one option — see Section 3)
-   # Option A: full history
-uv run python scripts/sync_api.py --user-id <your_spotify_username>  # Option B: recent 50 plays
+# 4. (Optional) Fill the gap between your JSON history and today, or fetch recent plays if you skipped JSON.
+uv run python scripts/sync_api.py
 
 # 5. Add the server to Claude (see Section 4)
 ```
@@ -56,7 +57,7 @@ Open `.env` in a text editor. Fill in the one required value:
 
 ### `TOKEN_ENCRYPT_KEY`
 
-**You don't need to generate this manually.** When you run `scripts/init_db.py --auth` and `TOKEN_ENCRYPT_KEY` is not set, the script auto-generates a Fernet key and writes it to your `.env` file automatically.
+**You don't need to generate this manually.** When you run `scripts/setup.py` and `TOKEN_ENCRYPT_KEY` is not set, the script auto-generates a Fernet key and writes it to your `.env` file automatically.
 
 If you ever need to set it manually (e.g., restoring from backup):
 
@@ -82,9 +83,7 @@ If omitted, defaults to `"default"`.
 
 ## Section 3 — Loading your listening history
 
-You have two options. **Option A gives you full history; Option B is instant.**
-
-### Option A — Spotify JSON export (recommended)
+### Full history — Spotify JSON export (recommended)
 
 Spotify can export your entire Extended Streaming History (all plays ever).
 
@@ -92,21 +91,29 @@ Spotify can export your entire Extended Streaming History (all plays ever).
 2. Scroll to **Download your data** → select **Extended streaming history**.
 3. Click **Request data**. Spotify emails you a download link within a few days.
 4. Unzip the download. You'll have files named `Streaming_History_Audio_*.json`.
-5. Place these files in `data/spotify_history/`.
-6. Import them:
-   ```bash
-   uv run python scripts/import_json.py --dir data/spotify_history
-   ```
+5. Place these files in `data/spotify_history/` **before** running `setup.py`.
+   `setup.py` imports them automatically — no extra command needed.
 
-### Option B — Recent plays from the Spotify API (instant)
-
-Fetches your 50 most recently played tracks right now:
+If you already ran `setup.py` and want to import JSON afterwards:
 
 ```bash
-uv run python scripts/sync_api.py --user-id <your_spotify_username>
+uv run python scripts/import_json.py --dir data/spotify_history
 ```
 
-Run this anytime to keep the DB up to date (the `sync_history` MCP tool does the same thing).
+Then run `sync_api.py` to fill the gap from the JSON end-date to today.
+
+### Recent plays only — Spotify API (instant, no JSON needed)
+
+If you skipped the JSON export, just run:
+
+```bash
+uv run python scripts/sync_api.py
+```
+
+> **Note:** The Spotify recently-played API only holds your last ~50 plays. It cannot recover months of history — only the JSON export can do that.
+
+Run `sync_api.py` anytime to stay up to date (the `sync_history` MCP tool does the same thing).
+
 ---
 
 ## Section 4 — Connecting to Claude
@@ -163,7 +170,7 @@ Claude will call the `setup_check` tool and give you a step-by-step list of what
 
 When the OAuth step comes up, Claude will say to run:
 ```bash
-uv run python scripts/init_db.py --auth --user-id <your_username>
+uv run python scripts/setup.py
 ```
 
 This opens your browser to Spotify's login page. After you approve, the browser shows "Authentication complete" and tokens are saved locally. You only need to do this once — tokens auto-refresh.
@@ -195,7 +202,7 @@ This opens your browser to Spotify's login page. After you approve, the browser 
 ## Troubleshooting
 
 **"No Spotify tokens found" on startup**
-→ Run the OAuth flow: `uv run python scripts/init_db.py --auth --user-id <your_username>`
+→ Run the OAuth flow: `uv run python scripts/setup.py`
 
 **"SPOTIFY_CLIENT_ID is not set"**
 → Check your `.env` file has `SPOTIFY_CLIENT_ID=...` (no quotes, no spaces around `=`)

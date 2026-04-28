@@ -1,9 +1,9 @@
 """One-command setup: init DB, OAuth, import JSON history.
 
 Recommended flow:
-  1. uv run python scripts/setup.py --user-id <id>
+    1. uv run python scripts/setup.py
      (add --json-dir if your Streaming*.json files are not in data/spotify_history)
-  2. uv run python scripts/sync_api.py --user-id <id>
+    2. uv run python scripts/sync_api.py
      (fills gap from JSON end to present; run again anytime to stay up to date)
 
 Re-running this script is safe — DB init is idempotent and JSON re-import skips duplicates.
@@ -22,6 +22,7 @@ load_dotenv()
 
 from _logging import setup_logging
 from spotify_core.db.pipeline import init_history_db, import_json_to_db
+from src.config.settings import settings
 
 
 def main():
@@ -31,8 +32,11 @@ def main():
             "Run sync_api.py afterwards to fill the gap from JSON end to present."
         )
     )
-    parser.add_argument("--user-id", required=True,
-                        help="Your Spotify username")
+    parser.add_argument(
+        "--user-id",
+        default=settings.spotify_user_id,
+        help="Your Spotify username (defaults to SPOTIFY_USER_ID from .env)",
+    )
     parser.add_argument("--db", default="data/history.db",
                         help="Path to history.db (default: data/history.db)")
     parser.add_argument("--tokens-db", default="data/tokens.db",
@@ -42,6 +46,11 @@ def main():
                              "(default: data/spotify_history; step skipped if no files found)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
+
+    logger = logging.getLogger(__name__)
+    if not args.user_id:
+        logger.error("SPOTIFY_USER_ID not set in environment and --user-id was not provided")
+        sys.exit(1)
 
     setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
@@ -105,8 +114,7 @@ def main():
         )
 
     logger.info(
-        "Setup complete. Next: uv run python scripts/sync_api.py --user-id %s",
-        args.user_id,
+        "Setup complete. Next: uv run python scripts/sync_api.py",
     )
 
 
