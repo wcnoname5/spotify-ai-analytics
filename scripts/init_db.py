@@ -10,7 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from spotify_core.db.pipeline import init_history_db
+from _logging import setup_logging
+from spotify_core.db.pipeline import init_history_db, sync_api_up_to_date
 
 
 def main():
@@ -34,7 +35,7 @@ def main():
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
 
     logger.info("Initializing history DB at %s", args.db)
@@ -83,6 +84,15 @@ def main():
         save_tokens(args.tokens_db, user_id, token_data, fernet_key)
         logger.info("Tokens saved for user_id='%s' in %s", user_id, args.tokens_db)
 
+        logger.info("Backfilling recent history from Spotify API (max 10 calls)...")
+        result = sync_api_up_to_date(
+            db_path=args.db,
+            tokens_db_path=args.tokens_db,
+            user_id=user_id,
+            client_id=client_id,
+            fernet_key=fernet_key,
+        )
+        logger.info("Backfill complete: %d rows inserted, cursor=%d ms", result["inserted"], result["cursor_ms"])
 
 if __name__ == "__main__":
     main()

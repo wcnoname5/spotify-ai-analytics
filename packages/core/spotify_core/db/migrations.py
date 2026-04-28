@@ -29,6 +29,25 @@ def init_db(db_path: Union[str, Path]) -> None:
 
     logger.info(f"Database initialized at {db_path}")
 
+# These are fields only in streaming history exports, but not in the API data.
+_HISTORY_COLUMNS = {
+    "platform":     "TEXT",
+    "conn_country": "TEXT",
+    "reason_start": "TEXT",
+    "reason_end":   "TEXT",
+    "shuffle":      "INTEGER", # Bool, but bool is not a native SQLite type, so use INTEGER with 0/1 values.
+    "skipped":      "INTEGER", # Bool, but bool is not a native SQLite type, so use INTEGER with 0/1 values.
+}
+
+
+def _migrate_history_db(conn: sqlite3.Connection) -> None:
+    """Add any missing columns to listening_history (idempotent)."""
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(listening_history)")}
+    for col, col_type in _HISTORY_COLUMNS.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE listening_history ADD COLUMN {col} {col_type}")
+            logger.info("Migration: added column %s %s to listening_history", col, col_type)
+
 
 def init_history_db(db_path: Union[str, Path]) -> None:
     """Create history.db with listening_history, sync_state, and index.
@@ -49,6 +68,7 @@ def init_history_db(db_path: Union[str, Path]) -> None:
         conn.execute("PRAGMA foreign_keys=ON")
         for ddl in HISTORY_DDL:
             conn.execute(ddl)
+        _migrate_history_db(conn)
         conn.commit()
 
     logger.info("History database initialized at %s", db_path)

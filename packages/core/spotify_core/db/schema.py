@@ -9,7 +9,13 @@ CREATE TABLE IF NOT EXISTS listening_history (
     album_name   TEXT,
     played_at    DATETIME NOT NULL, -- stored in ISO format (UTC)
     ms_played    INTEGER,
-    source       TEXT DEFAULT 'api' CHECK(source IN ('api', 'json_import'))
+    source       TEXT DEFAULT 'api' CHECK(source IN ('api', 'json_import')),
+    platform     TEXT,
+    conn_country TEXT,
+    reason_start TEXT,
+    reason_end   TEXT,
+    shuffle      INTEGER,            -- BOOLEAN stored as 0/1
+    skipped      INTEGER             -- BOOLEAN stored as 0/1
 );
 """
 

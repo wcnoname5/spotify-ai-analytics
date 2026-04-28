@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 load_dotenv()
 
+from _logging import setup_logging
 from spotify_core.db.pipeline import sync_api_to_db
 
 
@@ -32,7 +33,7 @@ def main():
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
 
     client_id = os.environ.get("SPOTIFY_CLIENT_ID")
@@ -45,6 +46,8 @@ def main():
         sys.exit(1)
 
     logger.info("Syncing recent plays for user '%s'", args.user_id)
+    # TODO: consider when initializing the DB, set the default user_id somewhere else so that user doesn't have to provide it every time for syncing
+    #  or at least provide a helpful error if the user_id doesn't match the one used during auth
     result = sync_api_to_db(
         db_path=args.db,
         tokens_db_path=args.tokens_db,

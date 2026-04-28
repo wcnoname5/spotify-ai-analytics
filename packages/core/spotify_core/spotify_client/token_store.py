@@ -83,11 +83,19 @@ def load_tokens(
         (``datetime``), and ``scopes`` (``str``), or ``None`` if not found.
     """
     with closing(get_connection(db_path)) as conn:
-        row = conn.execute(
-            "SELECT access_token, refresh_token, expires_at, scopes "
-            "FROM spotify_tokens WHERE user_id = ?",
-            (user_id,),
-        ).fetchone()
+        try:
+            row = conn.execute(
+                "SELECT access_token, refresh_token, expires_at, scopes "
+                "FROM spotify_tokens WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        except Exception as e:
+            if "no such table: spotify_tokens" in str(e).lower():
+                # throw a more specific error message for this common case
+                raise RuntimeError(f"Tokens database at {db_path} is not initialized. Call init_tokens_db() first.") from e
+            else:
+                raise RuntimeError(f"Error loading tokens for user {user_id} from {db_path}: {e}") from e
+
 
     if row is None:
         logger.debug("No token row found for user %s", user_id)

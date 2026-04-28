@@ -57,19 +57,20 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
     """Bulk load Streaming*.json files into listening_history.
 
     Returns:
-        {"inserted": int, "skipped": int}
+
+        {"inserted": int, "duplicated": int, "unparseable_dates": int}
     """
     json_path = Path(json_dir)
     if not list(json_path.rglob("Streaming*.json")):
         logger.warning("No Streaming*.json files found in %s", json_dir)
-        return {"inserted": 0, "skipped": 0}
+        return {"inserted": 0, "duplicated": 0, "unparseable_dates": 0}
 
     loader = SpotifyDataLoader(directory=json_path)
     df = loader.df
     if df is None or df.is_empty():
-        return {"inserted": 0, "skipped": 0}
+        return {"inserted": 0, "duplicated": 0, "unparseable_dates": 0}
 
-    inserted = skipped = 0
+    inserted = duplicated = unparseable_dates = 0
     conn = get_connection(db_path)
     try:
         with conn:  # BEGIN/COMMIT on success, ROLLBACK on exception
@@ -81,9 +82,8 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
                     played_at_iso = played_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
                 except (ValueError, AttributeError):
                     logger.warning("Skipping row with unparseable ts: %s", ts_str)
-                    skipped += 1
+                    unparseable_dates += 1
                     continue
-
                 row_id = hashlib.sha1(f"{track_uri}:{played_at_iso}".encode()).hexdigest()
 
                 # Polars Duration("ms") columns become Python timedelta via iter_rows()
@@ -94,26 +94,76 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
                     else None
                 )
 
+                shuffle_val = row.get("shuffle")
+                skipped_val = row.get("skipped")
+
                 cur = conn.execute(
                     "INSERT OR IGNORE INTO listening_history "
                     "(id, track_id, track_name, artist_name, album_name, "
-                    " played_at, ms_played, source) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    " played_at, ms_played, source, "
+                    " platform, conn_country, reason_start, reason_end, shuffle, skipped) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         row_id, track_uri,
                         row.get("track"), row.get("artist"), row.get("album"),
                         played_at_iso, ms_played_int, "json_import",
+                        row.get("platform"), row.get("conn_country"),
+                        row.get("reason_start"), row.get("reason_end"),
+                        int(shuffle_val) if shuffle_val is not None else None,
+                        int(skipped_val) if skipped_val is not None else None,
                     ),
                 )
                 if cur.rowcount > 0:
                     inserted += 1
                 else:
-                    skipped += 1
+                    duplicated += 1
     finally:
         conn.close()
 
-    logger.info("JSON import: %d inserted, %d skipped", inserted, skipped)
-    return {"inserted": inserted, "skipped": skipped}
+    logger.info("JSON import: %d inserted, %d duplicated, %d with unparseable dates", inserted, duplicated, unparseable_dates)
+    return {"inserted": inserted, "duplicated": duplicated, "unparseable_dates": unparseable_dates}
+
+
+def _insert_item_from_api_response(conn, item: dict, source: str = "api"):
+    """Insert a single Spotify API recently-played item into the DB.
+
+    Returns:
+    (inserted: bool, duplicated: bool, skipped_due_to_unparseable_date: bool, played_at_ms: Optional[int])
+    """
+    track = item.get("track", {})
+    track_uri = track.get("uri", "")
+    played_at_str = item.get("played_at", "")
+
+    try:
+        played_dt = datetime.fromisoformat(played_at_str.replace("Z", "+00:00"))
+        played_at_iso = played_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        played_at_ms = int(played_dt.timestamp() * 1000)
+    except (ValueError, AttributeError):
+        logger.warning("Skipping item with unparseable played_at: %s", played_at_str)
+        return False, False, True, None
+
+    row_id = hashlib.sha1(f"{track_uri}:{played_at_iso}".encode()).hexdigest()
+    artists = track.get("artists") or []
+    artist_name = artists[0]["name"] if artists else None
+    album_name = (track.get("album") or {}).get("name")
+    ms_played = track.get("duration_ms")
+
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO listening_history "
+        "(id, track_id, track_name, artist_name, album_name, "
+        " played_at, ms_played, source, "
+        " platform, conn_country, reason_start, reason_end, shuffle, skipped) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL)",
+        (
+            row_id, track_uri, track.get("name"),
+            artist_name, album_name,
+            played_at_iso, ms_played, source,
+        ),
+    )
+    # inserted if rowcount > 0, otherwise it was a duplicate and skipped
+    if cur.rowcount > 0:
+        return True, False, False, played_at_ms
+    return False, True, False, played_at_ms
 
 
 def sync_api_to_db(
@@ -158,45 +208,27 @@ def sync_api_to_db(
     new_cursor_ms = last_cursor_ms or 0
 
     conn = get_connection(db_path)
+    # This serve as a proxy to conn_contry for api sync items since API doesn't return country info in recently played endpoint
+    # we can use the user's country as a proxy for all API items
+    country = client.get_current_user().get("country")
     try:
         with conn:  # BEGIN/COMMIT on success, ROLLBACK on exception
             for item in items:
-                track = item.get("track", {})
-                track_uri = track.get("uri", "")
-                played_at_str = item.get("played_at", "")
-
-                try:
-                    played_dt = datetime.fromisoformat(played_at_str.replace("Z", "+00:00"))
-                    played_at_iso = played_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-                    played_at_ms = int(played_dt.timestamp() * 1000)
-                except (ValueError, AttributeError):
-                    logger.warning("Skipping item with unparseable played_at: %s", played_at_str)
+                inserted_flag, duplicated, skipped_unparseable, played_at_ms = _insert_item_from_api_response(
+                    conn, item, source="api"
+                )
+                if skipped_unparseable:
                     skipped += 1
                     continue
-
-                row_id = hashlib.sha1(f"{track_uri}:{played_at_iso}".encode()).hexdigest()
-                artists = track.get("artists") or []
-                artist_name = artists[0]["name"] if artists else None
-                album_name = (track.get("album") or {}).get("name")
-                # duration_ms is total track length; recently-played API doesn't return actual play time
-                ms_played = track.get("duration_ms")
-
-                cur = conn.execute(
-                    "INSERT OR IGNORE INTO listening_history "
-                    "(id, track_id, track_name, artist_name, album_name, "
-                    " played_at, ms_played, source) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        row_id, track_uri, track.get("name"),
-                        artist_name, album_name,
-                        played_at_iso, ms_played, "api",
-                    ),
-                )
-                if cur.rowcount > 0:
+                if inserted_flag:
                     inserted += 1
-                    new_cursor_ms = max(new_cursor_ms, played_at_ms)
+                    if played_at_ms:
+                        new_cursor_ms = max(new_cursor_ms, played_at_ms)
                 else:
-                    skipped += 1
+                    if duplicated:
+                        duplicated += 1
+                    else:
+                        skipped += 1
 
             if new_cursor_ms > (last_cursor_ms or 0):
                 conn.execute(
@@ -207,8 +239,115 @@ def sync_api_to_db(
     finally:
         conn.close()
 
-    logger.info("API sync: %d inserted, %d skipped, cursor=%d", inserted, skipped, new_cursor_ms)
-    return {"inserted": inserted, "cursor_ms": new_cursor_ms}
+    logger.info("API sync: %d inserted, %d duplicated, %d skipped, cursor=%d", inserted, duplicated, skipped, new_cursor_ms)
+    return {"inserted": inserted, "duplicated": duplicated, "skipped": skipped, "cursor_ms": new_cursor_ms}
+
+
+def sync_api_up_to_date(
+    db_path: str,
+    tokens_db_path: str,
+    user_id: str,
+    client_id: str,
+    fernet_key: bytes,
+    max_calls: int = 10,
+) -> dict:
+    """Backfill history by paging backward from now until the json_import anchor.
+
+    Uses the ``before`` cursor on ``GET /me/player/recently-played`` to walk
+    backward in time, stopping when the oldest fetched item is at or before the
+    latest json_import record.  When no json_import anchor exists (empty DB or
+    synced before any JSON load) it runs for ``max_calls`` iterations and stops.
+
+    Returns:
+        {"inserted": int, "cursor_ms": int}
+    """
+    token_data = load_tokens(tokens_db_path, user_id, fernet_key)
+    if token_data is None:
+        raise RuntimeError(
+            "Run OAuth flow first: uv run python scripts/init_db.py --auth"
+        )
+
+    # Anchor: latest played_at from json_import — stop backfill once we reach it.
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT MAX(played_at) FROM listening_history WHERE source='json_import'"
+        ).fetchone()
+        anchor_str: Optional[str] = row[0] if row else None
+    finally:
+        conn.close()
+
+    # The timestamp to stop backfilling at (the json_import anchor) in ms since epoch. If null, backfill until max_calls is reached.
+    stop_at_ms: Optional[int] = None
+    if anchor_str:
+        try:
+            anchor_dt = datetime.fromisoformat(anchor_str.replace("Z", "+00:00"))
+            stop_at_ms = int(anchor_dt.timestamp() * 1000)
+        except (ValueError, AttributeError):
+            logger.warning("Could not parse json_import anchor '%s' — no stop cursor", anchor_str)
+
+    inserted = skipped = 0
+    new_cursor_ms = 0
+    # start from current timstamp
+    before_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+    with SpotifyClient(tokens_db_path, user_id, client_id, fernet_key) as client:
+        for call_num in range(max_calls):
+            response = client.get_recently_played(limit=50, before=before_ms)
+            items = response.get("items", [])
+            if not items:
+                logger.info("No more items from Spotify API after %d call(s)", call_num + 1)
+                break
+            # This serve as a proxy to conn_contry for api sync items since API doesn't return country info in recently played endpoint
+            # we can use the user's country as a proxy for all API items
+            country = client.get_current_user().get("country")
+            conn = get_connection(db_path)
+            try:
+                with conn:
+                    for item in items:
+                        inserted_flag, duplicated, skipped_unparseable, played_at_ms = _insert_item_from_api_response(
+                            conn, item, source="api"
+                        )
+                        if skipped_unparseable:
+                            skipped += 1
+                            continue
+                        if inserted_flag:
+                            inserted += 1
+                            if played_at_ms:
+                                new_cursor_ms = max(new_cursor_ms, played_at_ms)
+                        else:
+                            if duplicated:
+                                duplicated += 1
+                            else:
+                                skipped += 1
+                            skipped += 1
+            finally:
+                conn.close()
+
+            # The cursor to use as key to find the previous page of items.
+            before_ms = response.get("cursors", {}).get("before")
+            # changet type to int
+            before_ms = int(before_ms) if before_ms else None
+
+            if stop_at_ms is not None and before_ms <= stop_at_ms:
+                logger.info("Reached json_import anchor at call %d — backfill complete", call_num + 1)
+                break
+
+    if new_cursor_ms > 0:
+        conn = get_connection(db_path)
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO sync_state (key, value) "
+                    "VALUES ('last_played_at_ms', ?)",
+                    (new_cursor_ms,),
+                )
+        finally:
+            conn.close()
+
+    logger.info("Backfill: %d inserted, %d duplicated, %d skipped, cursor=%d", inserted, duplicated, skipped, new_cursor_ms)
+    return {"inserted": inserted, "duplicated": duplicated, "skipped": skipped, "cursor_ms": new_cursor_ms}
+
 
 
 def open_inspect_shell(db_path: str) -> None:

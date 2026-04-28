@@ -107,7 +107,6 @@ uv run python scripts/sync_api.py --user-id <your_spotify_username>
 ```
 
 Run this anytime to keep the DB up to date (the `sync_history` MCP tool does the same thing).
-
 ---
 
 ## Section 4 — Connecting to Claude

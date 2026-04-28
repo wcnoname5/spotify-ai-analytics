@@ -170,22 +170,36 @@ class SpotifyClient:
     # Listening history & top items
     # ------------------------------------------------------------------
 
-    def get_recently_played(self, limit: int = 50, after: Optional[int] = None) -> dict:
+    def get_recently_played(
+        self,
+        limit: int = 50,
+        after: Optional[int] = None,
+        before: Optional[int] = None,
+    ) -> dict:
         """Return the user's recently played tracks.
 
         Calls ``GET /me/player/recently-played``.
 
         Args:
             limit: Number of items to return (max 50).
-            after: Unix timestamp in milliseconds — return only items played
-                after this cursor.
+            after: Unix timestamp in ms — return only items played after this cursor.
+            before: Unix timestamp in ms — return only items played before this cursor.
+
+        Only one of ``after`` / ``before`` should be set per call.
 
         Returns:
             Spotify paging object containing track items.
         """
+        # TODO: the before/after logic for this api is quite weird it reuqires more tests.
         params: dict = {"limit": limit}
+        if after and before:
+            raise ValueError("Only one of 'after' or 'before' can be set for get_recently_played")
+        
         if after is not None:
             params["after"] = after
+        if before is not None:
+            params["before"] = before
+
         response = self._request("GET", "/me/player/recently-played", params=params)
         return response.json()
 

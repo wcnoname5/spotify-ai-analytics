@@ -6,6 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from _logging import setup_logging
 from spotify_core.db.pipeline import import_json_to_db
 
 
@@ -24,12 +25,12 @@ def main():
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
+    setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
 
     logger.info("Importing JSON from %s into %s", args.dir, args.db)
     result = import_json_to_db(args.dir, args.db)
-    logger.info("Inserted %d rows, skipped %d duplicates", result["inserted"], result["skipped"])
+    logger.info("Inserted %d rows, duplicated %d, unparseable dates %d", result["inserted"], result["duplicated"], result["unparseable_dates"])
 
 
 if __name__ == "__main__":
