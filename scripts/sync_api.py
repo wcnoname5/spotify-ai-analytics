@@ -1,4 +1,7 @@
-"""Sync recent Spotify plays from the API into history.db."""
+"""
+Sync recent Spotify plays from the API into history.db. 
+NOTE: This sync need to run routinely (e.g. via cron) to keep the database up to date, as the Spotify API only provides access to the most recent ~50 plays.
+"""
 import argparse
 import logging
 import os
@@ -46,8 +49,6 @@ def main():
         sys.exit(1)
 
     logger.info("Syncing recent plays for user '%s'", args.user_id)
-    # TODO: consider when initializing the DB, set the default user_id somewhere else so that user doesn't have to provide it every time for syncing
-    #  or at least provide a helpful error if the user_id doesn't match the one used during auth
     result = sync_api_to_db(
         db_path=args.db,
         tokens_db_path=args.tokens_db,

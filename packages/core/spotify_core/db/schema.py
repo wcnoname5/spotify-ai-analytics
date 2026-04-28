@@ -1,4 +1,4 @@
-"""SQLite schema definitions for the Spotify AI Analytics database."""
+"""SQLite schema definitions (DDL, data definition language) for the Spotify AI Analytics database."""
 
 LISTENING_HISTORY_DDL = """
 CREATE TABLE IF NOT EXISTS listening_history (

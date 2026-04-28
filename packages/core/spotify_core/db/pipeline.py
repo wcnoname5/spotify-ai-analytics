@@ -120,6 +120,35 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
         conn.close()
 
     logger.info("JSON import: %d inserted, %d skipped duplicated, %d skipped parse errors", inserted, skipped_duplicated, skipped_parse_error)
+
+    # Advance sync_state cursor to the latest json_import play so that
+    # subsequent sync_api_to_db calls start from the right point.
+    if inserted > 0:
+        conn2 = get_connection(db_path)
+        try:
+            with conn2:
+                anchor_row = conn2.execute(
+                    "SELECT MAX(played_at) FROM listening_history WHERE source='json_import'"
+                ).fetchone()
+                if anchor_row and anchor_row[0]:
+                    try:
+                        anchor_dt = datetime.fromisoformat(anchor_row[0].replace("Z", "+00:00"))
+                        anchor_ms = int(anchor_dt.timestamp() * 1000)
+                        cur_row = conn2.execute(
+                            "SELECT value FROM sync_state WHERE key='last_played_at_ms'"
+                        ).fetchone()
+                        existing_ms = cur_row["value"] if cur_row else 0
+                        if anchor_ms > (existing_ms or 0):
+                            conn2.execute(
+                                "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_played_at_ms', ?)",
+                                (anchor_ms,),
+                            )
+                            logger.info("JSON import: sync cursor advanced to %d ms", anchor_ms)
+                    except (ValueError, AttributeError):
+                        pass
+        finally:
+            conn2.close()
+
     return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error}
 
 
@@ -251,6 +280,9 @@ def sync_api_up_to_date(
     max_calls: int = 10,
 ) -> dict:
     """Backfill history by paging backward from now until the json_import anchor.
+    
+    NOTE: This function behaves as `sync_api_to_db` since spotify doesn't provide data up to over 50 items ago.  
+
 
     Uses the ``before`` cursor on ``GET /me/player/recently-played`` to walk
     backward in time, stopping when the oldest fetched item is at or before the
@@ -285,18 +317,35 @@ def sync_api_up_to_date(
         except (ValueError, AttributeError):
             logger.warning("Could not parse json_import anchor '%s' — no stop cursor", anchor_str)
 
+    logger.debug(
+        "sync_api_up_to_date: json_import anchor=%s stop_at_ms=%s max_calls=%d",
+        anchor_str, stop_at_ms, max_calls,
+    )
+
     inserted = skipped_duplicated = skipped_parse_error = 0
     new_cursor_ms = 0
     before_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
     with SpotifyClient(tokens_db_path, user_id, client_id, fernet_key) as client:
         for call_num in range(max_calls):
+            logger.debug("Call %d/%d: fetching before_ms=%s", call_num + 1, max_calls, before_ms)
             response = client.get_recently_played(limit=50, before=before_ms)
             items = response.get("items", [])
+            cursors = response.get("cursors", {})
+            logger.debug(
+                "Call %d/%d: got %d item(s), cursors=%s, next=%s",
+                call_num + 1, max_calls, len(items), cursors, response.get("next"),
+            )
             if not items:
-                logger.info("No more items from Spotify API after %d call(s)", call_num + 1)
+                logger.info(
+                    "Call %d/%d: Spotify returned 0 items (API cache exhausted or no plays before %s) — stopping",
+                    call_num + 1, max_calls, before_ms,
+                )
                 break
+            oldest_in_page = items[-1].get("played_at", "?")
+            newest_in_page = items[0].get("played_at", "?")
             conn = get_connection(db_path)
+            call_inserted = call_dupes = 0
             try:
                 with conn:
                     for item in items:
@@ -308,19 +357,33 @@ def sync_api_up_to_date(
                             continue
                         if inserted_flag:
                             inserted += 1
+                            call_inserted += 1
                             if played_at_ms:
                                 new_cursor_ms = max(new_cursor_ms, played_at_ms)
                         elif is_duplicate:
                             skipped_duplicated += 1
+                            call_dupes += 1
             finally:
                 conn.close()
+            logger.info(
+                "Call %d/%d: %d item(s) [%s → %s], inserted=%d dupes=%d",
+                call_num + 1, max_calls, len(items), oldest_in_page, newest_in_page,
+                call_inserted, call_dupes,
+            )
 
             # get the `before` cursor for the next call from API response
-            before_ms = response.get("cursors", {}).get("before")
+            before_ms = cursors.get("before")
             before_ms = int(before_ms) if before_ms else None
 
+            if before_ms is None:
+                logger.info("No pagination cursor in API response after call %d — stopping", call_num + 1)
+                break
+
             if stop_at_ms is not None and before_ms <= stop_at_ms:
-                logger.info("Reached json_import anchor at call %d — backfill complete", call_num + 1)
+                logger.info(
+                    "Call %d: before_ms=%d reached json_import anchor=%d — backfill complete",
+                    call_num + 1, before_ms, stop_at_ms,
+                )
                 break
 
     if new_cursor_ms > 0:

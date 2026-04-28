@@ -111,6 +111,31 @@ def test_import_json_source_field(sample_json_dir, history_db):
     assert sources == {"json_import"}
 
 
+@pytest.mark.unit
+def test_import_json_sets_sync_cursor(sample_json_dir, history_db):
+    """import_json_to_db writes last_played_at_ms to sync_state after inserting rows."""
+    import_json_to_db(str(sample_json_dir), str(history_db))
+    with sqlite3.connect(history_db) as conn:
+        row = conn.execute("SELECT value FROM sync_state WHERE key='last_played_at_ms'").fetchone()
+    assert row is not None
+    assert row[0] > 0
+
+
+@pytest.mark.unit
+def test_import_json_cursor_does_not_regress(sample_json_dir, history_db):
+    """import_json_to_db never moves the cursor backward when one already exists."""
+    future_cursor = 9_999_999_999_999  # far in the future
+    with sqlite3.connect(history_db) as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_played_at_ms', ?)",
+            (future_cursor,),
+        )
+    import_json_to_db(str(sample_json_dir), str(history_db))
+    with sqlite3.connect(history_db) as conn:
+        row = conn.execute("SELECT value FROM sync_state WHERE key='last_played_at_ms'").fetchone()
+    assert row[0] == future_cursor  # unchanged
+
+
 def _make_recently_played_response(items):
     return {"items": items}
 

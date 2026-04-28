@@ -24,6 +24,7 @@ def init_db(db_path: Union[str, Path]) -> None:
         conn.execute("PRAGMA journal_mode=WAL")   # better concurrent read performance
         conn.execute("PRAGMA foreign_keys=ON")
         for ddl in ALL_DDL:
+            # CREATE TABLE statements are idempotent, so this won't overwrite existing tables or data.
             conn.execute(ddl)
         conn.commit()
 
