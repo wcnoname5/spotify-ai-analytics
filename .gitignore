@@ -208,6 +208,7 @@ __marimo__/
 
 # Git worktrees
 .worktrees/
+.claude/worktrees/
 
 # Project specific
 # Vector database and user data

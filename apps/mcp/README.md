@@ -81,7 +81,7 @@ If omitted, defaults to `"default"`.
 
 ---
 
-## Section 3 — Loading your listening history
+## Section 3 — Loading your listening history and initate the DB
 
 ### Full history — Spotify JSON export (recommended)
 
@@ -93,18 +93,10 @@ Spotify can export your entire Extended Streaming History (all plays ever).
 4. Unzip the download. You'll have files named `Streaming_History_Audio_*.json`.
 5. Place these files in `data/spotify_history/` **before** running `setup.py`.
    `setup.py` imports them automatically — no extra command needed.
+  - *Note:* If you didn't place the JSON files, `setup.py` won't load the data but it will still initate the databse.
 
-If you already ran `setup.py` and want to import JSON afterwards:
-
-```bash
-uv run python scripts/import_json.py --dir data/spotify_history
-```
-
-Then run `sync_api.py` to fill the gap from the JSON end-date to today.
 
 ### Recent plays only — Spotify API (instant, no JSON needed)
-
-If you skipped the JSON export, just run:
 
 ```bash
 uv run python scripts/sync_api.py
@@ -118,9 +110,9 @@ Run `sync_api.py` anytime to stay up to date (the `sync_history` MCP tool does t
 
 ## Section 4 — Connecting to Claude
 
-### Claude Code (VS Code / CLI)
+### Claude Code (CLI)
 
-Add to your project's `.claude/settings.json` or your user settings file:
+Add to your project's `.claude/settings.json` or your user settings file, claude code can then connect to this MCP server in project level:
 
 ```json
 {
@@ -142,15 +134,30 @@ Open the Claude Desktop config file:
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-Add the `mcpServers` block:
+Add the `mcpServers` block: (Windows)
 
 ```json
 {
   "mcpServers": {
     "spotify-analytics": {
       "command": "uv",
-      "args": ["run", "python", "apps/mcp/server.py"],
-      "cwd": "C:\\path\\to\\spotify-ai-analytics"
+      "args": ["run", "python", "C:\\Path\\Tospotify-ai-analytics\\apps\\mcp\\server.py"],
+      "cwd": "C:\\Path\\To\\spotify-ai-analytics"
+    }
+  }
+}
+```
+For best practice, the application (& `uv`) should be written with direct path. `\\` for windows, `/` for macOS.
+
+If the having trouble with `uv`, try use the python intepreter in `.venv` as command to initate the MCP server directly.
+
+```json
+{
+  "mcpServers": {
+    "spotify-analytics": {
+      "command": "C:\\Path\\To\\spotify-ai-analytics\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\Path\\To\\spotify-ai-analytics\\apps\\mcp\\server.py"],
+      "cwd": "C:\\Path\\To\\spotify-ai-analytics"
     }
   }
 }
@@ -216,7 +223,7 @@ This opens your browser to Spotify's login page. After you approve, the browser 
 
 **DB is empty after import**
 → Check that your JSON files are named `Streaming_History_Audio_*.json` or `Streaming_History_Video_*.json`.
-→ Run: `uv run python scripts/import_json.py --dir data/spotify_history`
+→ Run: `uv run python scripts/setup.py`
 
 **"Token decrypt failed" or "Invalid token"**
 → Your `TOKEN_ENCRYPT_KEY` may have changed. Generate a new key, update `.env`, and re-run OAuth.

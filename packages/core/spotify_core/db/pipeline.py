@@ -215,7 +215,7 @@ def sync_api_to_db(
     token_data = load_tokens(tokens_db_path, user_id, fernet_key)
     if token_data is None:
         raise RuntimeError(
-            "Run OAuth flow first: uv run python scripts/init_db.py --auth"
+            "Run setup to finish OAuth flow first: uv run python scripts/setup.py"
         )
 
     # Read current cursor from sync_state
@@ -225,6 +225,7 @@ def sync_api_to_db(
             "SELECT value FROM sync_state WHERE key='last_played_at_ms'"
         ).fetchone()
         db_last_cursor: Optional[int] = row["value"] if row else None
+    # TODO: catch specific exceptions (e.g. missing table) and provide actionable error messages in the future
     finally:
         conn.close()
 
