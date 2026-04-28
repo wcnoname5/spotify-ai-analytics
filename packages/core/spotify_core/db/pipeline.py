@@ -57,20 +57,19 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
     """Bulk load Streaming*.json files into listening_history.
 
     Returns:
-
-        {"inserted": int, "duplicated": int, "unparseable_dates": int}
+        {"inserted": int, "skipped_duplicated": int, "skipped_parse_error": int}
     """
     json_path = Path(json_dir)
     if not list(json_path.rglob("Streaming*.json")):
         logger.warning("No Streaming*.json files found in %s", json_dir)
-        return {"inserted": 0, "duplicated": 0, "unparseable_dates": 0}
+        return {"inserted": 0, "skipped_duplicated": 0, "skipped_parse_error": 0}
 
     loader = SpotifyDataLoader(directory=json_path)
     df = loader.df
     if df is None or df.is_empty():
-        return {"inserted": 0, "duplicated": 0, "unparseable_dates": 0}
+        return {"inserted": 0, "skipped_duplicated": 0, "skipped_parse_error": 0}
 
-    inserted = duplicated = unparseable_dates = 0
+    inserted = skipped_duplicated = skipped_parse_error = 0
     conn = get_connection(db_path)
     try:
         with conn:  # BEGIN/COMMIT on success, ROLLBACK on exception
@@ -82,7 +81,7 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
                     played_at_iso = played_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
                 except (ValueError, AttributeError):
                     logger.warning("Skipping row with unparseable ts: %s", ts_str)
-                    unparseable_dates += 1
+                    skipped_parse_error += 1
                     continue
                 row_id = hashlib.sha1(f"{track_uri}:{played_at_iso}".encode()).hexdigest()
 
@@ -116,19 +115,23 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
                 if cur.rowcount > 0:
                     inserted += 1
                 else:
-                    duplicated += 1
+                    skipped_duplicated += 1
     finally:
         conn.close()
 
-    logger.info("JSON import: %d inserted, %d duplicated, %d with unparseable dates", inserted, duplicated, unparseable_dates)
-    return {"inserted": inserted, "duplicated": duplicated, "unparseable_dates": unparseable_dates}
+    logger.info("JSON import: %d inserted, %d skipped duplicated, %d skipped parse errors", inserted, skipped_duplicated, skipped_parse_error)
+    return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error}
 
 
 def _insert_item_from_api_response(conn, item: dict, source: str = "api"):
     """Insert a single Spotify API recently-played item into the DB.
+    Input:
+        conn: SQLite connection with listening_history table.
+        item: dict representing a single play from Spotify API /me/player/recently-played response.
+        source: str indicating the source of the data ("api" or "json_import") to populate the source column in the DB.
 
     Returns:
-    (inserted: bool, duplicated: bool, skipped_due_to_unparseable_date: bool, played_at_ms: Optional[int])
+        (inserted: bool, duplicated: bool, skipped_due_to_unparseable_date: bool, played_at_ms: Optional[int])
     """
     track = item.get("track", {})
     track_uri = track.get("uri", "")
@@ -139,6 +142,7 @@ def _insert_item_from_api_response(conn, item: dict, source: str = "api"):
         played_at_iso = played_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         played_at_ms = int(played_dt.timestamp() * 1000)
     except (ValueError, AttributeError):
+        # Unparseable date — skip this item but don't fail the whole batch
         logger.warning("Skipping item with unparseable played_at: %s", played_at_str)
         return False, False, True, None
 
@@ -176,7 +180,7 @@ def sync_api_to_db(
     """Fetch the 50 most recent plays from the Spotify API and upsert.
 
     Returns:
-        {"inserted": int, "cursor_ms": int}
+        {"inserted": int, "skipped_duplicated": int, "skipped_parse_error": int, "cursor_ms": int}
     """
     # Verify a token record exists — SpotifyClient handles auto-refresh internally
     token_data = load_tokens(tokens_db_path, user_id, fernet_key)
@@ -191,46 +195,41 @@ def sync_api_to_db(
         row = conn.execute(
             "SELECT value FROM sync_state WHERE key='last_played_at_ms'"
         ).fetchone()
-        last_cursor_ms: Optional[int] = row["value"] if row else None
+        db_last_cursor: Optional[int] = row["value"] if row else None
     finally:
         conn.close()
 
     # Fetch from Spotify API
     with SpotifyClient(tokens_db_path, user_id, client_id, fernet_key) as client:
-        response = client.get_recently_played(limit=50, after=last_cursor_ms)
+        response = client.get_recently_played(limit=50, after=db_last_cursor)
 
     items = response.get("items", [])
     if not items:
         logger.info("No new tracks from Spotify API")
-        return {"inserted": 0, "cursor_ms": last_cursor_ms or 0}
+        return {"inserted": 0, "skipped_duplicated": 0, "skipped_parse_error": 0, "cursor_ms": db_last_cursor or 0}
 
-    inserted = skipped = 0
-    new_cursor_ms = last_cursor_ms or 0
+    inserted = skipped_duplicated = skipped_parse_error = 0
+    new_cursor_ms = db_last_cursor or 0
 
     conn = get_connection(db_path)
-    # This serve as a proxy to conn_contry for api sync items since API doesn't return country info in recently played endpoint
-    # we can use the user's country as a proxy for all API items
-    country = client.get_current_user().get("country")
     try:
         with conn:  # BEGIN/COMMIT on success, ROLLBACK on exception
             for item in items:
-                inserted_flag, duplicated, skipped_unparseable, played_at_ms = _insert_item_from_api_response(
+                inserted_flag, is_duplicate, is_unparseable, played_at_ms = _insert_item_from_api_response(
                     conn, item, source="api"
                 )
-                if skipped_unparseable:
-                    skipped += 1
+                if is_unparseable:
+                    skipped_parse_error += 1
                     continue
                 if inserted_flag:
                     inserted += 1
                     if played_at_ms:
                         new_cursor_ms = max(new_cursor_ms, played_at_ms)
-                else:
-                    if duplicated:
-                        duplicated += 1
-                    else:
-                        skipped += 1
+                elif is_duplicate:
+                    skipped_duplicated += 1
 
-            if new_cursor_ms > (last_cursor_ms or 0):
+            # Update sync_state cursor if we've advanced beyond the last cursor in the DB
+            if new_cursor_ms > (db_last_cursor or 0):
                 conn.execute(
                     "INSERT OR REPLACE INTO sync_state (key, value) "
                     "VALUES ('last_played_at_ms', ?)",
@@ -239,8 +238,8 @@ def sync_api_to_db(
     finally:
         conn.close()
 
-    logger.info("API sync: %d inserted, %d duplicated, %d skipped, cursor=%d", inserted, duplicated, skipped, new_cursor_ms)
-    return {"inserted": inserted, "duplicated": duplicated, "skipped": skipped, "cursor_ms": new_cursor_ms}
+    logger.info("API sync: %d inserted, %d skipped duplicated, %d skipped parse errors, cursor=%d", inserted, skipped_duplicated, skipped_parse_error, new_cursor_ms)
+    return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error, "cursor_ms": new_cursor_ms}
 
 
 def sync_api_up_to_date(
@@ -286,9 +285,8 @@ def sync_api_up_to_date(
         except (ValueError, AttributeError):
             logger.warning("Could not parse json_import anchor '%s' — no stop cursor", anchor_str)
 
-    inserted = skipped = 0
+    inserted = skipped_duplicated = skipped_parse_error = 0
     new_cursor_ms = 0
-    # start from current timstamp
     before_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
     with SpotifyClient(tokens_db_path, user_id, client_id, fernet_key) as client:
@@ -298,35 +296,27 @@ def sync_api_up_to_date(
             if not items:
                 logger.info("No more items from Spotify API after %d call(s)", call_num + 1)
                 break
-            # This serve as a proxy to conn_contry for api sync items since API doesn't return country info in recently played endpoint
-            # we can use the user's country as a proxy for all API items
-            country = client.get_current_user().get("country")
             conn = get_connection(db_path)
             try:
                 with conn:
                     for item in items:
-                        inserted_flag, duplicated, skipped_unparseable, played_at_ms = _insert_item_from_api_response(
+                        inserted_flag, is_duplicate, is_unparseable, played_at_ms = _insert_item_from_api_response(
                             conn, item, source="api"
                         )
-                        if skipped_unparseable:
-                            skipped += 1
+                        if is_unparseable:
+                            skipped_parse_error += 1
                             continue
                         if inserted_flag:
                             inserted += 1
                             if played_at_ms:
                                 new_cursor_ms = max(new_cursor_ms, played_at_ms)
-                        else:
-                            if duplicated:
-                                duplicated += 1
-                            else:
-                                skipped += 1
-                            skipped += 1
+                        elif is_duplicate:
+                            skipped_duplicated += 1
             finally:
                 conn.close()
 
-            # The cursor to use as key to find the previous page of items.
+            # get the `before` cursor for the next call from API response
             before_ms = response.get("cursors", {}).get("before")
-            # changet type to int
             before_ms = int(before_ms) if before_ms else None
 
             if stop_at_ms is not None and before_ms <= stop_at_ms:
@@ -345,8 +335,8 @@ def sync_api_up_to_date(
         finally:
             conn.close()
 
-    logger.info("Backfill: %d inserted, %d duplicated, %d skipped, cursor=%d", inserted, duplicated, skipped, new_cursor_ms)
-    return {"inserted": inserted, "duplicated": duplicated, "skipped": skipped, "cursor_ms": new_cursor_ms}
+    logger.info("Backfill: %d inserted, %d skipped duplicated, %d skipped parse errors, cursor=%d", inserted, skipped_duplicated, skipped_parse_error, new_cursor_ms)
+    return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error, "cursor_ms": new_cursor_ms}
 
 
 

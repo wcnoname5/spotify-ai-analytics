@@ -195,7 +195,7 @@ def import_history_from_json(json_dir: str) -> dict:
         json_dir: Path to the folder containing Spotify JSON export files.
 
     Returns:
-        {"inserted": int, "skipped": int}
+        {"inserted": int, "skipped_duplicated": int, "skipped_parse_error": int}
     """
     from spotify_core.db.pipeline import import_json_to_db
     return import_json_to_db(json_dir=json_dir, db_path=DB_PATH)

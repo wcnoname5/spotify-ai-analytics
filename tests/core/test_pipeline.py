@@ -79,7 +79,8 @@ def test_import_json_inserts_rows(sample_json_dir, history_db):
     """import_json_to_db inserts rows from JSON files."""
     result = import_json_to_db(str(sample_json_dir), str(history_db))
     assert result["inserted"] == 2
-    assert result["skipped"] == 0
+    assert result["skipped_duplicated"] == 0
+    assert result["skipped_parse_error"] == 0
     with sqlite3.connect(history_db) as conn:
         count = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()[0]
     assert count == 2
@@ -91,14 +92,14 @@ def test_import_json_idempotent(sample_json_dir, history_db):
     import_json_to_db(str(sample_json_dir), str(history_db))
     result = import_json_to_db(str(sample_json_dir), str(history_db))
     assert result["inserted"] == 0
-    assert result["skipped"] == 2
+    assert result["skipped_duplicated"] == 2
 
 
 @pytest.mark.unit
 def test_import_json_empty_dir(tmp_path, history_db):
     """import_json_to_db with empty dir returns zeros without raising."""
     result = import_json_to_db(str(tmp_path), str(history_db))
-    assert result == {"inserted": 0, "skipped": 0}
+    assert result == {"inserted": 0, "skipped_duplicated": 0, "skipped_parse_error": 0}
 
 
 @pytest.mark.unit

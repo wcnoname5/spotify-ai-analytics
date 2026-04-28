@@ -30,7 +30,7 @@ def main():
 
     logger.info("Importing JSON from %s into %s", args.dir, args.db)
     result = import_json_to_db(args.dir, args.db)
-    logger.info("Inserted %d rows, duplicated %d, unparseable dates %d", result["inserted"], result["duplicated"], result["unparseable_dates"])
+    logger.info("Inserted %d rows, skipped duplicated %d, skipped parse errors %d", result["inserted"], result["skipped_duplicated"], result["skipped_parse_error"])
 
 
 if __name__ == "__main__":

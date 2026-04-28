@@ -20,7 +20,6 @@ class SpotifyDataLoader:
         directory: Optional[Path] = None,
         file_pattern: str = "Streaming*.json",
         strict_validation: bool = False,
-        timezone: str = "Asia/Taipei"
     ):
         """
         Initialize the data loader.
@@ -29,7 +28,6 @@ class SpotifyDataLoader:
             directory: Path to directory containing Spotify JSON files. Must be specified.
             file_pattern: Glob pattern for files to load (default: "Streaming*.json")
             strict_validation: If True, raises ValidationError on failed sample validation.
-            timezone: Timezone for timestamp conversion (default: "Asia/Taipei").
         """
         if directory is None:
             raise ValueError("directory must be specified — no default available in package mode")
@@ -38,7 +36,6 @@ class SpotifyDataLoader:
 
         self.file_pattern = file_pattern
         self.strict_validation = strict_validation
-        self.timezone = timezone
 
         # intialize logging pattern
         self._logger_prefix = (
@@ -138,7 +135,6 @@ class SpotifyDataLoader:
         logger.info(f"Filtered records: {initial_count} -> {filtered_count} (Dropped {initial_count - filtered_count})")
 
         # --- Stage 3: Transformation ---
-        # Note: timezone conversion is configurable via self.timezone
         processed_df = (
             working_df
             .select([
@@ -147,8 +143,6 @@ class SpotifyDataLoader:
                         format="%+"
                     ).dt.replace_time_zone(
                         "UTC"
-                    ).dt.convert_time_zone(
-                        self.timezone
                     ).alias("timestamp"),
                 pl.col("ts").cast(pl.Utf8).alias("ts"),
                 pl.col("ms_played").cast(pl.Duration("ms")),
