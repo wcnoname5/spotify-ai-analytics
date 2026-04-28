@@ -19,13 +19,13 @@ Local MCP server that exposes Spotify history analytics and playback control as 
 uv sync
 
 # 2. Set SPOTIFY_CLIENT_ID in .env (only key you need to find manually — see Section 2)
-cp .env.template .env
+cp .env.example .env
 
 # 3. Initialize DB + connect Spotify account (auto-generates TOKEN_ENCRYPT_KEY, opens browser)
 uv run python scripts/init_db.py --auth --user-id <your_spotify_username>
 
 # 4. Load your listening history (choose one option — see Section 3)
-uv run python scripts/import_json.py --dir data/spotify_history   # Option A: full history
+   # Option A: full history
 uv run python scripts/sync_api.py --user-id <your_spotify_username>  # Option B: recent 50 plays
 
 # 5. Add the server to Claude (see Section 4)

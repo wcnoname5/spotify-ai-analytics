@@ -269,7 +269,7 @@ git clone <repo> && cd spotify-ai-analytics
 uv sync
 
 # 2. Configure
-cp .env.template .env
+cp .env.example .env
 # Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env
 
 # 3. Add to Claude Desktop config

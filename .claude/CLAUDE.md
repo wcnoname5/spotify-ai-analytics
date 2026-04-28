@@ -124,7 +124,7 @@ TOKEN_ENCRYPT_KEY=    # Fernet key for token encryption
 LOG_LEVEL=INFO        # DEBUG for verbose output
 ```
 
-Copy `.env.template` → `.env`. Never commit `.env`.
+Copy `.env.example` → `.env`. Never commit `.env`.
 
 ---
 

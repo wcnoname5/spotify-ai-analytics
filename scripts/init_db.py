@@ -55,6 +55,7 @@ def main():
             logger.error("SPOTIFY_CLIENT_ID not set in environment")
             sys.exit(1)
         if not fernet_key_str:
+            logger.warning("TOKEN_ENCRYPT_KEY not set in environment — auto-generating a Fernet key")
             from cryptography.fernet import Fernet
             new_key = Fernet.generate_key().decode()
             env_path = Path(__file__).resolve().parent.parent / ".env"

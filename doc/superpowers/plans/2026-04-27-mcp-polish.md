@@ -649,7 +649,7 @@ Local MCP server that exposes Spotify history analytics and playback control as 
 uv sync
 
 # 2. Set SPOTIFY_CLIENT_ID in .env (only key you need to find manually — see Section 2)
-cp .env.template .env
+cp .env.example .env
 
 # 3. Initialize DB + connect Spotify account (auto-generates TOKEN_ENCRYPT_KEY, opens browser)
 uv run python scripts/init_db.py --auth --user-id <your_spotify_username>
