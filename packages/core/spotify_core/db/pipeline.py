@@ -215,7 +215,7 @@ def sync_api_to_db(
     token_data = load_tokens(tokens_db_path, user_id, fernet_key)
     if token_data is None:
         raise RuntimeError(
-            "Run setup to finish OAuth flow first: uv run python scripts/setup.py"
+            "Run OAuth flow first: uv run python scripts/setup.py"
         )
 
     # Read current cursor from sync_state
