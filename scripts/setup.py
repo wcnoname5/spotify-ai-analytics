@@ -22,7 +22,7 @@ load_dotenv()
 
 from _logging import setup_logging
 from spotify_core.db.pipeline import init_history_db, import_json_to_db
-from src.config.settings import settings
+from spotify_core.config import settings
 
 
 def main():
