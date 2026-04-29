@@ -41,6 +41,7 @@ Open `.env` in a text editor. Fill in the one required value:
 ### `SPOTIFY_CLIENT_ID`
 
 1. Go to [https://developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in.
+  - *Note:* In the [Newest Policy](https://developer.spotify.com/blog/2026-02-06-update-on-developer-access-and-platform-security), spotify have restricted the developer mode can be only accessed by premium user. So Free user may need to access the ID from other existing apps.
 2. Click **Create app**.
 3. Fill in any name and description. Set **Redirect URIs** to exactly:
    ```
@@ -112,25 +113,18 @@ Run `sync_api.py` anytime to stay up to date (the `sync_history` MCP tool does t
 
 ### Claude Code (CLI)
 
-Add to your project's `.claude/settings.json` or your user settings file, claude code can then connect to this MCP server in project level:
-
-```json
-{
-  "mcpServers": {
-    "spotify-analytics": {
-      "command": "uv",
-      "args": ["run", "python", "apps/mcp/server.py"],
-      "cwd": "/absolute/path/to/spotify-ai-analytics"
-    }
-  }
-}
+At project root run the command in terminal
+```bash
+claude mcp add spotify-analytics -- uv run python apps/mcp/server.py
 ```
 
 Restart Claude Code after saving.
 
 ### Claude Desktop (macOS / Windows)
 
-Open the Claude Desktop config file:
+In Claude Code Desktop, click the settings (≡ mark in the top-left), go `≡ > Help > Troubleshooting > Enable Developer Mode`. After you enable the Developer Mode, go `≡ > Developer > Open App Config File...` to open the `claude_desktop_config.json`
+
+Or you can directly open the Claude Desktop config file with the path:
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
@@ -141,13 +135,13 @@ Add the `mcpServers` block: (Windows)
   "mcpServers": {
     "spotify-analytics": {
       "command": "uv",
-      "args": ["run", "python", "C:\\Path\\Tospotify-ai-analytics\\apps\\mcp\\server.py"],
+      "args": ["run", "python", "C:\\Path\\To\\spotify-ai-analytics\\apps\\mcp\\server.py"],
       "cwd": "C:\\Path\\To\\spotify-ai-analytics"
     }
   }
 }
 ```
-For best practice, the application (& `uv`) should be written with direct path. `\\` for windows, `/` for macOS.
+For best practice, the application (& `uv`) should be written with absoulte path. `\\` for windows, `/` for macOS.
 
 If the having trouble with `uv`, try use the python intepreter in `.venv` as command to initate the MCP server directly.
 

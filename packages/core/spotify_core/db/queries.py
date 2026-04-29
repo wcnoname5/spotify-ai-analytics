@@ -137,6 +137,30 @@ def get_listening_summary(db_path: str) -> dict:
         conn.close()
 
 
+def get_recent_plays(db_path: str, limit: int = 10) -> list[dict]:
+    """Most recent plays ordered by played_at descending.
+
+    Args:
+        db_path: Path to history.db.
+        limit: Number of rows to return.
+
+    Returns:
+        List of {"track_name", "artist_name", "album_name", "played_at", "ms_played", "track_id"}.
+    """
+    sql = """
+        SELECT track_name, artist_name, album_name, played_at, ms_played, track_id
+        FROM listening_history
+        ORDER BY played_at DESC
+        LIMIT ?
+    """
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute(sql, (limit,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
 def is_history_empty(db_path: str) -> bool:
     """Return True if the DB file is missing, has no table, or has zero rows."""
     import os
