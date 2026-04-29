@@ -221,3 +221,11 @@ This opens your browser to Spotify's login page. After you approve, the browser 
 
 **"Token decrypt failed" or "Invalid token"**
 → Your `TOKEN_ENCRYPT_KEY` may have changed. Generate a new key, update `.env`, and re-run OAuth.
+
+
+## Developer Debug
+
+Requires `Node.js` installed 
+```bash
+npx @modelcontextprotocol/inspector uv run python apps/mcp/server.py
+```
