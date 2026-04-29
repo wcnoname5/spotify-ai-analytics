@@ -186,6 +186,14 @@ def setup_check() -> dict:
             "  uv run python scripts/setup.py"
         )
     else:
+        ltm_exists = os.path.exists(LTM_DB)
+        checks["ltm_db_exists"] = ltm_exists
+        if not ltm_exists:
+            actions.append(
+                "Long-term memory DB not found. It will be auto-created on first use, "
+                "but run scripts/setup.py to initialise it explicitly."
+            )
+
         db_exists = os.path.exists(DB_PATH)
         checks["history_db_exists"] = db_exists
 
@@ -314,6 +322,7 @@ def import_history_from_json(
 )
 def get_recent_playback(
     limit: Annotated[int, Field(default=10, ge=1, le=50, description="Number of recent plays to return (1–50, default 10).")] = 10,
+    show_track_id: Annotated[bool, Field(default=False, description="If True, include track_id (Spotify URI) in each track. Required when you intend to pass results to play_track or add_to_queue.")] = False,
     user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
 ) -> dict:
     """Sync recent plays from the Spotify API into the local DB, then return them.
@@ -324,14 +333,16 @@ def get_recent_playback(
 
     Args:
         limit: Number of recent plays to return (1–50, default 10).
+        show_track_id: Include Spotify track URI in results (default false).
         user_id: Spotify user ID. Defaults to SPOTIFY_USER_ID env var.
 
     Returns:
         {
             "tracks": [{"track_name": str, "artist_name": str, "album_name": str,
-                        "played_at": str, "ms_played": int, "track_id": str}],
+                        "played_at": str, "ms_played": int}],
             "synced": {"inserted": int, "skipped_duplicated": int, "cursor_ms": int},
         }
+        plus "track_id": str per track when show_track_id is true.
         or {"error": str, "requires_auth": bool}.
     """
     try:
@@ -345,7 +356,7 @@ def get_recent_playback(
             client_id=CLIENT_ID,
             fernet_key=FERNET_KEY,
         )
-        tracks = get_recent_plays(DB_PATH, limit=limit)
+        tracks = get_recent_plays(DB_PATH, limit=limit, show_track_id=show_track_id)
         for track in tracks:
             track["played_at"] = utc_iso_to_local(track.get("played_at"))
         return {"tracks": tracks, "synced": sync_result}
@@ -403,25 +414,29 @@ def get_top_tracks(
     limit: Annotated[int, Field(default=10, ge=1, le=100, description="Number of top tracks to return (1–100, default 10).")] = 10,
     start_date: Annotated[Optional[str], Field(default=None, description="Filter plays on or after this date. Format: YYYY-MM-DD, e.g. '2024-01-01'.")] = None,
     end_date: Annotated[Optional[str], Field(default=None, description="Filter plays on or before this date. Format: YYYY-MM-DD, e.g. '2024-12-31'.")] = None,
+    show_track_id: Annotated[bool, Field(default=False, description="If True, include track_id (Spotify URI, e.g. 'spotify:track:<id>') in each result. Required when you intend to pass results to create_playlist or play_track.")] = False,
 ) -> list:
     """Return top tracks ranked by play count from the local history DB.
 
     Does not require Spotify auth — reads from the local SQLite database only.
     Use start_date/end_date to scope the ranking to a specific time window.
+    Set show_track_id=true when you need URIs for playlist creation or playback.
 
     Args:
         limit: Number of top tracks to return (1–100, default 10).
         start_date: Optional inclusive start date filter in YYYY-MM-DD format.
         end_date: Optional inclusive end date filter in YYYY-MM-DD format.
+        show_track_id: Include Spotify track URI in results (default false).
 
     Returns:
-        List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int}, ordered by play_count desc.
+        List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int},
+        plus "track_id": str when show_track_id is true. Ordered by play_count desc.
         If the DB is empty, returns [{"warning": ..., "next_steps": [...]}].
     """
     if is_history_empty(DB_PATH):
         return [_EMPTY_DB_RESPONSE]
     from spotify_core.db.queries import get_top_tracks as _get_top_tracks
-    return _get_top_tracks(DB_PATH, limit=limit, start_date=start_date, end_date=end_date)
+    return _get_top_tracks(DB_PATH, limit=limit, start_date=start_date, end_date=end_date, show_track_id=show_track_id)
 
 
 @mcp.tool(
@@ -729,7 +744,7 @@ def create_playlist(
 )
 def remember_preference(
     key: Annotated[str, Field(min_length=1, max_length=100, description="Preference key/name, e.g. 'favorite_genre', 'preferred_language', 'mood_for_working'.")],
-    value: Annotated[str, Field(min_length=1, max_length=500, description="Preference value as a string, e.g. 'jazz', 'English', 'lo-fi hip hop'.")],
+    value: Annotated[str, Field(min_length=1, max_length=2000, description="Preference value as a string. May be a short label ('jazz') or a longer structured note (e.g. a ranked list of tracks).")],
     user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
 ) -> dict:
     """Store a user preference in long-term memory. Persists across all future conversations.
@@ -739,18 +754,21 @@ def remember_preference(
 
     Args:
         key: Preference name (e.g. 'favorite_genre', 'mood_for_working').
-        value: Preference value as a string.
+        value: Preference value as a string (up to 2000 chars).
         user_id: Spotify user ID. Defaults to SPOTIFY_USER_ID env var.
 
     Returns:
-        {"status": "saved", "key": str, "value": str}.
+        {"status": "saved", "key": str, "value": str} or {"error": str}.
     """
-    # TODO: can add more structured types later, but for now we can just store everything as strings and let the agent handle parsing/formatting
-    from spotify_core.memory import get_store, get_user_namespace
-    ns = get_user_namespace(user_id, "preferences")
-    with get_store(LTM_DB) as store:
-        store.put(ns, key, {"value": value})
-    return {"status": "saved", "key": key, "value": value}
+    try:
+        from spotify_core.memory import get_store, get_user_namespace
+        ns = get_user_namespace(user_id, "preferences")
+        with get_store(LTM_DB) as store:
+            store.put(ns, key, {"value": value})
+        return {"status": "saved", "key": key, "value": value}
+    except Exception as exc:
+        logger.error("remember_preference failed: %s", exc)
+        return {"error": str(exc)}
 
 
 @mcp.tool(
@@ -777,14 +795,18 @@ def get_memory_summary(
     Returns:
         {"preferences": dict[str, any], "history_facts": dict[str, any], "feedback": dict[str, any]}
     """
-    from spotify_core.memory import get_store, get_user_namespace
-    summary: dict = {}
-    with get_store(LTM_DB) as store:
-        for key in ("preferences", "history_facts", "feedback"):
-            ns = get_user_namespace(user_id, key)
-            items = store.search(ns)
-            summary[key] = {item.key: item.value for item in items}
-    return summary
+    try:
+        from spotify_core.memory import get_store, get_user_namespace
+        summary: dict = {}
+        with get_store(LTM_DB) as store:
+            for key in ("preferences", "history_facts", "feedback"):
+                ns = get_user_namespace(user_id, key)
+                items = store.search(ns)
+                summary[key] = {item.key: item.value for item in items}
+        return summary
+    except Exception as exc:
+        logger.error("get_memory_summary failed: %s", exc)
+        return {"error": str(exc)}
 
 
 # ------------------------------------------------------------------

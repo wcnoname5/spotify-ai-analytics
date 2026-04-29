@@ -62,6 +62,7 @@ def get_top_tracks(
     limit: int = 10,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    show_track_id: bool = False,
 ) -> list[dict]:
     """Top tracks by play count from history.db.
 
@@ -70,9 +71,11 @@ def get_top_tracks(
         limit: Number of tracks to return.
         start_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
         end_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
+        show_track_id: If True, include track_id (Spotify URI) in each result row.
 
     Returns:
-        List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int}.
+        List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int}
+        plus "track_id": str when show_track_id is True.
     """
     where_clauses = ["track_name IS NOT NULL"]
     params: list = []
@@ -84,11 +87,13 @@ def get_top_tracks(
         params.append(end_date + "T23:59:59Z")
 
     where_sql = " AND ".join(where_clauses)
+    id_col = ", track_id" if show_track_id else ""
     sql = f"""
         SELECT track_name,
                artist_name,
                COUNT(*) AS play_count,
                SUM(ms_played) AS total_ms
+               {id_col}
         FROM listening_history
         WHERE {where_sql}
         GROUP BY track_id
@@ -137,18 +142,21 @@ def get_listening_summary(db_path: str) -> dict:
         conn.close()
 
 
-def get_recent_plays(db_path: str, limit: int = 10) -> list[dict]:
+def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False) -> list[dict]:
     """Most recent plays ordered by played_at descending.
 
     Args:
         db_path: Path to history.db.
         limit: Number of rows to return.
+        show_track_id: If True, include track_id (Spotify URI) in each result row.
 
     Returns:
-        List of {"track_name", "artist_name", "album_name", "played_at", "ms_played", "track_id"}.
+        List of {"track_name", "artist_name", "album_name", "played_at", "ms_played"}
+        plus "track_id": str when show_track_id is True.
     """
-    sql = """
-        SELECT track_name, artist_name, album_name, played_at, ms_played, track_id
+    id_col = ", track_id" if show_track_id else ""
+    sql = f"""
+        SELECT track_name, artist_name, album_name, played_at, ms_played{id_col}
         FROM listening_history
         ORDER BY played_at DESC
         LIMIT ?

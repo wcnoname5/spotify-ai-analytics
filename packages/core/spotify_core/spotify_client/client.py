@@ -350,12 +350,13 @@ class SpotifyClient:
         public: bool = False,
         description: str = "",
     ) -> dict:
-        """Create a new playlist for a Spotify user.
+        """Create a new playlist for the authenticated user.
 
-        Calls ``POST /users/{user_id}/playlists``.
+        Calls ``POST /me/playlists`` (user_id kept for signature compat but not sent
+        — Spotify deprecated ``POST /users/{id}/playlists`` and returns 403 for it).
 
         Args:
-            user_id: Spotify user ID who will own the playlist.
+            user_id: Unused; kept for call-site compatibility.
             name: Name for the new playlist.
             public: Whether the playlist should be public.
             description: Optional description.
@@ -364,7 +365,7 @@ class SpotifyClient:
             Spotify playlist object.
         """
         body = {"name": name, "public": public, "description": description}
-        response = self._request("POST", f"/users/{user_id}/playlists", json=body)
+        response = self._request("POST", "/me/playlists", json=body)
         return response.json()
 
     def add_tracks_to_playlist(self, playlist_id: str, uris: Sequence[str]) -> dict:
