@@ -294,7 +294,7 @@ def test_skip_to_next_sends_post(tmp_path):
 
 @pytest.mark.unit
 def test_create_playlist_sends_correct_body(tmp_path):
-    """create_playlist() sends POST /users/{user_id}/playlists with name and public."""
+    """create_playlist() sends POST /me/playlists (deprecated /users/{id}/playlists endpoint removed)."""
     mock_http = MagicMock()
     mock_http.request.return_value = _ok_response({"id": "playlist123"})
 
@@ -303,7 +303,7 @@ def test_create_playlist_sends_correct_body(tmp_path):
 
     args, kwargs = mock_http.request.call_args
     assert args[0] == "POST"
-    assert args[1] == BASE_URL + f"/users/{USER_ID}/playlists"
+    assert args[1] == BASE_URL + "/me/playlists"
     assert kwargs["json"]["name"] == "My Playlist"
     assert kwargs["json"]["public"] is True
     assert kwargs["json"]["description"] == "test"
