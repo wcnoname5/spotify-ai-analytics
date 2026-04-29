@@ -22,6 +22,7 @@ load_dotenv()
 
 from _logging import setup_logging
 from spotify_core.db.pipeline import init_history_db, import_json_to_db
+from spotify_core.db.migrations import init_ltm_db, init_tokens_db
 from spotify_core.config import settings
 
 
@@ -37,41 +38,48 @@ def main():
         default=settings.spotify_user_id,
         help="Your Spotify username (defaults to SPOTIFY_USER_ID from .env)",
     )
-    parser.add_argument("--db", default="data/history.db",
-                        help="Path to history.db (default: data/history.db)")
-    parser.add_argument("--tokens-db", default="data/tokens.db",
-                        help="Path to tokens.db (default: data/tokens.db)")
-    parser.add_argument("--json-dir", default="data/spotify_history",
+    parser.add_argument("--db", default=str(settings.history_db_path),
+                        help=f"Path to history.db (default: {settings.history_db_path})")
+    parser.add_argument("--tokens-db", default=str(settings.tokens_db_path),
+                        help=f"Path to tokens.db (default: {settings.tokens_db_path})")
+    parser.add_argument("--ltm-db", default=str(settings.ltm_db_path),
+                        help=f"Path to ltm.db (default: {settings.ltm_db_path})")
+    parser.add_argument("--json-dir", default=str(settings.spotify_data_path),
                         help="Directory containing Streaming*.json files "
-                             "(default: data/spotify_history; step skipped if no files found)")
+                             f"(default: {settings.spotify_data_path}; step skipped if no files found)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
-
-    logger = logging.getLogger(__name__)
-    if not args.user_id:
-        logger.error("SPOTIFY_USER_ID not set in environment and --user-id was not provided")
-        sys.exit(1)
 
     setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
 
-    # Step 1: Init DB
-    logger.info("Initializing DB at %s", args.db)
+    if not args.user_id:
+        logger.error("SPOTIFY_USER_ID not set in environment and --user-id was not provided")
+        sys.exit(1)
+
+    # Step 1: Init all DBs (idempotent)
+    logger.info("Initializing history DB at %s", args.db)
     init_history_db(args.db)
-    logger.info("DB ready at %s", args.db)
+
+    logger.info("Initializing tokens DB at %s", args.tokens_db)
+    init_tokens_db(args.tokens_db)
+
+    logger.info("Initializing long-term memory DB at %s", args.ltm_db)
+    init_ltm_db(args.ltm_db)
 
     # Step 2: OAuth
     from spotify_core.spotify_client.auth import run_pkce_flow
     from spotify_core.spotify_client.token_store import save_tokens
-    from spotify_core.db.migrations import init_tokens_db
-
-    init_tokens_db(args.tokens_db)
 
     client_id = os.environ.get("SPOTIFY_CLIENT_ID")
     fernet_key_str = os.environ.get("TOKEN_ENCRYPT_KEY")
 
     if not client_id:
-        logger.error("SPOTIFY_CLIENT_ID not set in environment — check your .env file")
+        logger.error(
+            "SPOTIFY_CLIENT_ID not set in environment.\n"
+            "  → Create an app at https://developer.spotify.com/dashboard\n"
+            "  → Copy the Client ID into your .env file as SPOTIFY_CLIENT_ID=..."
+        )
         sys.exit(1)
 
     if not fernet_key_str:
@@ -99,7 +107,7 @@ def main():
 
     # Step 3: Import JSON (skipped silently if no files found)
     json_path = Path(args.json_dir)
-    if list(json_path.rglob("Streaming*.json")):
+    if json_path.exists() and list(json_path.rglob("Streaming*.json")):
         logger.info("Importing JSON from %s", args.json_dir)
         result = import_json_to_db(args.json_dir, args.db)
         logger.info(
@@ -113,9 +121,7 @@ def main():
             args.json_dir,
         )
 
-    logger.info(
-        "Setup complete. Next: uv run python scripts/sync_api.py",
-    )
+    logger.info("Setup complete. Next: uv run python scripts/sync_api.py")
 
 
 if __name__ == "__main__":

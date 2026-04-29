@@ -30,7 +30,28 @@ class Settings(BaseSettings):
     spotify_data_path: Path = Field(default=_default_data_path, alias="SPOTIFY_DATA_PATH")
     spotify_user_id: str = Field(default="default", alias="SPOTIFY_USER_ID")
 
-    @field_validator("spotify_data_path", mode="before")
+    # DB paths — overridable via env vars; resolved relative to PROJECT_ROOT when not absolute
+    history_db_path: Path = Field(
+        default=PROJECT_ROOT / "data" / "history.db", alias="HISTORY_DB_PATH"
+    )
+    tokens_db_path: Path = Field(
+        default=PROJECT_ROOT / "data" / "tokens.db", alias="TOKENS_DB_PATH"
+    )
+    ltm_db_path: Path = Field(
+        default=PROJECT_ROOT / "data" / "ltm.db", alias="LTM_DB_PATH"
+    )
+    checkpoints_db_path: Path = Field(
+        default=PROJECT_ROOT / "data" / "checkpoints.db", alias="CHECKPOINTS_DB_PATH"
+    )
+
+    @field_validator(
+        "spotify_data_path",
+        "history_db_path",
+        "tokens_db_path",
+        "ltm_db_path",
+        "checkpoints_db_path",
+        mode="before",
+    )
     @classmethod
     def resolve_path(cls, v: str | Path) -> Path:
         if isinstance(v, str):

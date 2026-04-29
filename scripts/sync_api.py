@@ -28,23 +28,21 @@ def main():
         help="Spotify user ID (defaults to SPOTIFY_USER_ID from .env)",
     )
     parser.add_argument(
-        "--db", default="data/history.db",
-        help="Path to history.db (default: data/history.db)"
+        "--db", default=str(settings.history_db_path),
+        help=f"Path to history.db (default: {settings.history_db_path})"
     )
     parser.add_argument(
-        "--tokens-db", default="data/tokens.db",
-        help="Path to tokens.db (default: data/tokens.db)"
+        "--tokens-db", default=str(settings.tokens_db_path),
+        help=f"Path to tokens.db (default: {settings.tokens_db_path})"
     )
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
+    setup_logging(args.verbose)
     logger = logging.getLogger(__name__)
     if not args.user_id:
         logger.error("SPOTIFY_USER_ID not set in environment and --user-id was not provided")
         sys.exit(1)
-
-    setup_logging(args.verbose)
-    logger = logging.getLogger(__name__)
 
     client_id = os.environ.get("SPOTIFY_CLIENT_ID")
     fernet_key_str = os.environ.get("TOKEN_ENCRYPT_KEY")

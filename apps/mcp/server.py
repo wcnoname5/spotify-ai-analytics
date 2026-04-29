@@ -22,6 +22,8 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from spotify_mcp.utils import enrich_auth_error, utc_iso_to_local
 from spotify_core.db.queries import is_history_empty
+from spotify_core.db.migrations import init_history_db, init_tokens_db, init_ltm_db
+from spotify_core.config import settings
 
 load_dotenv()
 
@@ -42,10 +44,10 @@ CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID", "")
 _raw_key = os.getenv("TOKEN_ENCRYPT_KEY", "")
 FERNET_KEY: bytes = _raw_key.encode() if _raw_key else b""
 
-DB_PATH = "data/history.db"
-TOKENS_DB = "data/tokens.db"
-LTM_DB = "data/ltm.db"
-DEFAULT_USER_ID = os.getenv("SPOTIFY_USER_ID", "default")
+DB_PATH = str(settings.history_db_path)
+TOKENS_DB = str(settings.tokens_db_path)
+LTM_DB = str(settings.ltm_db_path)
+DEFAULT_USER_ID = settings.spotify_user_id
 
 # ------------------------------------------------------------------
 # Startup check
@@ -114,12 +116,46 @@ def _get_account_product() -> Optional[str]:
         return None
 
 
+def _ensure_dbs_initialized() -> Optional[str]:
+    """Ensure all three DB files exist with their schema initialised.
+
+    Idempotent — safe to call on every startup. Returns None on success or a
+    human-readable error string on failure (so the lifespan can log it without
+    crashing the server).
+    """
+    try:
+        init_history_db(DB_PATH)
+        init_tokens_db(TOKENS_DB)
+        init_ltm_db(LTM_DB)
+        return None
+    except Exception as exc:
+        return (
+            f"Failed to initialise local databases: {exc}\n"
+            f"  history: {DB_PATH}\n"
+            f"  tokens:  {TOKENS_DB}\n"
+            f"  ltm:     {LTM_DB}\n"
+            "Try running setup manually: uv run python scripts/setup.py"
+        )
+
+
 @asynccontextmanager
 async def lifespan(server: FastMCP):
-    # Run setup diagnostics and log any outstanding actions.
+    # Step 1: Make sure every DB file exists with its schema before any tool runs.
+    # Without this, tools like remember_preference / get_top_tracks crash with
+    # "no such table" errors that don't tell the user what to do.
+    db_err = _ensure_dbs_initialized()
+    if db_err:
+        logger.error(db_err)
+
+    # Step 2: Run setup diagnostics and log any outstanding actions (tokens, JSON import…).
     result = setup_check()
     if not result["ready"]:
-        logger.warning("Server not fully configured: %s", result["actions_needed"])
+        logger.warning(
+            "Server not fully configured. Outstanding actions:\n  - %s",
+            "\n  - ".join(result["actions_needed"]),
+        )
+    else:
+        logger.info("MCP server ready: all checks passed.")
 
     # Check account tier and remove Premium-only tools for free accounts.
     # Fail-open: if the check fails (no tokens yet, network error), keep all tools registered.

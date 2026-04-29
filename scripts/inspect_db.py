@@ -6,6 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from spotify_core.db.pipeline import open_inspect_shell
+from spotify_core.config import settings
 
 
 def main():
@@ -13,8 +14,8 @@ def main():
         description="Inspect history.db interactively via sqlite3"
     )
     parser.add_argument(
-        "--db", default="data/history.db",
-        help="Path to history.db (default: data/history.db)"
+        "--db", default=str(settings.history_db_path),
+        help=f"Path to history.db (default: {settings.history_db_path})"
     )
     args = parser.parse_args()
     open_inspect_shell(args.db)
