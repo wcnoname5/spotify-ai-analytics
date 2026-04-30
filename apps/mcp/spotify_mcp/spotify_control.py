@@ -72,27 +72,57 @@ def register(mcp: FastMCP) -> None:
             logger.error("play_track failed: %s", exc)
             return enrich_auth_error({"error": str(exc)}, user_id)
     
-    # TODO: extend this tools so that it can also play album or artist too.
     @mcp.tool(
-        name="play_playlist",
+        name="play_playlist_or_album",
         annotations={
-            "title": "Play a Spotify Playlist",
+            "title": "Play a Spotify Playlist or Album",
             "readOnlyHint": False,
             "destructiveHint": False,
             "idempotentHint": False,
             "openWorldHint": True,
         },
     )
-    def play_playlist(
-        context_uri: Annotated[str, Field(description="Spotify URI of the playlist to play. Format: 'spotify:playlist:<id>'.")],
+    def play_playlist_or_album(
+        context_uri: Annotated[str, Field(description="Spotify context URI to play. Supports playlists ('spotify:playlist:<id>') and albums ('spotify:album:<id>').")],
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
-        """Start playing a specific Spotify playlist on the active device. Requires Spotify Premium."""
+        """Start playing a Spotify playlist or album on the active device. Requires Spotify Premium."""
         try:
             with make_client(user_id) as client:
                 return enrich_auth_error(_make_tools(client, user_id).play_playlist_or_album(context_uri), user_id)
         except Exception as exc:
-            logger.error("play_playlist failed: %s", exc)
+            logger.error("play_playlist_or_album failed: %s", exc)
+            return enrich_auth_error({"error": str(exc)}, user_id)
+
+    @mcp.tool(
+        name="search",
+        annotations={
+            "title": "Search Spotify Catalogue",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    def search(
+        query: Annotated[str, Field(description="Search query string.")],
+        types: Annotated[
+            List[str],
+            Field(description="Item types to search. Valid values: 'track', 'album', 'artist', 'playlist'. Defaults to ['track']."),
+        ] = ["track"],
+        limit: Annotated[int, Field(ge=1, le=50, description="Max results per type (1–50). Defaults to 5.")] = 5,
+        user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
+    ) -> dict:
+        """Search the Spotify catalogue for tracks, albums, artists, or playlists.
+
+        Returns a dict keyed by type (e.g. 'tracks', 'albums'), each containing
+        a list of simplified items with name, uri, and relevant metadata.
+        """
+        try:
+            with make_client(user_id) as client:
+                return enrich_auth_error(_make_tools(client, user_id).search_item(query, types=types, limit=limit), user_id)
+        except Exception as exc:
+            logger.error("search failed: %s", exc)
             return enrich_auth_error({"error": str(exc)}, user_id)
 
 

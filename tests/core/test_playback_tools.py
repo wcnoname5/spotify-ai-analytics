@@ -67,28 +67,127 @@ class TestPlayTrack:
         assert "error" in result or result.get("error")
 
 
-class TestPlayPlaylist:
-    def test_success(self):
+class TestPlayPlaylistOrAlbum:
+    def test_plays_playlist(self):
         client = MagicMock()
         tools = _make_tools(client)
         result = tools.play_playlist_or_album("spotify:playlist:abc")
         client.play.assert_called_once_with(context_uri="spotify:playlist:abc")
-        assert result == {"status": "playing", "uri": "spotify:playlist:abc"}
+        assert result == {"status": "playing", "context_uri": "spotify:playlist:abc"}
+
+    def test_plays_album(self):
+        client = MagicMock()
+        tools = _make_tools(client)
+        result = tools.play_playlist_or_album("spotify:album:xyz")
+        client.play.assert_called_once_with(context_uri="spotify:album:xyz")
+        assert result == {"status": "playing", "context_uri": "spotify:album:xyz"}
 
     def test_premium_required(self):
         client = MagicMock()
         client.play.side_effect = Exception("403 Forbidden PREMIUM_REQUIRED")
         tools = _make_tools(client)
         result = tools.play_playlist_or_album("spotify:playlist:abc")
-        assert "error" in result or result.get("error")
-        assert result == {"status": "playing", "uri": "spotify:playlist:abc"}
+        assert "error" in result
 
-    def test_premium_required(self):
+
+class TestSearchItem:
+    def _make_track(self, name="Track A", artist="Artist A", album="Album A", uri="spotify:track:t1"):
+        return {
+            "name": name,
+            "uri": uri,
+            "artists": [{"name": artist}],
+            "album": {"name": album},
+        }
+
+    def _make_artist(self, name="Artist A", uri="spotify:artist:a1"):
+        return {"name": name, "uri": uri}
+
+    def _make_album(self, name="Album A", artist="Artist A", uri="spotify:album:al1"):
+        return {"name": name, "uri": uri, "artists": [{"name": artist}]}
+
+    def _make_playlist(self, name="Playlist A", owner="user1", uri="spotify:playlist:p1"):
+        return {"name": name, "uri": uri, "owner": {"display_name": owner}}
+
+    def test_search_tracks_returns_formatted_results(self):
         client = MagicMock()
-        client.play.side_effect = Exception("403 Forbidden PREMIUM_REQUIRED")
+        client.search.return_value = {
+            "tracks": {"items": [self._make_track()]},
+        }
         tools = _make_tools(client)
-        result = tools.play_playlist_or_album("spotify:playlist:abc")
-        assert "error" in result or result.get("error")
+        result = tools.search_item("Track A")
+        client.search.assert_called_once_with("Track A", types=["track"], limit=5)
+        assert "tracks" in result
+        assert result["tracks"][0] == {
+            "name": "Track A",
+            "artist": "Artist A",
+            "album": "Album A",
+            "uri": "spotify:track:t1",
+        }
+
+    def test_search_albums_returns_formatted_results(self):
+        client = MagicMock()
+        client.search.return_value = {
+            "albums": {"items": [self._make_album()]},
+        }
+        tools = _make_tools(client)
+        result = tools.search_item("Abbey Road", types=["album"])
+        client.search.assert_called_once_with("Abbey Road", types=["album"], limit=5)
+        assert "albums" in result
+        assert result["albums"][0] == {
+            "name": "Album A",
+            "artist": "Artist A",
+            "uri": "spotify:album:al1",
+        }
+
+    def test_search_artists_returns_formatted_results(self):
+        client = MagicMock()
+        client.search.return_value = {
+            "artists": {"items": [self._make_artist()]},
+        }
+        tools = _make_tools(client)
+        result = tools.search_item("Artist A", types=["artist"])
+        assert "artists" in result
+        assert result["artists"][0] == {"name": "Artist A", "uri": "spotify:artist:a1"}
+
+    def test_search_playlists_returns_formatted_results(self):
+        client = MagicMock()
+        client.search.return_value = {
+            "playlists": {"items": [self._make_playlist()]},
+        }
+        tools = _make_tools(client)
+        result = tools.search_item("chill vibes", types=["playlist"])
+        assert "playlists" in result
+        assert result["playlists"][0] == {
+            "name": "Playlist A",
+            "owner": "user1",
+            "uri": "spotify:playlist:p1",
+        }
+
+    def test_search_multi_type_returns_all_types(self):
+        client = MagicMock()
+        client.search.return_value = {
+            "tracks": {"items": [self._make_track()]},
+            "artists": {"items": [self._make_artist()]},
+        }
+        tools = _make_tools(client)
+        result = tools.search_item("queen", types=["track", "artist"])
+        client.search.assert_called_once_with("queen", types=["track", "artist"], limit=5)
+        assert "tracks" in result
+        assert "artists" in result
+
+    def test_search_custom_limit_is_passed_through(self):
+        client = MagicMock()
+        client.search.return_value = {"tracks": {"items": []}}
+        tools = _make_tools(client)
+        tools.search_item("anything", limit=10)
+        client.search.assert_called_once_with("anything", types=["track"], limit=10)
+
+    def test_search_api_error_returns_error_dict(self):
+        client = MagicMock()
+        client.search.side_effect = RuntimeError("network error")
+        tools = _make_tools(client)
+        result = tools.search_item("anything")
+        assert "error" in result
 
 
 class TestPause:

@@ -61,6 +61,76 @@ class SpotifyPlaybackTools:
         except Exception as exc:
             logger.error("get_now_playing failed: %s", exc)
             return {"error": str(exc)}
+    # ------------------------------------------------------------------
+    # Search and lookup tools
+    # ------------------------------------------------------------------
+
+    def search_item(
+        self,
+        query: str,
+        types: list | None = None,
+        limit: int = 5,
+    ) -> dict:
+        """Search the Spotify catalogue for tracks, albums, artists, or playlists.
+
+        Args:
+            query: Search query string.
+            types: List of item types to search. Defaults to ["track"].
+                   Valid values: "track", "album", "artist", "playlist".
+            limit: Max results per type (1–50).
+
+        Returns:
+            Dict keyed by type, each containing a list of simplified items,
+            or {"error": ...} on failure.
+        """
+        if types is None:
+            types = ["track"]
+        try:
+            raw = self._client.search(query, types=types, limit=limit)
+        except Exception as exc:
+            logger.error("search_item failed: %s", exc)
+            return {"error": str(exc)}
+
+        result: dict = {}
+
+        if "tracks" in raw:
+            result["tracks"] = [
+                {
+                    "name": t.get("name"),
+                    "artist": (t.get("artists") or [{}])[0].get("name"),
+                    "album": (t.get("album") or {}).get("name"),
+                    "uri": t.get("uri"),
+                }
+                for t in raw["tracks"].get("items", [])
+            ]
+
+        if "albums" in raw:
+            result["albums"] = [
+                {
+                    "name": a.get("name"),
+                    "artist": (a.get("artists") or [{}])[0].get("name"),
+                    "uri": a.get("uri"),
+                }
+                for a in raw["albums"].get("items", [])
+            ]
+
+        if "artists" in raw:
+            result["artists"] = [
+                {"name": a.get("name"), "uri": a.get("uri")}
+                for a in raw["artists"].get("items", [])
+            ]
+
+        if "playlists" in raw:
+            result["playlists"] = [
+                {
+                    "name": p.get("name"),
+                    "owner": (p.get("owner") or {}).get("display_name"),
+                    "uri": p.get("uri"),
+                }
+                for p in raw["playlists"].get("items", [])
+            ]
+
+        return result
 
     # ------------------------------------------------------------------
     # Playback control (Premium required)
@@ -84,7 +154,6 @@ class SpotifyPlaybackTools:
                 return _PREMIUM_REQUIRED
             return {"error": str(exc)}
 
-    # TODO: to play not only tracks but also albums and playlists, need to support context_uri and uris parameters in the play() method.
     def play_playlist_or_album(self, context_uri: str) -> dict:
         """Start playing a specific album or playlist by Spotify URI.
 
