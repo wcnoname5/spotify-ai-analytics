@@ -71,6 +71,30 @@ def register(mcp: FastMCP) -> None:
         except Exception as exc:
             logger.error("play_track failed: %s", exc)
             return enrich_auth_error({"error": str(exc)}, user_id)
+    
+    # TODO: extend this tools so that it can also play album or artist too.
+    @mcp.tool(
+        name="play_playlist",
+        annotations={
+            "title": "Play a Spotify Playlist",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": True,
+        },
+    )
+    def play_playlist(
+        context_uri: Annotated[str, Field(description="Spotify URI of the playlist to play. Format: 'spotify:playlist:<id>'.")],
+        user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
+    ) -> dict:
+        """Start playing a specific Spotify playlist on the active device. Requires Spotify Premium."""
+        try:
+            with make_client(user_id) as client:
+                return enrich_auth_error(_make_tools(client, user_id).play_playlist_or_album(context_uri), user_id)
+        except Exception as exc:
+            logger.error("play_playlist failed: %s", exc)
+            return enrich_auth_error({"error": str(exc)}, user_id)
+
 
     @mcp.tool(
         name="pause_playback",

@@ -84,6 +84,25 @@ class SpotifyPlaybackTools:
                 return _PREMIUM_REQUIRED
             return {"error": str(exc)}
 
+    # TODO: to play not only tracks but also albums and playlists, need to support context_uri and uris parameters in the play() method.
+    def play_playlist_or_album(self, context_uri: str) -> dict:
+        """Start playing a specific album or playlist by Spotify URI.
+
+        Args:
+            context_uri: Spotify URI of the context to play. Valid contexts are albums, artists & playlists. (e.g. "spotify:album:<id>" or "spotify:playlist:<id>").
+
+        Returns:
+            {"status": "playing", "context_uri": context_uri} or {"error": ...}.
+        """
+        try:
+            self._client.play(context_uri=context_uri)
+            return {"status": "playing", "context_uri": context_uri}
+        except Exception as exc:
+            logger.error("play_playlist_or_album failed: %s", exc)
+            if "403" in str(exc) or "PREMIUM" in str(exc).upper():
+                return _PREMIUM_REQUIRED
+            return {"error": str(exc)}
+
     def pause(self) -> dict:
         """Pause the current playback.
 

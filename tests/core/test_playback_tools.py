@@ -67,6 +67,30 @@ class TestPlayTrack:
         assert "error" in result or result.get("error")
 
 
+class TestPlayPlaylist:
+    def test_success(self):
+        client = MagicMock()
+        tools = _make_tools(client)
+        result = tools.play_playlist_or_album("spotify:playlist:abc")
+        client.play.assert_called_once_with(context_uri="spotify:playlist:abc")
+        assert result == {"status": "playing", "uri": "spotify:playlist:abc"}
+
+    def test_premium_required(self):
+        client = MagicMock()
+        client.play.side_effect = Exception("403 Forbidden PREMIUM_REQUIRED")
+        tools = _make_tools(client)
+        result = tools.play_playlist_or_album("spotify:playlist:abc")
+        assert "error" in result or result.get("error")
+        assert result == {"status": "playing", "uri": "spotify:playlist:abc"}
+
+    def test_premium_required(self):
+        client = MagicMock()
+        client.play.side_effect = Exception("403 Forbidden PREMIUM_REQUIRED")
+        tools = _make_tools(client)
+        result = tools.play_playlist_or_album("spotify:playlist:abc")
+        assert "error" in result or result.get("error")
+
+
 class TestPause:
     def test_success(self):
         client = MagicMock()
