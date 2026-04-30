@@ -224,7 +224,9 @@ def setup_check() -> dict:
 # Attach the rest of the tools.
 db_crud.register(mcp)
 spotify_control.register(mcp)
-memory_store.register(mcp)
+# TODO: memory schema design is still have flaws.
+# Need to improve validation and error handling before enabling this.
+# memory_store.register(mcp)
 
 
 def main():

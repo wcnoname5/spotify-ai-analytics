@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def register(mcp: FastMCP) -> None:
+    # TODO: the memory schemas are still unstable. need to imporve error handling and validation here before opening to users.
     """Attach long-term memory tools to the given FastMCP server."""
 
     @mcp.tool(
