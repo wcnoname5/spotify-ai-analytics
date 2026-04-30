@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def _make_tools(client, user_id: str):
-    from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+    from spotify_core.spotify_utils.playback_tools import SpotifyPlaybackTools
     return SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
 
 

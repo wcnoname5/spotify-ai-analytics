@@ -1,7 +1,8 @@
 """Tests for SpotifyPlaybackTools (Stage 5). All SpotifyClient calls are mocked."""
 import pytest
 from unittest.mock import MagicMock, patch
-from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+from spotify_core.spotify_utils.playback_tools import SpotifyPlaybackTools
+from spotify_core.agent.playback_tools import AgentPlaybackTools
 
 
 def _make_tools(client=None):
@@ -268,7 +269,7 @@ class TestCreatePlaylist:
 
 class TestSyncRecentHistory:
     def test_delegates_to_sync_api_to_db(self):
-        with patch("spotify_core.agent.playback_tools.sync_api_to_db") as mock_sync:
+        with patch("spotify_core.spotify_utils.playback_tools.sync_api_to_db") as mock_sync:
             mock_sync.return_value = {"inserted": 10, "cursor_ms": 1700000000000}
             tools = _make_tools()
             result = tools.sync_recent_history()
@@ -283,7 +284,7 @@ class TestSyncRecentHistory:
         assert result == {"inserted": 10, "cursor_ms": 1700000000000}
 
     def test_error_returns_dict(self):
-        with patch("spotify_core.agent.playback_tools.sync_api_to_db") as mock_sync:
+        with patch("spotify_core.spotify_utils.playback_tools.sync_api_to_db") as mock_sync:
             mock_sync.side_effect = RuntimeError("No token found")
             tools = _make_tools()
             result = tools.sync_recent_history()
@@ -291,11 +292,27 @@ class TestSyncRecentHistory:
 
 
 class TestGetTools:
+    def _make_agent_tools(self, client=None):
+        if client is None:
+            client = MagicMock()
+        return AgentPlaybackTools(
+            client=client,
+            db_path="data/history.db",
+            tokens_db_path="data/tokens.db",
+            user_id="test_user",
+            client_id="test_client_id",
+            fernet_key=b"fake_key",
+        )
+
     def test_returns_list_of_tools(self):
-        tools = _make_tools()
+        tools = self._make_agent_tools()
         tool_list = tools.get_tools()
         assert len(tool_list) == 8
         names = [t.name for t in tool_list]
         assert "get_now_playing" in names
         assert "sync_recent_history" in names
         assert "create_playlist" in names
+
+    def test_agent_tools_is_subclass(self):
+        tools = self._make_agent_tools()
+        assert isinstance(tools, SpotifyPlaybackTools)

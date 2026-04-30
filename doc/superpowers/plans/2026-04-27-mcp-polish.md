@@ -565,7 +565,7 @@ def get_now_playing(user_id: str = DEFAULT_USER_ID) -> dict:
         Dict with track info, or {"status": "nothing_playing"}, or {"error": str, "requires_auth": bool, "auth_command": str}.
     """
     try:
-        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        from spotify_core.spotify_utils.playback_tools import SpotifyPlaybackTools
         with _make_client(user_id) as client:
             tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
             return enrich_auth_error(tools.get_now_playing(), user_id)
@@ -590,7 +590,7 @@ def play_track(uri: str, user_id: str = DEFAULT_USER_ID) -> dict:
         {"status": "playing", "uri": str} or {"error": str}.
     """
     try:
-        from spotify_core.agent.playback_tools import SpotifyPlaybackTools
+        from spotify_core.spotify_utils.playback_tools import SpotifyPlaybackTools
         with _make_client(user_id) as client:
             tools = SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
             return enrich_auth_error(tools.play_track(uri), user_id)
