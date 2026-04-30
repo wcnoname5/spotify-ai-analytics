@@ -371,7 +371,7 @@ class SpotifyClient:
     def add_tracks_to_playlist(self, playlist_id: str, uris: Sequence[str]) -> dict:
         """Add tracks to an existing playlist.
 
-        Calls ``POST /playlists/{playlist_id}/tracks``.
+        Calls ``POST /playlists/{playlist_id}/items``.
 
         Args:
             playlist_id: Spotify playlist ID.
@@ -379,9 +379,10 @@ class SpotifyClient:
 
         Returns:
             Snapshot ID response dict.
+        Note: endpoint ``/playlists/{playlist_id}/tracks`` is deprecated.
         """
         body = {"uris": list(uris)}
-        response = self._request("POST", f"/playlists/{playlist_id}/tracks", json=body)
+        response = self._request("POST", f"/playlists/{playlist_id}/items", json=body)
         return response.json()
 
     # ------------------------------------------------------------------

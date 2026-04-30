@@ -167,6 +167,7 @@ class SpotifyPlaybackTools:
             {"playlist_id": str, "url": str, "track_count": int} or {"error": ...}.
         """
         try:
+            # In spotify API v1, create playlist and add tracks are two separate calls.
             playlist = self._client.create_playlist(
                 self._user_id, name, public=False, description=description
             )

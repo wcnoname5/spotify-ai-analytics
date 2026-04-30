@@ -2,6 +2,10 @@
 import logging
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from spotify_core.config import settings
 
 logger = logging.getLogger(__name__)

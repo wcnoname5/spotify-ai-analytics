@@ -174,14 +174,14 @@ def setup_check() -> dict:
     checks["token_encrypt_key"] = bool(FERNET_KEY)
     if not FERNET_KEY:
         actions.append(
-            "Run setup — auto-generates TOKEN_ENCRYPT_KEY, initialises DBs, and connects Spotify:\n"
+            "Run setup — auto-generates TOKEN_ENCRYPT_KEY, initializes DBs, and connects Spotify:\n"
             "  uv run python scripts/setup.py"
         )
     else:
         checks["ltm_db_exists"] = os.path.exists(LTM_DB)
         if not checks["ltm_db_exists"]:
             actions.append(
-                "Long-term memory DB not found. Run scripts/setup.py to initialise it."
+                "Long-term memory DB not found. Run scripts/setup.py to initialize it."
             )
 
         checks["history_db_exists"] = os.path.exists(DB_PATH)
@@ -195,7 +195,7 @@ def setup_check() -> dict:
 
         if not checks["history_db_exists"] or not checks["tokens_exist"]:
             actions.append(
-                "Initialise DB and connect Spotify (one command, opens browser):\n"
+                "Initialize DB and connect Spotify (one command, opens browser):\n"
                 "  uv run python scripts/setup.py"
             )
         else:
