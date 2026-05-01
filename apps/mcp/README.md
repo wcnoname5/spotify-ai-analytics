@@ -225,7 +225,7 @@ This opens your browser to Spotify's login page. After you approve, the browser 
 
 ## Developer Debug
 
-Requires `Node.js` installed 
+Run officail MCP inspector: Requires `Node.js` installed. 
 ```bash
 npx @modelcontextprotocol/inspector uv run python apps/mcp/server.py
 ```

@@ -15,7 +15,6 @@ Run:
 """
 import logging
 import os
-import sys
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -24,6 +23,7 @@ from mcp.server.fastmcp import FastMCP
 
 from spotify_core.db.migrations import init_history_db, init_ltm_db, init_tokens_db
 from spotify_core.db.queries import is_history_empty
+from spotify_core.logging import setup_mcp_logging
 from spotify_mcp import db_crud, memory_store, spotify_control
 from spotify_mcp.config import (
     CLIENT_ID,
@@ -37,12 +37,10 @@ from spotify_mcp.config import (
 
 load_dotenv()
 
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "DEBUG"),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    stream=sys.stderr,
-)
+_raw_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
+_log_file = setup_mcp_logging(level=logging.getLevelNamesMapping().get(_raw_level, logging.DEBUG))
 logger = logging.getLogger(__name__)
+logger.info("Logging to %s", _log_file)
 
 
 # ------------------------------------------------------------------
@@ -121,7 +119,7 @@ async def lifespan(server: FastMCP):
         for tool_name in PREMIUM_TOOLS:
             server.remove_tool(tool_name)
         logger.info("Spotify account type is %r — playback tools removed.", product)
-    elif product == "premium":
+    elif product is not None:
         logger.info("Spotify Premium account confirmed — all tools enabled.")
     else:
         logger.debug("Account type unknown — all tools registered (fail-open).")
@@ -230,7 +228,7 @@ spotify_control.register(mcp)
 
 
 def main():
-    mcp.run()
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
