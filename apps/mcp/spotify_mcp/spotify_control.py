@@ -1,6 +1,6 @@
 """MCP tools that talk to the live Spotify Web API (playback + playlists)."""
 import logging
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 
 from pydantic import Field
 from mcp.server.fastmcp import FastMCP
@@ -57,6 +57,35 @@ def register(mcp: FastMCP) -> None:
             return enrich_auth_error({"error": str(exc)}, user_id)
 
     @mcp.tool(
+        name="get_devices",
+        annotations={
+            "title": "List Available Playback Devices",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    def get_devices(
+        user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
+    ) -> dict:
+        """List all Spotify-connected devices available for playback.
+
+        Returns a list of devices with their id, name, type, is_active, and
+        volume_percent. Use a device_id from this list with play_track or
+        play_playlist_or_album to target a specific device.
+        """
+        logger.debug("[Tool] get_devices: user_id=%s", user_id)
+        try:
+            with make_client(user_id) as client:
+                result = _make_tools(client, user_id).get_devices()
+            logger.info("[Tool] get_devices success: user_id=%s", user_id)
+            return result
+        except Exception as exc:
+            logger.error("[Tool] get_devices failed: %s", exc)
+            return enrich_auth_error({"error": str(exc)}, user_id)
+
+    @mcp.tool(
         name="play_track",
         annotations={
             "title": "Play a Spotify Track",
@@ -68,19 +97,24 @@ def register(mcp: FastMCP) -> None:
     )
     def play_track(
         uri: Annotated[str, Field(description="Spotify track URI to play. Format: 'spotify:track:<id>'.")],
+        device_id: Annotated[Optional[str], Field(description="Spotify device ID to play on. Use get_devices to list available IDs. Defaults to the currently active device.")] = None,
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
-        """Start playing a specific Spotify track on the active device. Requires Spotify Premium."""
-        logger.debug("[Tool] play_track: uri=%r user_id=%s", uri, user_id)
+        """Start playing a specific Spotify track. Requires Spotify Premium.
+
+        If no device is active, returns an error with available_devices so you
+        can retry with a device_id, or prompt the user to open Spotify first.
+        """
+        logger.debug("[Tool] play_track: uri=%r device_id=%r user_id=%s", uri, device_id, user_id)
         try:
             with make_client(user_id) as client:
-                result = _make_tools(client, user_id).play_track(uri)
+                result = _make_tools(client, user_id).play_track(uri, device_id=device_id)
             logger.info("[Tool] play_track success: uri=%r user_id=%s", uri, user_id)
             return result
         except Exception as exc:
             logger.error("[Tool] play_track failed: %s", exc)
             return enrich_auth_error({"error": str(exc)}, user_id)
-    
+
     @mcp.tool(
         name="play_playlist_or_album",
         annotations={
@@ -93,13 +127,18 @@ def register(mcp: FastMCP) -> None:
     )
     def play_playlist_or_album(
         context_uri: Annotated[str, Field(description="Spotify context URI to play. Supports playlists ('spotify:playlist:<id>') and albums ('spotify:album:<id>').")],
+        device_id: Annotated[Optional[str], Field(description="Spotify device ID to play on. Use get_devices to list available IDs. Defaults to the currently active device.")] = None,
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
-        """Start playing a Spotify playlist or album on the active device. Requires Spotify Premium."""
-        logger.debug("[Tool] play_playlist_or_album: context_uri=%r user_id=%s", context_uri, user_id)
+        """Start playing a Spotify playlist or album. Requires Spotify Premium.
+
+        If no device is active, returns an error with available_devices so you
+        can retry with a device_id, or prompt the user to open Spotify first.
+        """
+        logger.debug("[Tool] play_playlist_or_album: context_uri=%r device_id=%r user_id=%s", context_uri, device_id, user_id)
         try:
             with make_client(user_id) as client:
-                result = _make_tools(client, user_id).play_playlist_or_album(context_uri)
+                result = _make_tools(client, user_id).play_playlist_or_album(context_uri, device_id=device_id)
             logger.info("[Tool] play_playlist_or_album success: context_uri=%r user_id=%s", context_uri, user_id)
             return result
         except Exception as exc:

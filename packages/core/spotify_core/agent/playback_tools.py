@@ -11,6 +11,7 @@ class AgentPlaybackTools(SpotifyPlaybackTools):
         """Return all playback/sync methods as LangChain tools."""
         return [
             tool(self.get_now_playing),
+            tool(self.get_devices),
             tool(self.play_track),
             tool(self.pause),
             tool(self.skip),

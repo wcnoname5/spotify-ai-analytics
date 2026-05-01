@@ -154,41 +154,83 @@ class SpotifyPlaybackTools:
     # Playback control (Premium required)
     # ------------------------------------------------------------------
 
-    def play_track(self, uri: str) -> dict:
+    def get_devices(self) -> dict:
+        """Return the user's available Spotify playback devices.
+
+        Returns:
+            {"devices": [...]} where each device has id, name, type, is_active,
+            volume_percent. Returns {"error": ...} on failure.
+        """
+        try:
+            raw = self._client.get_devices()
+            return {
+                "devices": [
+                    {
+                        "id": d.get("id"),
+                        "name": d.get("name"),
+                        "type": d.get("type"),
+                        "is_active": d.get("is_active"),
+                        "volume_percent": d.get("volume_percent"),
+                    }
+                    for d in raw.get("devices", [])
+                ]
+            }
+        except Exception as exc:
+            logger.error("get_devices failed: %s", exc)
+            return {"error": str(exc)}
+
+    def play_track(self, uri: str, device_id: Optional[str] = None) -> dict:
         """Start playing a specific track by Spotify URI.
 
         Args:
             uri: Spotify track URI (e.g. "spotify:track:4iV5W9uYEdYUVa79Axb7Rh").
+            device_id: Optional Spotify device ID to target. If omitted, playback
+                starts on the currently active device.
 
         Returns:
             {"status": "playing", "uri": uri} or {"error": ...}.
         """
         try:
-            self._client.play(uris=[uri])
+            self._client.play(uris=[uri], device_id=device_id)
             return {"status": "playing", "uri": uri}
         except Exception as exc:
             logger.error("play_track failed: %s", exc)
             if "403" in str(exc) or "PREMIUM" in str(exc).upper():
                 return _PREMIUM_REQUIRED
+            if "NO_ACTIVE_DEVICE" in str(exc):
+                return self._no_active_device_error()
             return {"error": str(exc)}
 
-    def play_playlist_or_album(self, context_uri: str) -> dict:
+    def play_playlist_or_album(self, context_uri: str, device_id: Optional[str] = None) -> dict:
         """Start playing a specific album or playlist by Spotify URI.
 
         Args:
             context_uri: Spotify URI of the context to play. Valid contexts are albums, artists & playlists. (e.g. "spotify:album:<id>" or "spotify:playlist:<id>").
+            device_id: Optional Spotify device ID to target. If omitted, playback
+                starts on the currently active device.
 
         Returns:
             {"status": "playing", "context_uri": context_uri} or {"error": ...}.
         """
         try:
-            self._client.play(context_uri=context_uri)
+            self._client.play(context_uri=context_uri, device_id=device_id)
             return {"status": "playing", "context_uri": context_uri}
         except Exception as exc:
             logger.error("play_playlist_or_album failed: %s", exc)
             if "403" in str(exc) or "PREMIUM" in str(exc).upper():
                 return _PREMIUM_REQUIRED
+            if "NO_ACTIVE_DEVICE" in str(exc):
+                return self._no_active_device_error()
             return {"error": str(exc)}
+
+    def _no_active_device_error(self) -> dict:
+        """Return an enriched error dict when no active device is found."""
+        devices = self.get_devices()
+        return {
+            "error": "No active Spotify device found. Open Spotify on a device first.",
+            "available_devices": devices.get("devices", []),
+            "hint": "Pass a device_id from available_devices to target a specific device.",
+        }
 
     def pause(self) -> dict:
         """Pause the current playback.

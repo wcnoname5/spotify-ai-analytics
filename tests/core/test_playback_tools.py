@@ -52,12 +52,48 @@ class TestGetNowPlaying:
         assert "error" in result
 
 
+class TestGetDevices:
+    def test_returns_device_list(self):
+        client = MagicMock()
+        client.get_devices.return_value = {
+            "devices": [
+                {"id": "dev1", "name": "My Phone", "type": "Smartphone", "is_active": True, "volume_percent": 80},
+                {"id": "dev2", "name": "My PC", "type": "Computer", "is_active": False, "volume_percent": 50},
+            ]
+        }
+        tools = _make_tools(client)
+        result = tools.get_devices()
+        assert len(result["devices"]) == 2
+        assert result["devices"][0] == {"id": "dev1", "name": "My Phone", "type": "Smartphone", "is_active": True, "volume_percent": 80}
+
+    def test_empty_device_list(self):
+        client = MagicMock()
+        client.get_devices.return_value = {"devices": []}
+        tools = _make_tools(client)
+        result = tools.get_devices()
+        assert result == {"devices": []}
+
+    def test_api_error_returns_error_dict(self):
+        client = MagicMock()
+        client.get_devices.side_effect = RuntimeError("network error")
+        tools = _make_tools(client)
+        result = tools.get_devices()
+        assert "error" in result
+
+
 class TestPlayTrack:
     def test_success(self):
         client = MagicMock()
         tools = _make_tools(client)
         result = tools.play_track("spotify:track:abc")
-        client.play.assert_called_once_with(uris=["spotify:track:abc"])
+        client.play.assert_called_once_with(uris=["spotify:track:abc"], device_id=None)
+        assert result == {"status": "playing", "uri": "spotify:track:abc"}
+
+    def test_success_with_device_id(self):
+        client = MagicMock()
+        tools = _make_tools(client)
+        result = tools.play_track("spotify:track:abc", device_id="dev1")
+        client.play.assert_called_once_with(uris=["spotify:track:abc"], device_id="dev1")
         assert result == {"status": "playing", "uri": "spotify:track:abc"}
 
     def test_premium_required(self):
@@ -65,7 +101,20 @@ class TestPlayTrack:
         client.play.side_effect = Exception("403 Forbidden PREMIUM_REQUIRED")
         tools = _make_tools(client)
         result = tools.play_track("spotify:track:abc")
-        assert "error" in result or result.get("error")
+        assert "error" in result
+
+    def test_no_active_device_enriches_with_devices(self):
+        client = MagicMock()
+        client.play.side_effect = Exception("HTTP 404: {'error': {'status': 404, 'message': 'Player command failed: No active device found', 'reason': 'NO_ACTIVE_DEVICE'}}")
+        client.get_devices.return_value = {
+            "devices": [{"id": "dev1", "name": "My Phone", "type": "Smartphone", "is_active": False, "volume_percent": 80}]
+        }
+        tools = _make_tools(client)
+        result = tools.play_track("spotify:track:abc")
+        assert "error" in result
+        assert "available_devices" in result
+        assert result["available_devices"][0]["id"] == "dev1"
+        assert "hint" in result
 
 
 class TestPlayPlaylistOrAlbum:
@@ -73,15 +122,22 @@ class TestPlayPlaylistOrAlbum:
         client = MagicMock()
         tools = _make_tools(client)
         result = tools.play_playlist_or_album("spotify:playlist:abc")
-        client.play.assert_called_once_with(context_uri="spotify:playlist:abc")
+        client.play.assert_called_once_with(context_uri="spotify:playlist:abc", device_id=None)
         assert result == {"status": "playing", "context_uri": "spotify:playlist:abc"}
 
     def test_plays_album(self):
         client = MagicMock()
         tools = _make_tools(client)
         result = tools.play_playlist_or_album("spotify:album:xyz")
-        client.play.assert_called_once_with(context_uri="spotify:album:xyz")
+        client.play.assert_called_once_with(context_uri="spotify:album:xyz", device_id=None)
         assert result == {"status": "playing", "context_uri": "spotify:album:xyz"}
+
+    def test_plays_with_device_id(self):
+        client = MagicMock()
+        tools = _make_tools(client)
+        result = tools.play_playlist_or_album("spotify:playlist:abc", device_id="dev2")
+        client.play.assert_called_once_with(context_uri="spotify:playlist:abc", device_id="dev2")
+        assert result == {"status": "playing", "context_uri": "spotify:playlist:abc"}
 
     def test_premium_required(self):
         client = MagicMock()
@@ -89,6 +145,16 @@ class TestPlayPlaylistOrAlbum:
         tools = _make_tools(client)
         result = tools.play_playlist_or_album("spotify:playlist:abc")
         assert "error" in result
+
+    def test_no_active_device_enriches_with_devices(self):
+        client = MagicMock()
+        client.play.side_effect = Exception("HTTP 404: {'error': {'status': 404, 'message': 'Player command failed: No active device found', 'reason': 'NO_ACTIVE_DEVICE'}}")
+        client.get_devices.return_value = {"devices": []}
+        tools = _make_tools(client)
+        result = tools.play_playlist_or_album("spotify:playlist:abc")
+        assert "error" in result
+        assert "available_devices" in result
+        assert result["available_devices"] == []
 
 
 class TestSearchItem:
@@ -307,9 +373,10 @@ class TestGetTools:
     def test_returns_list_of_tools(self):
         tools = self._make_agent_tools()
         tool_list = tools.get_tools()
-        assert len(tool_list) == 8
+        assert len(tool_list) == 9
         names = [t.name for t in tool_list]
         assert "get_now_playing" in names
+        assert "get_devices" in names
         assert "sync_recent_history" in names
         assert "create_playlist" in names
 
