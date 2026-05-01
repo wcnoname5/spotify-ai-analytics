@@ -250,8 +250,6 @@ def register(mcp: FastMCP) -> None:
             return [{"error": str(exc)}]
 
 
-    # TODO: add limit and date range filters to get_listening_summary and enrich with most played artists/tracks in the period,
-    # similar to Spotify Wrapped insights.
     @mcp.tool(
         name="get_listening_summary",
         annotations={
@@ -262,8 +260,18 @@ def register(mcp: FastMCP) -> None:
             "openWorldHint": False,
         },
     )
-    def get_listening_summary() -> dict:
-        """Return a summary of local listening history (total plays, date range, unique artists/tracks).
+    def get_listening_summary(
+        start_date: Annotated[Optional[str], Field(default=None, description="Filter plays on or after this date. Format: YYYY-MM-DD, e.g. '2024-01-01'.")] = None,
+        end_date: Annotated[Optional[str], Field(default=None, description="Filter plays on or before this date. Format: YYYY-MM-DD, e.g. '2024-12-31'.")] = None,
+    ) -> dict:
+        """Return a summary of local listening history including play counts, date range, and volume stats.
+
+        Does not require Spotify auth — reads from the local SQLite database only.
+        Use start_date/end_date to scope the summary to a specific time window.
+
+        Args:
+            start_date: Optional inclusive start date filter in YYYY-MM-DD format.
+            end_date: Optional inclusive end date filter in YYYY-MM-DD format.
 
         Returns:
             {
@@ -272,25 +280,77 @@ def register(mcp: FastMCP) -> None:
                 "unique_artists": int,
                 "earliest_played_at": str | None,
                 "latest_played_at": str | None,
+                "total_ms_played": int | None,
+                "avg_ms_per_play": float | None,
+                "skip_rate": float | None,
             }
             If the DB is empty, returns {"warning": ..., "next_steps": [...]}.
         """
-        logger.debug("[Tool] get_listening_summary")
+        logger.debug("[Tool] get_listening_summary: start=%s end=%s", start_date, end_date)
         if is_history_empty(DB_PATH):
             logger.warning("[Tool] get_listening_summary: history DB is empty")
             return EMPTY_DB_RESPONSE
         try:
             from spotify_core.db.queries import get_listening_summary as _summary
-            result = dict(_summary(DB_PATH))
+            result = dict(_summary(DB_PATH, start_date=start_date, end_date=end_date))
             result["earliest_played_at"] = utc_iso_to_local(result.get("earliest_played_at"))
             result["latest_played_at"] = utc_iso_to_local(result.get("latest_played_at"))
             logger.info(
                 "[Tool] get_listening_summary success: total_plays=%d unique_tracks=%d unique_artists=%d",
                 result["total_plays"],
                 result["unique_tracks"],
-                result["unique_artists"]
+                result["unique_artists"],
             )
             return result
         except Exception as exc:
             logger.error("[Tool] get_listening_summary failed: %s", exc)
+            return {"error": str(exc)}
+
+    @mcp.tool(
+        name="get_listening_patterns",
+        annotations={
+            "title": "Get Temporal Listening Patterns",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+    )
+    def get_listening_patterns(
+        start_date: Annotated[Optional[str], Field(default=None, description="Filter plays on or after this date. Format: YYYY-MM-DD, e.g. '2024-01-01'.")] = None,
+        end_date: Annotated[Optional[str], Field(default=None, description="Filter plays on or before this date. Format: YYYY-MM-DD, e.g. '2024-12-31'.")] = None,
+    ) -> dict:
+        """Return temporal patterns from local listening history: peak hour, peak day, most active date, and average plays per day.
+
+        Does not require Spotify auth — reads from the local SQLite database only.
+        Use start_date/end_date to scope the analysis to a specific time window.
+
+        Args:
+            start_date: Optional inclusive start date filter in YYYY-MM-DD format.
+            end_date: Optional inclusive end date filter in YYYY-MM-DD format.
+
+        Returns:
+            {
+                "peak_hour": int | None,           -- hour-of-day (0-23) with most plays
+                "peak_day_of_week": str | None,    -- e.g. "Thursday"
+                "most_active_date": str | None,    -- YYYY-MM-DD with most plays in period
+                "avg_plays_per_day": float | None, -- plays divided by distinct calendar days
+            }
+            If the DB is empty, returns {"warning": ..., "next_steps": [...]}.
+        """
+        logger.debug("[Tool] get_listening_patterns: start=%s end=%s", start_date, end_date)
+        if is_history_empty(DB_PATH):
+            logger.warning("[Tool] get_listening_patterns: history DB is empty")
+            return EMPTY_DB_RESPONSE
+        try:
+            from spotify_core.db.queries import get_listening_patterns as _patterns
+            result = _patterns(DB_PATH, start_date=start_date, end_date=end_date)
+            logger.info(
+                "[Tool] get_listening_patterns success: peak_hour=%s peak_day=%s",
+                result.get("peak_hour"),
+                result.get("peak_day_of_week"),
+            )
+            return result
+        except Exception as exc:
+            logger.error("[Tool] get_listening_patterns failed: %s", exc)
             return {"error": str(exc)}

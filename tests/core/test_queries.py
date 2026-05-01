@@ -2,7 +2,12 @@
 import pytest
 from spotify_core.db.migrations import init_history_db
 from spotify_core.db.migrations import get_connection
-from spotify_core.db.queries import get_top_artists, get_top_tracks, get_listening_summary
+from spotify_core.db.queries import (
+    get_top_artists,
+    get_top_tracks,
+    get_listening_summary,
+    get_listening_patterns,
+)
 
 
 def _seed_db(db_path: str, rows: list[dict]) -> None:
@@ -116,3 +121,85 @@ class TestGetListeningSummary:
         summary = get_listening_summary(db)
         assert summary["total_plays"] == 0
         assert summary["earliest_played_at"] is None
+
+    def test_date_filter_start(self, seeded_db):
+        summary = get_listening_summary(seeded_db, start_date="2024-02-01")
+        assert summary["total_plays"] == 2
+
+    def test_date_filter_end(self, seeded_db):
+        summary = get_listening_summary(seeded_db, end_date="2024-01-31")
+        assert summary["total_plays"] == 2
+
+    def test_total_ms_played(self, seeded_db):
+        summary = get_listening_summary(seeded_db)
+        # 200k + 150k + 300k + 200k = 850k
+        assert summary["total_ms_played"] == 850_000
+
+    def test_avg_ms_per_play(self, seeded_db):
+        summary = get_listening_summary(seeded_db)
+        assert summary["avg_ms_per_play"] == pytest.approx(212_500.0)
+
+    def test_skip_rate_no_skips(self, seeded_db):
+        summary = get_listening_summary(seeded_db)
+        # All plays >= 150k ms — no skips
+        assert summary["skip_rate"] == pytest.approx(0.0)
+
+    def test_skip_rate_with_short_plays(self, tmp_path):
+        db = str(tmp_path / "history.db")
+        init_history_db(db)
+        _seed_db(db, [
+            {"id": "1", "track_name": "Full", "artist_name": "A",
+             "played_at": "2024-01-10T12:00:00Z", "ms_played": 200_000},
+            {"id": "2", "track_name": "Skip", "artist_name": "A",
+             "played_at": "2024-01-11T12:00:00Z", "ms_played": 10_000},
+        ])
+        summary = get_listening_summary(db)
+        assert summary["skip_rate"] == pytest.approx(0.5)
+
+    def test_volume_stats_scoped_by_date_filter(self, seeded_db):
+        # Only Jan plays: 200k + 150k = 350k, 2 plays
+        summary = get_listening_summary(seeded_db, end_date="2024-01-31")
+        assert summary["total_ms_played"] == 350_000
+        assert summary["avg_ms_per_play"] == pytest.approx(175_000.0)
+
+
+class TestGetListeningPatterns:
+    def test_returns_expected_keys(self, seeded_db):
+        patterns = get_listening_patterns(seeded_db)
+        for key in ("peak_hour", "peak_day_of_week", "most_active_date", "avg_plays_per_day"):
+            assert key in patterns
+
+    def test_peak_hour(self, seeded_db):
+        patterns = get_listening_patterns(seeded_db)
+        # All plays at T12:00:00Z → hour 12
+        assert patterns["peak_hour"] == 12
+
+    def test_peak_day_of_week(self, seeded_db):
+        patterns = get_listening_patterns(seeded_db)
+        # Jan 11 and Feb 1 are both Thursday → peak
+        assert patterns["peak_day_of_week"] == "Thursday"
+
+    def test_most_active_date_is_valid(self, seeded_db):
+        patterns = get_listening_patterns(seeded_db)
+        assert patterns["most_active_date"] is not None
+        # Should be a YYYY-MM-DD string
+        assert len(patterns["most_active_date"]) == 10
+
+    def test_avg_plays_per_day(self, seeded_db):
+        patterns = get_listening_patterns(seeded_db)
+        # 4 plays across 4 distinct days → 1.0
+        assert patterns["avg_plays_per_day"] == pytest.approx(1.0)
+
+    def test_date_filter_scopes_patterns(self, seeded_db):
+        patterns = get_listening_patterns(seeded_db, end_date="2024-01-31")
+        # Only Jan 10 + Jan 11 → 2 plays / 2 days = 1.0
+        assert patterns["avg_plays_per_day"] == pytest.approx(1.0)
+
+    def test_empty_db_returns_none_values(self, tmp_path):
+        db = str(tmp_path / "empty.db")
+        init_history_db(db)
+        patterns = get_listening_patterns(db)
+        assert patterns["peak_hour"] is None
+        assert patterns["peak_day_of_week"] is None
+        assert patterns["most_active_date"] is None
+        assert patterns["avg_plays_per_day"] is None
