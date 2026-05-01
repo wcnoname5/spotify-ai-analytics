@@ -50,17 +50,20 @@ def register(mcp: FastMCP) -> None:
         Returns:
             {"inserted": int, "cursor_ms": int} or {"error": str, "requires_auth": bool, "auth_command": str}.
         """
+        logger.debug("[Tool] sync_history: user_id=%s", user_id)
         try:
             from spotify_core.db.pipeline import sync_api_to_db
-            return sync_api_to_db(
+            result = sync_api_to_db(
                 db_path=DB_PATH,
                 tokens_db_path=TOKENS_DB,
                 user_id=user_id,
                 client_id=CLIENT_ID,
                 fernet_key=FERNET_KEY,
             )
+            logger.info("[Tool] sync_history success: inserted=%s", result.get("inserted"))
+            return result
         except Exception as exc:
-            logger.error("sync_history failed: %s", exc)
+            logger.error("[Tool] sync_history failed: %s", exc)
             return enrich_auth_error({"error": str(exc)}, user_id)
 
     @mcp.tool(
@@ -88,8 +91,15 @@ def register(mcp: FastMCP) -> None:
         Returns:
             {"inserted": int, "skipped_duplicated": int, "skipped_parse_error": int}
         """
-        from spotify_core.db.pipeline import import_json_to_db
-        return import_json_to_db(json_dir=json_dir, db_path=DB_PATH)
+        logger.debug("[Tool] import_history_from_json: json_dir=%s", json_dir)
+        try:
+            from spotify_core.db.pipeline import import_json_to_db
+            result = import_json_to_db(json_dir=json_dir, db_path=DB_PATH)
+            logger.info("[Tool] import_history_from_json success: inserted=%s", result.get("inserted"))
+            return result
+        except Exception as exc:
+            logger.error("[Tool] import_history_from_json failed: %s", exc)
+            return {"error": str(exc)}
 
     @mcp.tool(
         name="get_recent_playback",
@@ -126,6 +136,7 @@ def register(mcp: FastMCP) -> None:
             plus "track_id": str per track when show_track_id is true.
             or {"error": str, "requires_auth": bool}.
         """
+        logger.debug("[Tool] get_recent_playback: user_id=%s limit=%d show_track_id=%s", user_id, limit, show_track_id)
         try:
             from spotify_core.db.pipeline import sync_api_to_db
             from spotify_core.db.queries import get_recent_plays
@@ -140,9 +151,14 @@ def register(mcp: FastMCP) -> None:
             tracks = get_recent_plays(DB_PATH, limit=limit, show_track_id=show_track_id)
             for track in tracks:
                 track["played_at"] = utc_iso_to_local(track.get("played_at"))
+            logger.info(
+                "[Tool] get_recent_playback success: returned %d, synced %d tracks",
+                len(tracks),
+                sync_result.get("inserted")
+            )
             return {"tracks": tracks, "synced": sync_result}
         except Exception as exc:
-            logger.error("get_recent_playback failed: %s", exc)
+            logger.error("[Tool] get_recent_playback failed: %s", exc)
             return enrich_auth_error({"error": str(exc)}, user_id)
 
     @mcp.tool(
@@ -174,10 +190,18 @@ def register(mcp: FastMCP) -> None:
             List of {"artist_name": str, "total_ms": int, "play_count": int}, ordered by total_ms desc.
             If the DB is empty, returns [{"warning": ..., "next_steps": [...]}].
         """
+        logger.debug("[Tool] get_top_artists: limit=%d start=%s end=%s", limit, start_date, end_date)
         if is_history_empty(DB_PATH):
+            logger.warning("[Tool] get_top_artists: history DB is empty")
             return [EMPTY_DB_RESPONSE]
-        from spotify_core.db.queries import get_top_artists as _get_top_artists
-        return _get_top_artists(DB_PATH, limit=limit, start_date=start_date, end_date=end_date)
+        try:
+            from spotify_core.db.queries import get_top_artists as _get_top_artists
+            result = _get_top_artists(DB_PATH, limit=limit, start_date=start_date, end_date=end_date)
+            logger.info("[Tool] get_top_artists success: returned %d artists", len(result))
+            return result
+        except Exception as exc:
+            logger.error("[Tool] get_top_artists failed: %s", exc)
+            return [{"error": str(exc)}]
 
     @mcp.tool(
         name="get_top_tracks",
@@ -212,11 +236,22 @@ def register(mcp: FastMCP) -> None:
             plus "track_id": str when show_track_id is true. Ordered by play_count desc.
             If the DB is empty, returns [{"warning": ..., "next_steps": [...]}].
         """
+        logger.debug("[Tool] get_top_tracks: limit=%d start=%s end=%s show_track_id=%s", limit, start_date, end_date, show_track_id)
         if is_history_empty(DB_PATH):
+            logger.warning("[Tool] get_top_tracks: history DB is empty")
             return [EMPTY_DB_RESPONSE]
-        from spotify_core.db.queries import get_top_tracks as _get_top_tracks
-        return _get_top_tracks(DB_PATH, limit=limit, start_date=start_date, end_date=end_date, show_track_id=show_track_id)
+        try:
+            from spotify_core.db.queries import get_top_tracks as _get_top_tracks
+            result = _get_top_tracks(DB_PATH, limit=limit, start_date=start_date, end_date=end_date, show_track_id=show_track_id)
+            logger.info("[Tool] get_top_tracks success: returned %d tracks", len(result))
+            return result
+        except Exception as exc:
+            logger.error("[Tool] get_top_tracks failed: %s", exc)
+            return [{"error": str(exc)}]
 
+
+    # TODO: add limit and date range filters to get_listening_summary and enrich with most played artists/tracks in the period,
+    # similar to Spotify Wrapped insights.
     @mcp.tool(
         name="get_listening_summary",
         annotations={
@@ -240,10 +275,22 @@ def register(mcp: FastMCP) -> None:
             }
             If the DB is empty, returns {"warning": ..., "next_steps": [...]}.
         """
+        logger.debug("[Tool] get_listening_summary")
         if is_history_empty(DB_PATH):
+            logger.warning("[Tool] get_listening_summary: history DB is empty")
             return EMPTY_DB_RESPONSE
-        from spotify_core.db.queries import get_listening_summary as _summary
-        result = dict(_summary(DB_PATH))
-        result["earliest_played_at"] = utc_iso_to_local(result.get("earliest_played_at"))
-        result["latest_played_at"] = utc_iso_to_local(result.get("latest_played_at"))
-        return result
+        try:
+            from spotify_core.db.queries import get_listening_summary as _summary
+            result = dict(_summary(DB_PATH))
+            result["earliest_played_at"] = utc_iso_to_local(result.get("earliest_played_at"))
+            result["latest_played_at"] = utc_iso_to_local(result.get("latest_played_at"))
+            logger.info(
+                "[Tool] get_listening_summary success: total_plays=%d unique_tracks=%d unique_artists=%d",
+                result["total_plays"],
+                result["unique_tracks"],
+                result["unique_artists"]
+            )
+            return result
+        except Exception as exc:
+            logger.error("[Tool] get_listening_summary failed: %s", exc)
+            return {"error": str(exc)}

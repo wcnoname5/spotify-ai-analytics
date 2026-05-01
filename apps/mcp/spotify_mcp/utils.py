@@ -1,6 +1,9 @@
 """Shared helpers for the MCP server layer (not part of core — MCP-specific only)."""
 from __future__ import annotations
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 _AUTH_ERROR_KEYWORDS = ("No token found", "No stored token", "Cannot refresh")
 
@@ -17,6 +20,7 @@ def utc_iso_to_local(utc_iso: str | None) -> str | None:
         dt = datetime.fromisoformat(utc_iso.replace("Z", "+00:00"))
         return dt.astimezone().isoformat()
     except (ValueError, TypeError):
+        logger.warning("utc_iso_to_local: failed to parse %r, returning unchanged", utc_iso)
         return utc_iso
 
 
@@ -27,6 +31,7 @@ def enrich_auth_error(result: dict, user_id: str) -> dict:
     """
     error_msg = result.get("error", "")
     if any(kw in error_msg for kw in _AUTH_ERROR_KEYWORDS):
+        logger.warning("enrich_auth_error: auth error detected for user=%r: %r", user_id, error_msg)
         return {
             **result,
             "requires_auth": True,
