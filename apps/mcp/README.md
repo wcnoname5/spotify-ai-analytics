@@ -118,7 +118,10 @@ At project root run the command in terminal
 claude mcp add spotify-analytics -- uv run python apps/mcp/server.py
 ```
 
-Restart Claude Code after saving.
+Restart Claude Code after saving. Run the command to check if the MCP server is connected successfully.
+```bash
+claude mcp list
+```
 
 ### Claude Desktop (macOS / Windows)
 
@@ -143,15 +146,14 @@ Add the `mcpServers` block: (Windows)
 ```
 For best practice, the application (& `uv`) should be written with absoulte path. `\\` for windows, `/` for macOS.
 
-If the having trouble with `uv`, try use the python intepreter in `.venv` as command to initate the MCP server directly.
+If you having trouble with `uv`, try use the python intepreter in `.venv` as command to initate the MCP server directly.
 
 ```json
 {
   "mcpServers": {
     "spotify-analytics": {
       "command": "C:\\Path\\To\\spotify-ai-analytics\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\Path\\To\\spotify-ai-analytics\\apps\\mcp\\server.py"],
-      "cwd": "C:\\Path\\To\\spotify-ai-analytics"
+      "args": ["C:\\Path\\To\\spotify-ai-analytics\\apps\\mcp\\server.py"]
     }
   }
 }

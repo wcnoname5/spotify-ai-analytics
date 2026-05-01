@@ -78,24 +78,6 @@ def _ensure_dbs_initialized() -> Optional[str]:
             "Try running setup manually: uv run python scripts/setup.py"
         )
 
-
-def _get_account_product() -> Optional[str]:
-    """Return the Spotify account product ('premium', 'free', …), or None if unknown."""
-    if not FERNET_KEY or not CLIENT_ID:
-        return None
-    try:
-        from spotify_core.spotify_client.token_store import load_tokens
-        if load_tokens(TOKENS_DB, DEFAULT_USER_ID, FERNET_KEY) is None:
-            return None
-        from spotify_core.spotify_client.client import SpotifyClient
-        with SpotifyClient(TOKENS_DB, DEFAULT_USER_ID, CLIENT_ID, FERNET_KEY) as client:
-            profile = client.get_current_user()
-            return profile.get("product")
-    except Exception as exc:
-        logger.debug("Account product check skipped: %s", exc)
-        return None
-
-
 @asynccontextmanager
 async def lifespan(server: FastMCP):
     # 1. Make sure every DB exists with its schema before any tool runs.
@@ -112,17 +94,6 @@ async def lifespan(server: FastMCP):
         )
     else:
         logger.info("MCP server ready: all checks passed.")
-
-    # 3. Premium gating: drop playback tools if account is free / unknown-but-token-present.
-    product = _get_account_product()
-    if product is not None and product != "premium":
-        for tool_name in PREMIUM_TOOLS:
-            server.remove_tool(tool_name)
-        logger.info("Spotify account type is %r — playback tools removed.", product)
-    elif product is not None:
-        logger.info("Spotify Premium account confirmed — all tools enabled.")
-    else:
-        logger.debug("Account type unknown — all tools registered (fail-open).")
 
     yield
 

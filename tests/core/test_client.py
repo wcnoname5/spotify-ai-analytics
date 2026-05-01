@@ -316,7 +316,7 @@ def test_create_playlist_sends_correct_body(tmp_path):
 
 @pytest.mark.unit
 def test_add_tracks_to_playlist_sends_uris(tmp_path):
-    """add_tracks_to_playlist() sends POST /playlists/{id}/tracks with uris body."""
+    """add_tracks_to_playlist() sends POST /playlists/{id}/items with uris body."""
     mock_http = MagicMock()
     mock_http.request.return_value = _ok_response({"snapshot_id": "snap1"})
 
@@ -326,6 +326,6 @@ def test_add_tracks_to_playlist_sends_uris(tmp_path):
 
     args, kwargs = mock_http.request.call_args
     assert args[0] == "POST"
-    assert args[1] == BASE_URL + "/playlists/playlist123/tracks"
+    assert args[1] == BASE_URL + "/playlists/playlist123/items"
     assert kwargs["json"]["uris"] == uris
     assert result == {"snapshot_id": "snap1"}

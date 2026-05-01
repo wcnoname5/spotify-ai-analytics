@@ -15,7 +15,12 @@ _PREMIUM_REQUIRED = {"error": "Spotify Premium required for playback control."}
 
 
 class SpotifyPlaybackTools:
-    """Tools for playback control, queue management, and history sync."""
+    """
+    Tools for playback control, queue management, and history sync.
+    
+    Note: At this stages the methods returns a dict: {error: ...} on failure, which the MCP server layer can enrich with auth hints if needed.
+    In the future we may want to raise custom exceptions here and handle them in the server layer instead.
+    """
 
     def __init__(
         self,
