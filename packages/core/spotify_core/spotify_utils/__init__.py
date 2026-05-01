@@ -1,3 +1,3 @@
-from .playback_tools import SpotifyPlaybackTools
+from .playback import SpotifyPlaybackTools
 
 __all__ = ["SpotifyPlaybackTools"]

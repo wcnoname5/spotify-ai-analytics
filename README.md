@@ -11,7 +11,7 @@ A local MCP server that connects Claude Desktop / Claude Code to your Spotify li
 - **Analytics** — ask Claude things like "What were my top artists last year?" or "How has my taste changed since 2022?"
 - **Playback control** — play, pause, skip, set volume, add to queue (Spotify Premium required)
 - **AI playlists** — generate and save playlists based on your listening history
-- **Memory** — Claude remembers your preferences across conversations
+- **Memory** — Claude remembers your preferences across conversations (not released yet)
 
 ---
 
@@ -45,7 +45,7 @@ claude mcp add spotify-analytics -- uv run python apps/mcp/server.py
 | Agent framework | LangGraph |
 | Local storage | SQLite |
 | Data processing | Polars |
-| OAuth | PKCE (Spotify mandates this as of Nov 2025) |
+| OAuth | PKCE |
 
 ---
 

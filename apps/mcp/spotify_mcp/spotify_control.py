@@ -22,7 +22,7 @@ def _make_tools(client, user_id: str):
     '''
     Factory for `SpotifyPlaybackTools` instance to avoid circular imports. Passes through the shared client and config.
     '''
-    from spotify_core.spotify_utils.playback_tools import SpotifyPlaybackTools
+    from spotify_core.spotify_utils.playback import SpotifyPlaybackTools
     return SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
 
 

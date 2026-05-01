@@ -1,7 +1,7 @@
 """Tests for SpotifyPlaybackTools (Stage 5). All SpotifyClient calls are mocked."""
 import pytest
 from unittest.mock import MagicMock, patch
-from spotify_core.spotify_utils.playback_tools import SpotifyPlaybackTools
+from spotify_core.spotify_utils.playback import SpotifyPlaybackTools
 from spotify_core.agent.playback_tools import AgentPlaybackTools
 
 
@@ -269,7 +269,7 @@ class TestCreatePlaylist:
 
 class TestSyncRecentHistory:
     def test_delegates_to_sync_api_to_db(self):
-        with patch("spotify_core.spotify_utils.playback_tools.sync_api_to_db") as mock_sync:
+        with patch("spotify_core.spotify_utils.playback.sync_api_to_db") as mock_sync:
             mock_sync.return_value = {"inserted": 10, "cursor_ms": 1700000000000}
             tools = _make_tools()
             result = tools.sync_recent_history()
@@ -284,7 +284,7 @@ class TestSyncRecentHistory:
         assert result == {"inserted": 10, "cursor_ms": 1700000000000}
 
     def test_error_returns_dict(self):
-        with patch("spotify_core.spotify_utils.playback_tools.sync_api_to_db") as mock_sync:
+        with patch("spotify_core.spotify_utils.playback.sync_api_to_db") as mock_sync:
             mock_sync.side_effect = RuntimeError("No token found")
             tools = _make_tools()
             result = tools.sync_recent_history()
