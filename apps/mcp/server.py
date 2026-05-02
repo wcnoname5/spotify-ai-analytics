@@ -190,6 +190,68 @@ def setup_check() -> dict:
     }
 
 
+# ------------------------------------------------------------------
+# Prompts
+# ------------------------------------------------------------------
+
+@mcp.prompt(
+    name="how_to_use",
+    title="Spotify-Analytic MCP Guide",
+    description="Onboarding guide — explains every tool and how to get started.",
+            )
+def how_to_use() -> str:
+    """Onboarding guide — explains every tool and how to get started."""
+    return """\
+# Spotify AI Analytics — How to Use
+
+## First-Time Setup (run in order)
+1. **Check what's missing** — call `setup_check`. It will tell you exactly what still needs to be done.
+2. **Connect Spotify** — if tokens are missing, run `uv run python scripts/setup.py` in a terminal. It opens a browser login and stores encrypted tokens automatically.
+3. **Load history** — either: 
+   - *Full export*: download your data at https://www.spotify.com/account/privacy/, place the `Streaming_History_Audio_*.json` files in `data/spotify_history/`, then run `import_history_from_json`.
+   - *Recent plays only*: call `sync_history` (fetches the last 50 plays from the Spotify API).
+
+## Available Tools
+
+### Diagnostics
+| Tool | What it does |
+|------|-------------|
+| `setup_check` | Diagnoses configuration — always call this first if something isn't working |
+
+### History & Analytics
+| Tool | What it does |
+|------|-------------|
+| `sync_history` | Pull your latest plays from Spotify into the local DB |
+| `import_history_from_json` | Bulk-load a full Spotify data export |
+| `get_listening_summary` | Play counts, top tracks/artists over a date range |
+| `get_top_tracks` | Your most-played tracks (filterable by date range) |
+| `get_top_artists` | Your most-played artists (filterable by date range) |
+| `get_listening_patterns` | Heatmap of listening by hour-of-day and day-of-week |
+| `get_recent_playback` | The N most recent plays stored in the DB |
+
+### Playback Control *(requires Spotify Premium)*
+| Tool | What it does |
+|------|-------------|
+| `get_now_playing` | What's currently playing |
+| `get_devices` | List active Spotify devices |
+| `play_track` | Play a specific track by URI or name |
+| `play_playlist_or_album` | Start a playlist or album |
+| `pause_playback` | Pause the current track |
+| `skip_track` | Skip to the next track |
+| `set_volume` | Set playback volume (0–100) |
+| `add_to_queue` | Add a track to the playback queue |
+| `search` | Search for tracks, artists, albums, or playlists |
+| `create_playlist` | Create a new Spotify playlist |
+
+## Example Queries
+- "Run setup_check and tell me what I still need to configure."
+- "Sync my history, then show me a listening summary for April 2025."
+- "What are my top 10 artists of all time?"
+- "Search for 'Bohemian Rhapsody' and play it on my phone."
+- "What's playing right now?"
+"""
+
+
 # Attach the rest of the tools.
 db_crud.register(mcp)
 spotify_control.register(mcp)
