@@ -17,13 +17,14 @@ def _seed_db(db_path: str, rows: list[dict]) -> None:
         for r in rows:
             conn.execute(
                 "INSERT OR IGNORE INTO listening_history "
-                "(id, track_id, track_name, artist_name, album_name, played_at, ms_played, source) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "(id, track_id, track_name, artist_name, album_name, played_at, ms_played, source, conn_country) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     r["id"], r.get("track_id", r["id"]),
                     r.get("track_name"), r.get("artist_name"),
                     r.get("album_name"), r["played_at"],
                     r.get("ms_played"), r.get("source", "json_import"),
+                    r.get("conn_country"),
                 ),
             )
     conn.close()
@@ -203,3 +204,69 @@ class TestGetListeningPatterns:
         assert patterns["peak_day_of_week"] is None
         assert patterns["most_active_date"] is None
         assert patterns["avg_plays_per_day"] is None
+
+
+@pytest.fixture()
+def seeded_db_tw(tmp_path):
+    """DB seeded with TW (+8) country — two plays at T16:00:00Z on 2024-01-10.
+
+    UTC view:  2024-01-10 (Wednesday), hour 16
+    TW local:  2024-01-11 (Thursday),  hour 00
+    """
+    db = str(tmp_path / "history.db")
+    init_history_db(db)
+    _seed_db(db, [
+        {"id": "1", "track_name": "A", "artist_name": "X",
+         "played_at": "2024-01-10T16:00:00Z", "ms_played": 200_000, "conn_country": "TW"},
+        {"id": "2", "track_name": "B", "artist_name": "X",
+         "played_at": "2024-01-10T16:01:00Z", "ms_played": 150_000, "conn_country": "TW"},
+    ])
+    return db
+
+
+class TestGetListeningPatternsTimezone:
+    def test_peak_hour_uses_local_time(self, seeded_db_tw):
+        patterns = get_listening_patterns(seeded_db_tw)
+        # UTC hour = 16, TW local (+8) = 0
+        assert patterns["peak_hour"] == 0
+
+    def test_peak_day_uses_local_time(self, seeded_db_tw):
+        patterns = get_listening_patterns(seeded_db_tw)
+        # UTC: 2024-01-10 = Wednesday; TW local: 2024-01-11 = Thursday
+        assert patterns["peak_day_of_week"] == "Thursday"
+
+    def test_most_active_date_uses_local_date(self, seeded_db_tw):
+        patterns = get_listening_patterns(seeded_db_tw)
+        # UTC date: 2024-01-10; TW local date: 2024-01-11
+        assert patterns["most_active_date"] == "2024-01-11"
+
+    def test_no_conn_country_falls_back_to_utc(self, seeded_db):
+        # seeded_db has no conn_country — should stay UTC (offset 0)
+        patterns = get_listening_patterns(seeded_db)
+        assert patterns["peak_hour"] == 12  # T12:00:00Z stays at 12
+
+
+class TestGetListeningPatternsMostActiveDateDetail:
+    def test_most_active_date_play_count(self, seeded_db_tw):
+        patterns = get_listening_patterns(seeded_db_tw)
+        # Both plays land on 2024-01-11 local TW — play_count = 2
+        assert patterns["most_active_date_play_count"] == 2
+
+    def test_most_active_date_total_ms(self, seeded_db_tw):
+        patterns = get_listening_patterns(seeded_db_tw)
+        # 200_000 + 150_000
+        assert patterns["most_active_date_total_ms"] == 350_000
+
+    def test_detail_none_when_db_empty(self, tmp_path):
+        db = str(tmp_path / "empty.db")
+        init_history_db(db)
+        patterns = get_listening_patterns(db)
+        assert patterns["most_active_date_play_count"] is None
+        assert patterns["most_active_date_total_ms"] is None
+
+    def test_detail_respects_date_filter(self, seeded_db):
+        # seeded_db: Jan 10, 11 and Feb 1, 10 — all with 1 play each.
+        # Filter to Jan only: most_active_date is one of the Jan dates (1 play).
+        # The detail query must not count Feb plays for that date.
+        patterns = get_listening_patterns(seeded_db, end_date="2024-01-31")
+        assert patterns["most_active_date_play_count"] == 1

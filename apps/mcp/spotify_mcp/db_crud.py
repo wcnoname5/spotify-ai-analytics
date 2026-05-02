@@ -322,6 +322,8 @@ def register(mcp: FastMCP) -> None:
     ) -> dict:
         """Return temporal patterns from local listening history: peak hour, peak day, most active date, and average plays per day.
 
+        All time-based groupings (hour, day-of-week, date) are expressed in the user's
+        local timezone, inferred automatically from the most common conn_country in the DB.
         Does not require Spotify auth — reads from the local SQLite database only.
         Use start_date/end_date to scope the analysis to a specific time window.
 
@@ -331,10 +333,12 @@ def register(mcp: FastMCP) -> None:
 
         Returns:
             {
-                "peak_hour": int | None,           -- hour-of-day (0-23) with most plays
-                "peak_day_of_week": str | None,    -- e.g. "Thursday"
-                "most_active_date": str | None,    -- YYYY-MM-DD with most plays in period
-                "avg_plays_per_day": float | None, -- plays divided by distinct calendar days
+                "peak_hour": int | None,                   -- local hour-of-day (0-23) with most plays
+                "peak_day_of_week": str | None,            -- e.g. "Thursday" (local time)
+                "most_active_date": str | None,            -- YYYY-MM-DD (local date) with most plays
+                "most_active_date_play_count": int | None, -- how many plays on that date
+                "most_active_date_total_ms": int | None,   -- total ms listened on that date
+                "avg_plays_per_day": float | None,         -- plays divided by distinct local calendar days
             }
             If the DB is empty, returns {"warning": ..., "next_steps": [...]}.
         """
