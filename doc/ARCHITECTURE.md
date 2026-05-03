@@ -56,21 +56,6 @@ spotify-ai-analytics/
 └── CLAUDE.md                  # Instructions for Claude Code (this repo's AI guide)
 ```
 
-### Migration Map (existing → new)
-
-| Current path | New path | Change |
-|---|---|---|
-| `src/analytics/` | `packages/core/analytics/` | Move only |
-| `src/dataloader/` | `packages/dataloader/` | Move only |
-| `src/spotify_agent/` | `packages/core/agent/` | Move + add memory/playback tools |
-| `src/app/` | `apps/web/ui/` | Move, keep functional for Phase 2 |
-| _(new)_ | `packages/core/spotify_client/` | OAuth PKCE + API client |
-| _(new)_ | `packages/core/memory/` | LangGraph persistence layer |
-| _(new)_ | `packages/core/db/` | SQLite schema + models |
-| _(new)_ | `apps/mcp/server.py` | MCP tool wrapper |
-
----
-
 ## 3. Tech Stack Decisions
 
 ### Confirmed
@@ -123,7 +108,7 @@ POST /me/player/next                  # Skip         ← Premium required
 PUT  /me/player/volume                # Volume       ← Premium required
 POST /me/player/queue                 # Add to queue ← Premium required
 POST /users/{id}/playlists            # Create playlist
-POST /playlists/{id}/tracks           # Add tracks
+POST /playlists/{id}/items           # Add tracks
 GET  /search                          # Search tracks/artists
 ```
 

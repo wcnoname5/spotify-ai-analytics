@@ -13,9 +13,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from dotenv import load_dotenv
 load_dotenv()
 
-from _logging import setup_logging
 from spotify_core.db.pipeline import sync_api_to_db
 from spotify_core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def main():
@@ -38,8 +39,11 @@ def main():
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
-    setup_logging(args.verbose)
-    logger = logging.getLogger(__name__)
+    from spotify_core.logging import setup_logging
+    level = logging.DEBUG if args.verbose else logging.getLevelNamesMapping().get(
+        os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
+    )
+    setup_logging(log_name="sync_api", level=level)
     if not args.user_id:
         logger.error("SPOTIFY_USER_ID not set in environment and --user-id was not provided")
         sys.exit(1)

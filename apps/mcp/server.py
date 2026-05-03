@@ -129,6 +129,8 @@ def setup_check() -> dict:
             "message": str,
         }
     """
+    logger.debug("[Tool] setup_check: running diagnostics on server configuration.")
+
     checks: dict[str, bool] = {}
     actions: list[str] = []
 
@@ -159,8 +161,8 @@ def setup_check() -> dict:
         try:
             from spotify_core.spotify_client.token_store import load_tokens
             checks["tokens_exist"] = load_tokens(TOKENS_DB, DEFAULT_USER_ID, FERNET_KEY) is not None
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("[Tool] setup_check: Error occurred while checking tokens: %s", exc)
 
         if not checks["history_db_exists"] or not checks["tokens_exist"]:
             actions.append(
@@ -190,6 +192,36 @@ def setup_check() -> dict:
     }
 
 
+@mcp.tool(
+    name="setup",
+    annotations={
+        "title": "Run Setup",
+        "readOnlyHint": False,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    },
+)
+def setup() -> dict[str, str | bool | dict]:
+    """Run the full setup process: initialize DBs, connect Spotify, and optionally load history."""
+    from spotify_core.setup import run_setup
+
+    try:
+        response = run_setup()
+
+        return {
+            "status": "success",
+            "response": response,
+            "message": "Setup completed successfully. Run `setup_check` to verify. You are able to use other tools."
+            }
+    except Exception as exc:
+        logger.exception("Setup failed with an error.")
+        return {
+            "status": "failed",
+            "response": {},
+            "message": f"Setup failed: {exc}\nCheck server logs for details."
+            }
+
 # ------------------------------------------------------------------
 # Prompts
 # ------------------------------------------------------------------
@@ -206,17 +238,18 @@ def how_to_use() -> str:
 
 ## First-Time Setup (run in order)
 1. **Check what's missing** — call `setup_check`. It will tell you exactly what still needs to be done.
-2. **Connect Spotify** — if tokens are missing, run `uv run python scripts/setup.py` in a terminal. It opens a browser login and stores encrypted tokens automatically.
-3. **Load history** — either: 
-   - *Full export*: download your data at https://www.spotify.com/account/privacy/, place the `Streaming_History_Audio_*.json` files in `data/spotify_history/`, then run `import_history_from_json`.
+2. **Connect Spotify** — call `setup` tool. It auto-generates a Fernet key if needed, initialises all databases, and opens a browser tab for Spotify login. Tokens are stored encrypted automatically.
+3. **Load history** — either:
+   - *Full export*: download your data at https://www.spotify.com/account/privacy/, place the `Streaming_History_Audio_*.json` files in `data/spotify_history/`, then call `import_history_from_json`.
    - *Recent plays only*: call `sync_history` (fetches the last 50 plays from the Spotify API).
 
 ## Available Tools
 
-### Diagnostics
+### Setup & Diagnostics
 | Tool | What it does |
 |------|-------------|
 | `setup_check` | Diagnoses configuration — always call this first if something isn't working |
+| `setup` | Run full setup: init DBs, auto-generate encryption key, connect Spotify via browser OAuth |
 
 ### History & Analytics
 | Tool | What it does |
