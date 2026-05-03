@@ -19,24 +19,59 @@ A local MCP server that connects Claude Desktop / Claude Code to your Spotify li
 
 See **[doc/MCP_QUICKSTART.md](doc/MCP_QUICKSTART.md)** for the full setup guide.
 
-The short version:
+Before starting, you need to create an app tor get the `SPOTIFY_CLIENT_ID` (check **[doc/MCP_QUICKSTART.md](doc/MCP_QUICKSTART.md#spotify_client_id)** for details).
+
+The short version: you need to run these scripts in your terminal:
 
 ```bash
 # 1. Install dependencies
 uv sync
 
-# 2. Set SPOTIFY_CLIENT_ID in .env
+# 2. Create .env and go set SPOTIFY_CLIENT_ID in .env file
 cp .env.example .env
 
-# 3. Initialize DB and authenticate
+# 3. setup for DB initialization, Oath authentication
 uv run python scripts/setup.py
-
-# 4. Add to Claude (CLI)
-claude mcp add spotify-analytics -- uv run python apps/mcp/server.py
 ```
 
----
+### MCP connection in Claude Desktop (Recommended for GUI users)
 
+1. In Claude Desktop, click the settings (≡ mark in the top-left), go to `Help > Troubleshooting > Enable Developer Mode`. After you enable Developer Mode, go to `Developer > Open App Config File...` to open `claude_desktop_config.json` and add this block:
+
+    ```json
+    {
+    "mcpServers": {
+        "spotify-analytics": {
+        "command": "uv",
+        "args": ["run", "python", "C:\\Path\\To\\spotify-ai-analytics\\apps\\mcp\\server.py"],
+        "cwd": "C:\\Path\\To\\spotify-ai-analytics"
+        }
+    }
+    }
+    ```
+
+    For best results, use absolute paths for `args` and `cwd`. Use `\\` for Windows and `/` for macOS.
+
+2. Click `Developer > Reload MCP Configuration` in Claude Desktop (or simply restart) after saving.
+
+3. Click `+ > Connectors` in the chat box; you should see `spotify-analytics` in the list.
+
+### MCP connection in Claude CLI
+
+```bash
+# 3. Add to Claude (CLI)
+claude mcp add spotify-analytics -- uv run python apps/mcp/server.py
+# 4. Check if the connection is successful
+claude mcp list
+```
+
+### How do I know if I'm doing it right?
+
+If you've connected to Claude successfully, you can ask it directly!
+
+Click `+ > Connectors > Add from spotify-analytics` in the chat box. We provide a system prompt `Spotify-Analytic MCP Guide` to help you get started.
+
+---
 ## Tech stack
 
 | Layer | Choice |

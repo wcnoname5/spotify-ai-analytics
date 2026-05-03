@@ -21,15 +21,11 @@ uv sync
 # 2. Set SPOTIFY_CLIENT_ID in .env (only key you need to find manually — see Section 2)
 cp .env.example .env
 
-# 3. Initialize DB, connect Spotify account, and optionally import your full history.
-#    Place your Streaming_History_Audio_*.json files in data/spotify_history/ first (optional).
-#    TOKEN_ENCRYPT_KEY would be auto-generated (no need to prepare manually)
+# 3. Initiate the DB and Authentication. (Or you can tell Claude to run this for you, see section 5) 
 uv run python scripts/setup.py
 
 # 4. (Optional) Fill the gap between your JSON history and today, or fetch recent plays if you skipped JSON.
 uv run python scripts/sync_api.py
-
-# 5. Add the server to Claude (see Section 4)
 ```
 
 ---
@@ -40,25 +36,26 @@ Open `.env` in a text editor. Fill in the one required value:
 
 ### `SPOTIFY_CLIENT_ID`
 
-1. Go to [https://developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and log in.
-  - *Note:* In the [Newest Policy](https://developer.spotify.com/blog/2026-02-06-update-on-developer-access-and-platform-security), spotify have restricted the developer mode can be only accessed by premium user. So Free user may need to access the ID from other existing apps.
-2. Click **Create app**.
-3. Fill in any name and description. Set **Redirect URIs** to exactly:
+1. Log in to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+  - *Note:* Per [Spotify's Feb 2026 update](https://developer.spotify.com/blog/2026-02-06-update-on-developer-access-and-platform-security), creating new apps may require a Premium account. 
+2. Click **Create app** and set **Redirect URIs** to exactly:
    ```
    http://127.0.0.1:8888/callback
    ```
-   > ⚠️ Use `127.0.0.1`, NOT `localhost` — Spotify blocked `localhost` redirects in November 2025.
-4. Accept the terms and click **Save**.
-5. On the app overview page, copy the **Client ID** (a 32-character hex string).
-6. Paste it into `.env`:
+   > ⚠️ Use `127.0.0.1`, NOT `localhost`.
+3. Copy the **Client ID** and paste it into `.env`:
    ```
    SPOTIFY_CLIENT_ID=your_client_id_here
    ```
-   > Note: `SPOTIFY_CLIENT_SECRET` is **not needed** — this server uses PKCE (no secret required).
+   > Note: `SPOTIFY_CLIENT_SECRET` is **not needed** (this server uses PKCE).
+
+<details>
+ <summary> <strong> Optional Fields  </strong> </summary>
 
 ### `TOKEN_ENCRYPT_KEY`
+**You don't need to generate this manually.**
 
-**You don't need to generate this manually.** When you run `scripts/setup.py` and `TOKEN_ENCRYPT_KEY` is not set, the script auto-generates a Fernet key and writes it to your `.env` file automatically.
+When you run `scripts/setup.py` and `TOKEN_ENCRYPT_KEY` is not set, the script auto-generates a Fernet key and writes it to your `.env` file automatically.
 
 If you ever need to set it manually (e.g., restoring from backup):
 
@@ -70,7 +67,7 @@ Copy the output into `.env` as `TOKEN_ENCRYPT_KEY=<value>`.
 
 > Keep this key safe — it encrypts your stored Spotify tokens. If you lose it, re-run OAuth to get new tokens.
 
-### `SPOTIFY_USER_ID` (optional but recommended)
+### Optional: `SPOTIFY_USER_ID`
 
 Your Spotify username — shown at [https://www.spotify.com/account/overview/](https://www.spotify.com/account/overview/) under **Username**.
 
@@ -80,36 +77,68 @@ SPOTIFY_USER_ID=your_username
 
 If omitted, defaults to `"default"`.
 
+</details>
 ---
 
-## Section 3 — Loading your listening history and initate the DB
+## Section 3 — Loading history & Database initialization
 
-### Full history — Spotify JSON export (recommended)
+### Full history — Spotify JSON export (Recommended)
 
-Spotify can export your entire Extended Streaming History (all plays ever).
+Spotify can export your full Extended Listening History.
 
-1. Go to [https://www.spotify.com/account/privacy/](https://www.spotify.com/account/privacy/).
-2. Scroll to **Download your data** → select **Extended streaming history**.
-3. Click **Request data**. Spotify emails you a download link within a few days.
-4. Unzip the download. You'll have files named `Streaming_History_Audio_*.json`.
-5. Place these files in `data/spotify_history/` **before** running `setup.py`.
-   `setup.py` imports them automatically — no extra command needed.
-  - *Note:* If you didn't place the JSON files, `setup.py` won't load the data but it will still initate the databse.
+1. Request your data at [spotify.com/account/privacy](https://www.spotify.com/account/privacy/) (select **Extended streaming history**).
+2. Once received (~few days), unzip and place `Streaming_History_Audio_*.json` files in `data/spotify_history/`.
+3. Run `uv run python scripts/setup.py` to import them automatically.
 
-
-### Recent plays only — Spotify API (instant, no JSON needed)
+### Recent plays — Spotify API (Instant)
 
 ```bash
 uv run python scripts/sync_api.py
 ```
 
-> **Note:** The Spotify recently-played API only holds your last ~50 plays. It cannot recover months of history — only the JSON export can do that.
-
-Run `sync_api.py` anytime to stay up to date (the `sync_history` MCP tool does the same thing).
+> **Note:** The API only holds your last ~50 plays. Deep history requires the JSON export.
 
 ---
 
 ## Section 4 — Connecting to Claude
+
+You can choose connecting to Claude Desktop (GUI, but much tricky to connect) or Claude CLI.
+
+### Claude Desktop (macOS / Windows)
+
+1. Enable Developer Mode: `Settings > Help > Troubleshooting > Enable Developer Mode`.
+2. Open Config: `Developer > Open App Config File...` and add to `mcpServers`:
+
+  ```json
+  {
+    "mcpServers": {
+      "spotify-analytics": {
+        "command": "uv",
+        "args": ["run", "python", "ABSOLUTE_PATH\\apps\\mcp\\server.py"],
+        "cwd": "ABSOLUTE_PATH"
+      }
+    }
+  }
+  ```
+  > **Note:** Replace `ABSOLUTE_PATH` with the full path to this project folder. Use `\\` for Windows.
+
+3. Click `Developer > Reload MCP Configuration`. You should see `Spotify-Analytic` in the `+ > Connectors` menu.
+
+<details>
+<summary><i>If Claude Desktop cannot find the path:</i></summary>
+
+If `uv` fails, use the path to the internal python interpreter:
+```json
+{
+  "mcpServers": {
+    "spotify-analytics": {
+      "command": "ABSOLUTE_PATH\\.venv\\Scripts\\python.exe",
+      "args": ["ABSOLUTE_PATH\\apps\\mcp\\server.py"]
+    }
+  }
+}
+```
+</details>
 
 ### Claude Code (CLI)
 
@@ -123,68 +152,35 @@ Restart Claude Code after saving. Run the command to check if the MCP server is 
 claude mcp list
 ```
 
-### Claude Desktop (macOS / Windows)
-
-In Claude Code Desktop, click the settings (≡ mark in the top-left), go `≡ > Help > Troubleshooting > Enable Developer Mode`. After you enable the Developer Mode, go `≡ > Developer > Open App Config File...` to open the `claude_desktop_config.json`
-
-Or you can directly open the Claude Desktop config file with the path:
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-
-Add the `mcpServers` block: (Windows)
-
-```json
-{
-  "mcpServers": {
-    "spotify-analytics": {
-      "command": "uv",
-      "args": ["run", "python", "C:\\Path\\To\\spotify-ai-analytics\\apps\\mcp\\server.py"],
-      "cwd": "C:\\Path\\To\\spotify-ai-analytics"
-    }
-  }
-}
-```
-For best practice, the application (& `uv`) should be written with absoulte path. `\\` for windows, `/` for macOS.
-
-If you having trouble with `uv`, try use the python intepreter in `.venv` as command to initate the MCP server directly.
-
-```json
-{
-  "mcpServers": {
-    "spotify-analytics": {
-      "command": "C:\\Path\\To\\spotify-ai-analytics\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\Path\\To\\spotify-ai-analytics\\apps\\mcp\\server.py"]
-    }
-  }
-}
-```
-
-Restart Claude Desktop after saving.
-
 ---
 
-## Section 5 — First-time auth walkthrough
+## Section 5 — Authentication
 
-After adding the server to Claude, ask Claude:
+Once MCP server is connected, you can ask Claude to handle setup:
 
-> "Run setup_check and tell me what's missing."
+1. **Check status:** "Run `setup_check` to see what I'm missing."
+2. **Run setup:** "Run `setup` for me."
 
-Claude will call the `setup_check` tool and give you a step-by-step list of what still needs to be done.
+Claude will initialize the database and open your browser for Spotify login. After you approve, tokens are saved locally. You only need to do this once.
 
-When the OAuth step comes up, Claude will say to run:
-```bash
-uv run python scripts/setup.py
-```
-
-This opens your browser to Spotify's login page. After you approve, the browser shows "Authentication complete" and tokens are saved locally. You only need to do this once — tokens auto-refresh.
+*Alternatively, run from terminal:* `uv run python scripts/setup.py`
 
 ---
 
 ## Section 6 — Available MCP tools
 
+### Prompt
+
+| Prompt | How to activate | What it does |
+|--------|----------------|-------------|
+| `how_to_use` | Ask Claude: *"Use the how_to_use prompt"* | Loads the full onboarding guide — explains every tool and the setup sequence |
+
+### Tools
+
 | Tool | Description | Requires auth |
 |------|-------------|---------------|
 | `setup_check` | Diagnose configuration — start here if anything is broken | No |
+| `setup` | Run full setup: init DBs, auto-generate encryption key, connect Spotify via browser OAuth | No |
 | `sync_history` | Fetch 50 most recent plays from Spotify API into local DB | Yes |
 | `import_history_from_json` | Bulk-import a folder of Spotify JSON export files | No |
 | `get_listening_summary` | Total plays, unique artists/tracks, date range | No |
@@ -208,7 +204,8 @@ This opens your browser to Spotify's login page. After you approve, the browser 
 → Run the OAuth flow: `uv run python scripts/setup.py`
 
 **"SPOTIFY_CLIENT_ID is not set"**
-→ Check your `.env` file has `SPOTIFY_CLIENT_ID=...` (no quotes, no spaces around `=`)
+→ Check your `.env` file has `SPOTIFY_CLIENT_ID=...` (no quotes, no 
+s around `=`)
 
 **OAuth browser doesn't open / times out**
 → The callback server listens on port 8888. Make sure nothing else is using it.
@@ -224,10 +221,13 @@ This opens your browser to Spotify's login page. After you approve, the browser 
 **"Token decrypt failed" or "Invalid token"**
 → Your `TOKEN_ENCRYPT_KEY` may have changed. Generate a new key, update `.env`, and re-run OAuth.
 
+**"Cannot find my `claude_desktop_config.json`"**
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
 ## Developer Debug
 
-Run officail MCP inspector: Requires `Node.js` installed. 
+Run official MCP inspector (requires Node.js):
 ```bash
 npx @modelcontextprotocol/inspector uv run python apps/mcp/server.py
 ```
