@@ -69,7 +69,10 @@ claude mcp list
 
 If you've connected to Claude successfully, you can ask it directly!
 
-Click `+ > Connectors > Add from spotify-analytics` in the chat box. We provide a system prompt `Spotify-Analytic MCP Guide` to help you get started.
+Click `+ > Connectors > Add from spotify-analytics` in the chat box. We provide a system prompt `Spotify-Analytic MCP Setup Guide` to help you get started.
+
+## Examaple Use
+`Listening Report Generator` Prompt
 
 ---
 ## Tech stack
