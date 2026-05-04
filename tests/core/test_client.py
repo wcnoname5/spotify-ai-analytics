@@ -5,7 +5,13 @@ from cryptography.fernet import Fernet
 
 from spotify_core.db.migrations import init_db
 from spotify_core.spotify_client.token_store import save_tokens
+import httpx
+
 from spotify_core.spotify_client.client import SpotifyClient, BASE_URL
+from spotify_core.spotify_client.errors import (
+    SpotifyNoActiveDeviceError,
+    SpotifyPremiumRequiredError,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -329,3 +335,57 @@ def test_add_tracks_to_playlist_sends_uris(tmp_path):
     assert args[1] == BASE_URL + "/playlists/playlist123/items"
     assert kwargs["json"]["uris"] == uris
     assert result == {"snapshot_id": "snap1"}
+
+
+# ---------------------------------------------------------------------------
+# Typed-error translation in _request
+# ---------------------------------------------------------------------------
+
+def _http_status_response(status: int, body: dict | str) -> MagicMock:
+    """Build a mock httpx.Response that raises HTTPStatusError on raise_for_status."""
+    resp = MagicMock()
+    resp.status_code = status
+    if isinstance(body, dict):
+        resp.json.return_value = body
+        resp.text = str(body)
+    else:
+        resp.json.side_effect = ValueError("not json")
+        resp.text = body
+    request = MagicMock()
+    resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+        f"HTTP {status}", request=request, response=resp
+    )
+    return resp
+
+
+@pytest.mark.unit
+def test_request_raises_premium_required_on_403_premium(tmp_path):
+    mock_http = MagicMock()
+    mock_http.request.return_value = _http_status_response(
+        403, {"error": {"status": 403, "message": "PREMIUM_REQUIRED", "reason": "PREMIUM_REQUIRED"}}
+    )
+    client = _make_client(tmp_path, mock_http)
+    with pytest.raises(SpotifyPremiumRequiredError):
+        client.pause()
+
+
+@pytest.mark.unit
+def test_request_raises_no_active_device_on_404(tmp_path):
+    mock_http = MagicMock()
+    mock_http.request.return_value = _http_status_response(
+        404,
+        {"error": {"status": 404, "message": "Player command failed", "reason": "NO_ACTIVE_DEVICE"}},
+    )
+    client = _make_client(tmp_path, mock_http)
+    with pytest.raises(SpotifyNoActiveDeviceError):
+        client.play(uris=["spotify:track:abc"])
+
+
+@pytest.mark.unit
+def test_request_passes_through_other_http_errors(tmp_path):
+    """Non-recognised HTTP errors (e.g. 500) keep raising HTTPStatusError."""
+    mock_http = MagicMock()
+    mock_http.request.return_value = _http_status_response(500, {"error": "server"})
+    client = _make_client(tmp_path, mock_http)
+    with pytest.raises(httpx.HTTPStatusError):
+        client.get_current_user()

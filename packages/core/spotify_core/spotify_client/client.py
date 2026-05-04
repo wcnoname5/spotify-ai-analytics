@@ -9,6 +9,11 @@ from typing import Optional, Sequence, Union
 
 import httpx
 
+from .errors import (
+    SpotifyAuthError,
+    SpotifyNoActiveDeviceError,
+    SpotifyPremiumRequiredError,
+)
 from .token_store import load_tokens, save_tokens, is_token_expired
 
 logger = logging.getLogger(__name__)
@@ -70,7 +75,7 @@ class SpotifyClient:
         """Load token from store, refresh if expired, return access_token string.
 
         Raises:
-            RuntimeError: If no token is found for the user even after refresh.
+            SpotifyAuthError: If no token is found for the user even after refresh.
         """
         if is_token_expired(self.db_path, self.user_id):
             logger.info("Token expired for user %s — refreshing", self.user_id)
@@ -78,16 +83,20 @@ class SpotifyClient:
 
         token_data = load_tokens(self.db_path, self.user_id, self.fernet_key)
         if token_data is None:
-            raise RuntimeError(
+            raise SpotifyAuthError(
                 f"No token found for user {self.user_id!r} — run OAuth flow first."
             )
         return token_data["access_token"]
 
     def _refresh_token(self) -> None:
-        """Perform the token refresh POST and persist the new tokens."""
+        """Perform the token refresh POST and persist the new tokens.
+
+        Raises:
+            SpotifyAuthError: If no refresh token is stored for the user.
+        """
         token_data = load_tokens(self.db_path, self.user_id, self.fernet_key)
         if token_data is None:
-            raise RuntimeError(
+            raise SpotifyAuthError(
                 f"Cannot refresh — no stored token for user {self.user_id!r}."
             )
 
@@ -128,7 +137,10 @@ class SpotifyClient:
             The ``httpx.Response`` object.
 
         Raises:
-            httpx.HTTPStatusError: On non-2xx responses after retry.
+            SpotifyAuthError: If the request returns 401 even after a refresh retry.
+            SpotifyPremiumRequiredError: If the endpoint requires Spotify Premium.
+            SpotifyNoActiveDeviceError: If a playback command has no active device.
+            httpx.HTTPStatusError: On other non-2xx responses.
         """
         access_token = self._get_access_token()
         headers = kwargs.pop("headers", {})
@@ -143,8 +155,9 @@ class SpotifyClient:
             self._refresh_token()
             token_data = load_tokens(self.db_path, self.user_id, self.fernet_key)
             if token_data is None:
-                response.raise_for_status()
-                return response
+                raise SpotifyAuthError(
+                    f"401 Unauthorized after refresh — token missing for user {self.user_id!r}."
+                )
             headers["Authorization"] = f"Bearer {token_data['access_token']}"
             response = self._client.request(method, url, headers=headers, **kwargs)
 
@@ -155,12 +168,28 @@ class SpotifyClient:
                 body = exc.response.json()
             except Exception:
                 body = exc.response.text
+            status = exc.response.status_code
             logger.error(
                 "_request error: %s %s status=%d body=%s",
-                method, path, exc.response.status_code, body,
+                method, path, status, body,
             )
+            reason = ""
+            body_text = ""
+            if isinstance(body, dict):
+                inner = body.get("error") if isinstance(body.get("error"), dict) else {}
+                reason = (inner.get("reason") or "").upper() if isinstance(inner, dict) else ""
+                body_text = str(body).upper()
+            else:
+                body_text = str(body).upper()
+
+            if status == 401:
+                raise SpotifyAuthError(f"HTTP 401: {body}") from exc
+            if status == 403 and "PREMIUM" in body_text:
+                raise SpotifyPremiumRequiredError(f"HTTP 403: {body}") from exc
+            if reason == "NO_ACTIVE_DEVICE" or "NO_ACTIVE_DEVICE" in body_text:
+                raise SpotifyNoActiveDeviceError(f"HTTP {status}: {body}") from exc
             raise httpx.HTTPStatusError(
-                f"HTTP {exc.response.status_code}: {body}",
+                f"HTTP {status}: {body}",
                 request=exc.request,
                 response=exc.response,
             ) from exc

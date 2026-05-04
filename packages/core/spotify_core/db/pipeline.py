@@ -215,7 +215,7 @@ def sync_api_to_db(
     token_data = load_tokens(tokens_db_path, user_id, fernet_key)
     if token_data is None:
         raise RuntimeError(
-            "Run OAuth flow first: uv run python scripts/setup.py"
+            "Fernet key is invalid or missing. Run OAuth flow first: uv run python scripts/setup.py"
         )
 
     # Read current cursor from sync_state
@@ -225,7 +225,8 @@ def sync_api_to_db(
             "SELECT value FROM sync_state WHERE key='last_played_at_ms'"
         ).fetchone()
         db_last_cursor: Optional[int] = row["value"] if row else None
-    # TODO: catch specific exceptions (e.g. missing table) and provide actionable error messages in the future
+    except Exception as e:
+        logger.error("Error occurred while fetching sync cursor from sync_state DB: %s", e)
     finally:
         conn.close()
 
@@ -265,6 +266,8 @@ def sync_api_to_db(
                     "VALUES ('last_played_at_ms', ?)",
                     (new_cursor_ms,),
                 )
+    except Exception as e:
+        logger.error("Error occurred during API sync: %s", e)
     finally:
         conn.close()
 
@@ -296,7 +299,7 @@ def sync_api_up_to_date(
     token_data = load_tokens(tokens_db_path, user_id, fernet_key)
     if token_data is None:
         raise RuntimeError(
-            "Run OAuth flow first: uv run python scripts/init_db.py --auth"
+            "Fernet key is invalid or missing. Run OAuth flow first: uv run python scripts/init_db.py --auth"
         )
 
     # Anchor: latest played_at from json_import — stop backfill once we reach it.

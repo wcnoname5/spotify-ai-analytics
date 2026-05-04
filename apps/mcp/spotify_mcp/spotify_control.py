@@ -5,7 +5,7 @@ from typing import Annotated, List, Optional
 from pydantic import Field
 from mcp.server.fastmcp import FastMCP
 
-from spotify_mcp.utils import enrich_auth_error
+from spotify_mcp.utils import to_error_response
 from spotify_mcp.config import (
     DB_PATH,
     DEFAULT_USER_ID,
@@ -24,6 +24,12 @@ def _make_tools(client, user_id: str):
     '''
     from spotify_core.spotify_utils.playback import SpotifyPlaybackTools
     return SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, get_client_id(), get_fernet_key())
+
+
+def _list_devices(user_id: str) -> list:
+    """Best-effort device list for enriching NoActiveDevice errors."""
+    with make_client(user_id) as client:
+        return _make_tools(client, user_id).get_devices().get("devices", [])
 
 
 def register(mcp: FastMCP) -> None:
@@ -54,7 +60,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] get_now_playing failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
         name="get_devices",
@@ -83,7 +89,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] get_devices failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
         name="play_track",
@@ -113,7 +119,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] play_track failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
         name="play_playlist_or_album",
@@ -143,7 +149,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] play_playlist_or_album failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
         name="search",
@@ -177,7 +183,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] search failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
 
     @mcp.tool(
@@ -202,7 +208,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] pause_playback failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
         name="skip_track",
@@ -226,7 +232,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] skip_track failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
         name="set_volume",
@@ -251,7 +257,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] set_volume failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
         name="add_to_queue",
@@ -276,7 +282,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] add_to_queue failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
         name="create_playlist",
@@ -303,4 +309,4 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] create_playlist failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))

@@ -1,11 +1,17 @@
 """Shared helpers for the MCP server layer (not part of core — MCP-specific only)."""
 from __future__ import annotations
+
 import logging
 from datetime import datetime
+from typing import Callable, Optional
+
+from spotify_core.spotify_client.errors import (
+    SpotifyAuthError,
+    SpotifyNoActiveDeviceError,
+    SpotifyPremiumRequiredError,
+)
 
 logger = logging.getLogger(__name__)
-
-_AUTH_ERROR_KEYWORDS = ("No token found", "No stored token", "Cannot refresh")
 
 
 def utc_iso_to_local(utc_iso: str | None) -> str | None:
@@ -24,19 +30,44 @@ def utc_iso_to_local(utc_iso: str | None) -> str | None:
         return utc_iso
 
 
-def enrich_auth_error(result: dict, user_id: str) -> dict:
-    """If result contains a Spotify auth error, add requires_auth and auth_command fields.
+def to_error_response(
+    exc: Exception,
+    user_id: str,
+    *,
+    list_devices: Optional[Callable[[], list]] = None,
+) -> dict:
+    """Convert an exception raised by the core layer into an MCP-friendly error dict.
 
-    Leaves non-error and non-auth-error dicts untouched.
+    Recognised typed exceptions get enriched output:
+
+    - ``SpotifyAuthError``: adds ``requires_auth`` and ``auth_command``.
+    - ``SpotifyPremiumRequiredError``: returns the canonical Premium message.
+    - ``SpotifyNoActiveDeviceError``: when ``list_devices`` is provided, includes
+      the available device list and a ``hint``.
+
+    Other exceptions are returned as ``{"error": str(exc)}``.
     """
-    error_msg = result.get("error", "")
-    if any(kw in error_msg for kw in _AUTH_ERROR_KEYWORDS):
-        logger.warning("enrich_auth_error: auth error detected for user=%r: %r", user_id, error_msg)
+    if isinstance(exc, SpotifyAuthError):
+        logger.warning("auth error for user=%r: %s", user_id, exc)
         return {
-            **result,
+            "error": str(exc),
             "requires_auth": True,
             "auth_command": (
                 f"uv run python scripts/init_db.py --auth --user-id {user_id}"
             ),
         }
-    return result
+    if isinstance(exc, SpotifyPremiumRequiredError):
+        return {"error": "Spotify Premium required for playback control."}
+    if isinstance(exc, SpotifyNoActiveDeviceError):
+        devices: list = []
+        if list_devices is not None:
+            try:
+                devices = list_devices()
+            except Exception as inner:
+                logger.warning("Failed to list devices while enriching error: %s", inner)
+        return {
+            "error": "No active Spotify device found. Open Spotify on a device first.",
+            "available_devices": devices,
+            "hint": "Pass a device_id from available_devices to target a specific device.",
+        }
+    return {"error": str(exc)}

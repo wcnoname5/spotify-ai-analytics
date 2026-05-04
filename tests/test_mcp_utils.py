@@ -3,7 +3,12 @@ import sqlite3
 import pytest
 from datetime import datetime
 from spotify_core.db.queries import is_history_empty
-from spotify_mcp.utils import utc_iso_to_local, enrich_auth_error
+from spotify_core.spotify_client.errors import (
+    SpotifyAuthError,
+    SpotifyNoActiveDeviceError,
+    SpotifyPremiumRequiredError,
+)
+from spotify_mcp.utils import to_error_response, utc_iso_to_local
 
 
 class TestIsHistoryEmpty:
@@ -51,28 +56,42 @@ class TestUtcIsoToLocal:
         assert dt.year == 2024
 
 
-class TestEnrichAuthError:
-    def test_no_token_found_adds_requires_auth(self):
-        result = enrich_auth_error({"error": "No token found for user 'bob'"}, "bob")
+class TestToErrorResponse:
+    def test_auth_error_adds_requires_auth(self):
+        result = to_error_response(SpotifyAuthError("No token found"), "bob")
         assert result["requires_auth"] is True
+        assert "bob" in result["auth_command"]
+        assert "No token found" in result["error"]
 
-    def test_no_stored_token_adds_requires_auth(self):
-        result = enrich_auth_error({"error": "No stored token for user 'bob'"}, "bob")
-        assert result["requires_auth"] is True
+    def test_premium_error_returns_canonical_message(self):
+        result = to_error_response(SpotifyPremiumRequiredError("HTTP 403: ..."), "bob")
+        assert result == {"error": "Spotify Premium required for playback control."}
 
-    def test_cannot_refresh_adds_requires_auth(self):
-        result = enrich_auth_error({"error": "Cannot refresh — no stored token"}, "bob")
-        assert result["requires_auth"] is True
+    def test_no_active_device_without_list_devices(self):
+        result = to_error_response(SpotifyNoActiveDeviceError("HTTP 404: ..."), "bob")
+        assert "No active Spotify device" in result["error"]
+        assert result["available_devices"] == []
+        assert "hint" in result
 
-    def test_auth_command_contains_user_id(self):
-        result = enrich_auth_error({"error": "No token found for user 'alice'"}, "alice")
-        assert "alice" in result["auth_command"]
+    def test_no_active_device_with_list_devices(self):
+        devices = [{"id": "dev1", "name": "Phone"}]
+        result = to_error_response(
+            SpotifyNoActiveDeviceError("HTTP 404: ..."),
+            "bob",
+            list_devices=lambda: devices,
+        )
+        assert result["available_devices"] == devices
 
-    def test_non_auth_error_unchanged(self):
-        result = enrich_auth_error({"error": "Network timeout"}, "bob")
-        assert "requires_auth" not in result
+    def test_no_active_device_swallows_list_devices_error(self):
+        def bad_list():
+            raise RuntimeError("network")
+
+        result = to_error_response(
+            SpotifyNoActiveDeviceError("HTTP 404: ..."), "bob", list_devices=bad_list
+        )
+        assert result["available_devices"] == []
+
+    def test_unknown_exception_falls_through(self):
+        result = to_error_response(RuntimeError("Network timeout"), "bob")
         assert result == {"error": "Network timeout"}
-
-    def test_success_dict_unchanged(self):
-        result = enrich_auth_error({"status": "paused"}, "bob")
-        assert result == {"status": "paused"}
+        assert "requires_auth" not in result

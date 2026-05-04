@@ -10,7 +10,7 @@ from pydantic import Field
 from mcp.server.fastmcp import FastMCP
 
 from spotify_core.db.queries import is_history_empty
-from spotify_mcp.utils import enrich_auth_error, utc_iso_to_local
+from spotify_mcp.utils import to_error_response, utc_iso_to_local
 from spotify_mcp.config import (
     DB_PATH,
     DEFAULT_USER_ID,
@@ -64,7 +64,7 @@ def register(mcp: FastMCP) -> None:
             return result
         except Exception as exc:
             logger.error("[Tool] sync_history failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id)
 
     @mcp.tool(
         name="import_history_from_json",
@@ -159,7 +159,7 @@ def register(mcp: FastMCP) -> None:
             return {"tracks": tracks, "synced": sync_result}
         except Exception as exc:
             logger.error("[Tool] get_recent_playback failed: %s", exc)
-            return enrich_auth_error({"error": str(exc)}, user_id)
+            return to_error_response(exc, user_id)
 
     @mcp.tool(
         name="get_top_artists",

@@ -1,6 +1,10 @@
 """Tests for SpotifyPlaybackTools (Stage 5). All SpotifyClient calls are mocked."""
 import pytest
 from unittest.mock import MagicMock, patch
+from spotify_core.spotify_client.errors import (
+    SpotifyNoActiveDeviceError,
+    SpotifyPremiumRequiredError,
+)
 from spotify_core.spotify_utils.playback import SpotifyPlaybackTools
 from spotify_core.agent.playback_tools import AgentPlaybackTools
 
@@ -44,12 +48,12 @@ class TestGetNowPlaying:
         result = tools.get_now_playing()
         assert result == {"status": "nothing_playing"}
 
-    def test_api_error_returns_error_dict(self):
+    def test_api_error_propagates(self):
         client = MagicMock()
         client.get_currently_playing.side_effect = RuntimeError("network error")
         tools = _make_tools(client)
-        result = tools.get_now_playing()
-        assert "error" in result
+        with pytest.raises(RuntimeError, match="network error"):
+            tools.get_now_playing()
 
 
 class TestGetDevices:
@@ -73,12 +77,12 @@ class TestGetDevices:
         result = tools.get_devices()
         assert result == {"devices": []}
 
-    def test_api_error_returns_error_dict(self):
+    def test_api_error_propagates(self):
         client = MagicMock()
         client.get_devices.side_effect = RuntimeError("network error")
         tools = _make_tools(client)
-        result = tools.get_devices()
-        assert "error" in result
+        with pytest.raises(RuntimeError):
+            tools.get_devices()
 
 
 class TestPlayTrack:
@@ -96,25 +100,19 @@ class TestPlayTrack:
         client.play.assert_called_once_with(uris=["spotify:track:abc"], device_id="dev1")
         assert result == {"status": "playing", "uri": "spotify:track:abc"}
 
-    def test_premium_required(self):
+    def test_premium_error_propagates(self):
         client = MagicMock()
-        client.play.side_effect = Exception("403 Forbidden PREMIUM_REQUIRED")
+        client.play.side_effect = SpotifyPremiumRequiredError("HTTP 403: PREMIUM_REQUIRED")
         tools = _make_tools(client)
-        result = tools.play_track("spotify:track:abc")
-        assert "error" in result
+        with pytest.raises(SpotifyPremiumRequiredError):
+            tools.play_track("spotify:track:abc")
 
-    def test_no_active_device_enriches_with_devices(self):
+    def test_no_active_device_propagates(self):
         client = MagicMock()
-        client.play.side_effect = Exception("HTTP 404: {'error': {'status': 404, 'message': 'Player command failed: No active device found', 'reason': 'NO_ACTIVE_DEVICE'}}")
-        client.get_devices.return_value = {
-            "devices": [{"id": "dev1", "name": "My Phone", "type": "Smartphone", "is_active": False, "volume_percent": 80}]
-        }
+        client.play.side_effect = SpotifyNoActiveDeviceError("HTTP 404: NO_ACTIVE_DEVICE")
         tools = _make_tools(client)
-        result = tools.play_track("spotify:track:abc")
-        assert "error" in result
-        assert "available_devices" in result
-        assert result["available_devices"][0]["id"] == "dev1"
-        assert "hint" in result
+        with pytest.raises(SpotifyNoActiveDeviceError):
+            tools.play_track("spotify:track:abc")
 
 
 class TestPlayPlaylistOrAlbum:
@@ -139,22 +137,19 @@ class TestPlayPlaylistOrAlbum:
         client.play.assert_called_once_with(context_uri="spotify:playlist:abc", device_id="dev2")
         assert result == {"status": "playing", "context_uri": "spotify:playlist:abc"}
 
-    def test_premium_required(self):
+    def test_premium_error_propagates(self):
         client = MagicMock()
-        client.play.side_effect = Exception("403 Forbidden PREMIUM_REQUIRED")
+        client.play.side_effect = SpotifyPremiumRequiredError("HTTP 403: PREMIUM_REQUIRED")
         tools = _make_tools(client)
-        result = tools.play_playlist_or_album("spotify:playlist:abc")
-        assert "error" in result
+        with pytest.raises(SpotifyPremiumRequiredError):
+            tools.play_playlist_or_album("spotify:playlist:abc")
 
-    def test_no_active_device_enriches_with_devices(self):
+    def test_no_active_device_propagates(self):
         client = MagicMock()
-        client.play.side_effect = Exception("HTTP 404: {'error': {'status': 404, 'message': 'Player command failed: No active device found', 'reason': 'NO_ACTIVE_DEVICE'}}")
-        client.get_devices.return_value = {"devices": []}
+        client.play.side_effect = SpotifyNoActiveDeviceError("HTTP 404: NO_ACTIVE_DEVICE")
         tools = _make_tools(client)
-        result = tools.play_playlist_or_album("spotify:playlist:abc")
-        assert "error" in result
-        assert "available_devices" in result
-        assert result["available_devices"] == []
+        with pytest.raises(SpotifyNoActiveDeviceError):
+            tools.play_playlist_or_album("spotify:playlist:abc")
 
 
 class TestSearchItem:
@@ -249,12 +244,12 @@ class TestSearchItem:
         tools.search_item("anything", limit=10)
         client.search.assert_called_once_with("anything", types=["track"], limit=10)
 
-    def test_search_api_error_returns_error_dict(self):
+    def test_search_api_error_propagates(self):
         client = MagicMock()
         client.search.side_effect = RuntimeError("network error")
         tools = _make_tools(client)
-        result = tools.search_item("anything")
-        assert "error" in result
+        with pytest.raises(RuntimeError):
+            tools.search_item("anything")
 
 
 class TestPause:
@@ -265,12 +260,12 @@ class TestPause:
         client.pause.assert_called_once()
         assert result == {"status": "paused"}
 
-    def test_error_returns_dict(self):
+    def test_error_propagates(self):
         client = MagicMock()
         client.pause.side_effect = Exception("something failed")
         tools = _make_tools(client)
-        result = tools.pause()
-        assert "error" in result
+        with pytest.raises(Exception, match="something failed"):
+            tools.pause()
 
 
 class TestSkip:
@@ -349,12 +344,12 @@ class TestSyncRecentHistory:
         )
         assert result == {"inserted": 10, "cursor_ms": 1700000000000}
 
-    def test_error_returns_dict(self):
+    def test_error_propagates(self):
         with patch("spotify_core.spotify_utils.playback.sync_api_to_db") as mock_sync:
             mock_sync.side_effect = RuntimeError("No token found")
             tools = _make_tools()
-            result = tools.sync_recent_history()
-        assert "error" in result
+            with pytest.raises(RuntimeError):
+                tools.sync_recent_history()
 
 
 class TestGetTools:
