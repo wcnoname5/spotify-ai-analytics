@@ -7,11 +7,11 @@ from mcp.server.fastmcp import FastMCP
 
 from spotify_mcp.utils import enrich_auth_error
 from spotify_mcp.config import (
-    CLIENT_ID,
     DB_PATH,
     DEFAULT_USER_ID,
-    FERNET_KEY,
     TOKENS_DB,
+    get_client_id,
+    get_fernet_key,
     make_client,
 )
 
@@ -23,7 +23,7 @@ def _make_tools(client, user_id: str):
     Factory for `SpotifyPlaybackTools` instance to avoid circular imports. Passes through the shared client and config.
     '''
     from spotify_core.spotify_utils.playback import SpotifyPlaybackTools
-    return SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+    return SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, get_client_id(), get_fernet_key())
 
 
 def register(mcp: FastMCP) -> None:

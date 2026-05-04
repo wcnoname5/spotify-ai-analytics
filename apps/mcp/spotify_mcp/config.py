@@ -10,9 +10,17 @@ from spotify_core.config import settings
 
 logger = logging.getLogger(__name__)
 
-CLIENT_ID: str = os.getenv("SPOTIFY_CLIENT_ID", "")
-_raw_key = os.getenv("TOKEN_ENCRYPT_KEY", "")
-FERNET_KEY: bytes = _raw_key.encode() if _raw_key else b""
+def get_client_id() -> str:
+    """Read SPOTIFY_CLIENT_ID from env at call time (so updates after setup take effect)."""
+    return os.getenv("SPOTIFY_CLIENT_ID", "")
+
+
+def get_fernet_key() -> bytes:
+    """Read TOKEN_ENCRYPT_KEY from env at call time (so a freshly-generated key takes effect
+    in the same process — e.g. after the `setup` MCP tool writes a new key)."""
+    raw = os.getenv("TOKEN_ENCRYPT_KEY", "")
+    return raw.encode() if raw else b""
+
 
 DB_PATH: str = str(settings.history_db_path)
 TOKENS_DB: str = str(settings.tokens_db_path)
@@ -38,4 +46,4 @@ PREMIUM_TOOLS = ["play_track", "pause_playback", "skip_track", "set_volume", "ad
 def make_client(user_id: str):
     """Build a SpotifyClient for the given user against the configured tokens DB."""
     from spotify_core.spotify_client.client import SpotifyClient
-    return SpotifyClient(TOKENS_DB, user_id, CLIENT_ID, FERNET_KEY)
+    return SpotifyClient(TOKENS_DB, user_id, get_client_id(), get_fernet_key())

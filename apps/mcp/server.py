@@ -26,13 +26,13 @@ from spotify_core.db.queries import is_history_empty
 from spotify_core.logging import setup_mcp_logging
 from spotify_mcp import db_crud, memory_store, spotify_control
 from spotify_mcp.config import (
-    CLIENT_ID,
     DB_PATH,
     DEFAULT_USER_ID,
-    FERNET_KEY,
     LTM_DB,
     PREMIUM_TOOLS,
     TOKENS_DB,
+    get_client_id,
+    get_fernet_key,
 )
 
 load_dotenv()
@@ -47,11 +47,11 @@ logger.info("Logging to %s", _log_file)
 # Startup env warnings (non-fatal)
 # ------------------------------------------------------------------
 
-if not CLIENT_ID:
+if not get_client_id():
     logger.warning(
         "SPOTIFY_CLIENT_ID is not set. Set it in .env or as an environment variable."
     )
-if not FERNET_KEY:
+if not get_fernet_key():
     logger.warning(
         "TOKEN_ENCRYPT_KEY is not set. "
         "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
@@ -134,16 +134,19 @@ def setup_check() -> dict:
     checks: dict[str, bool] = {}
     actions: list[str] = []
 
-    checks["spotify_client_id"] = bool(CLIENT_ID)
-    if not CLIENT_ID:
+    client_id = get_client_id()
+    fernet_key = get_fernet_key()
+
+    checks["spotify_client_id"] = bool(client_id)
+    if not client_id:
         actions.append(
             "Set SPOTIFY_CLIENT_ID in .env\n"
             "  → Create an app at https://developer.spotify.com/dashboard\n"
             "  → Copy the Client ID into your .env file"
         )
 
-    checks["token_encrypt_key"] = bool(FERNET_KEY)
-    if not FERNET_KEY:
+    checks["token_encrypt_key"] = bool(fernet_key)
+    if not fernet_key:
         actions.append(
             "Run setup — auto-generates TOKEN_ENCRYPT_KEY, initializes DBs, and connects Spotify:\n"
             "  uv run python scripts/setup.py"
@@ -160,7 +163,7 @@ def setup_check() -> dict:
         checks["tokens_exist"] = False
         try:
             from spotify_core.spotify_client.token_store import load_tokens
-            checks["tokens_exist"] = load_tokens(TOKENS_DB, DEFAULT_USER_ID, FERNET_KEY) is not None
+            checks["tokens_exist"] = load_tokens(TOKENS_DB, DEFAULT_USER_ID, fernet_key) is not None
         except Exception as exc:
             logger.error("[Tool] setup_check: Error occurred while checking tokens: %s", exc)
 

@@ -12,12 +12,12 @@ from mcp.server.fastmcp import FastMCP
 from spotify_core.db.queries import is_history_empty
 from spotify_mcp.utils import enrich_auth_error, utc_iso_to_local
 from spotify_mcp.config import (
-    CLIENT_ID,
     DB_PATH,
     DEFAULT_USER_ID,
     EMPTY_DB_RESPONSE,
-    FERNET_KEY,
     TOKENS_DB,
+    get_client_id,
+    get_fernet_key,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,8 +57,8 @@ def register(mcp: FastMCP) -> None:
                 db_path=DB_PATH,
                 tokens_db_path=TOKENS_DB,
                 user_id=user_id,
-                client_id=CLIENT_ID,
-                fernet_key=FERNET_KEY,
+                client_id=get_client_id(),
+                fernet_key=get_fernet_key(),
             )
             logger.info("[Tool] sync_history success: inserted=%s", result.get("inserted"))
             return result
@@ -145,8 +145,8 @@ def register(mcp: FastMCP) -> None:
                 db_path=DB_PATH,
                 tokens_db_path=TOKENS_DB,
                 user_id=user_id,
-                client_id=CLIENT_ID,
-                fernet_key=FERNET_KEY,
+                client_id=get_client_id(),
+                fernet_key=get_fernet_key(),
             )
             tracks = get_recent_plays(DB_PATH, limit=limit, show_track_id=show_track_id)
             for track in tracks:
