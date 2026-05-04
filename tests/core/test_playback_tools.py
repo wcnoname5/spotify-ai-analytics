@@ -5,14 +5,14 @@ from spotify_core.spotify_client.errors import (
     SpotifyNoActiveDeviceError,
     SpotifyPremiumRequiredError,
 )
-from spotify_core.spotify_utils.playback import SpotifyPlaybackTools
+from spotify_core.spotify_utils.spotify_facade import SpotifyToolFacade
 from spotify_core.agent.playback_tools import AgentPlaybackTools
 
 
 def _make_tools(client=None):
     if client is None:
         client = MagicMock()
-    return SpotifyPlaybackTools(
+    return SpotifyToolFacade(
         client=client,
         db_path="data/history.db",
         tokens_db_path="data/tokens.db",
@@ -330,7 +330,7 @@ class TestCreatePlaylist:
 
 class TestSyncRecentHistory:
     def test_delegates_to_sync_api_to_db(self):
-        with patch("spotify_core.spotify_utils.playback.sync_api_to_db") as mock_sync:
+        with patch("spotify_core.spotify_utils.spotify_facade.sync_api_to_db") as mock_sync:
             mock_sync.return_value = {"inserted": 10, "cursor_ms": 1700000000000}
             tools = _make_tools()
             result = tools.sync_recent_history()
@@ -345,7 +345,7 @@ class TestSyncRecentHistory:
         assert result == {"inserted": 10, "cursor_ms": 1700000000000}
 
     def test_error_propagates(self):
-        with patch("spotify_core.spotify_utils.playback.sync_api_to_db") as mock_sync:
+        with patch("spotify_core.spotify_utils.spotify_facade.sync_api_to_db") as mock_sync:
             mock_sync.side_effect = RuntimeError("No token found")
             tools = _make_tools()
             with pytest.raises(RuntimeError):
@@ -377,4 +377,4 @@ class TestGetTools:
 
     def test_agent_tools_is_subclass(self):
         tools = self._make_agent_tools()
-        assert isinstance(tools, SpotifyPlaybackTools)
+        assert isinstance(tools, SpotifyToolFacade)

@@ -1,10 +1,10 @@
 """LangChain-wrapped playback tools for agent integration."""
 from langchain_core.tools import tool
 
-from ..spotify_utils.playback import SpotifyPlaybackTools
+from ..spotify_utils.spotify_facade import SpotifyToolFacade
 
 
-class AgentPlaybackTools(SpotifyPlaybackTools):
+class AgentPlaybackTools(SpotifyToolFacade):
     """SpotifyPlaybackTools with LangChain tool wrapping for agent integration."""
 
     def get_tools(self) -> list:

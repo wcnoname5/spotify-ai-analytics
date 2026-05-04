@@ -34,7 +34,7 @@ spotify-ai-analytics/
 ├── packages/
 │   ├── core/
 │   │   ├── spotify_client/    # OAuth PKCE, token mgmt, Spotify API calls
-│   │   ├── analytics/         # MIGRATED from src/analytics/ — minimal changes
+│   │   ├── spotify_utils/     # integrate spotify client calls, DB into facades. 
 │   │   ├── agent/             # MIGRATED from src/spotify_agent/ — add memory, playback tools
 │   │   ├── memory/            # NEW: LangGraph SqliteSaver + SqliteStore
 │   │   └── db/                # NEW: SQLite models (history, tokens, ltm)

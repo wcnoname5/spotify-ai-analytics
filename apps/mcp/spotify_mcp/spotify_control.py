@@ -22,8 +22,8 @@ def _make_tools(client, user_id: str):
     '''
     Factory for `SpotifyPlaybackTools` instance to avoid circular imports. Passes through the shared client and config.
     '''
-    from spotify_core.spotify_utils.playback import SpotifyPlaybackTools
-    return SpotifyPlaybackTools(client, DB_PATH, TOKENS_DB, user_id, get_client_id(), get_fernet_key())
+    from spotify_core.spotify_utils.spotify_facade import SpotifyToolFacade
+    return SpotifyToolFacade(client, DB_PATH, TOKENS_DB, user_id, get_client_id(), get_fernet_key())
 
 
 def _list_devices(user_id: str) -> list:

@@ -1,6 +1,7 @@
-"""Playback and sync tools — no LangChain dependency.
+"""Integrated Facade/Service for Spotify-related operations, DB sync and others.
 
-These tools wrap SpotifyClient methods. Playback control requires Spotify Premium.
+These tools wrap SpotifyClient method and DB operations (e.g., ``sync_api_to_db``).
+Playback control requires Spotify Premium.
 For LangChain-wrapped versions see agent/playback_tools.py (AgentPlaybackTools).
 
 Errors propagate as typed exceptions from ``spotify_core.spotify_client.errors``
@@ -17,8 +18,11 @@ from ..db.pipeline import sync_api_to_db
 logger = logging.getLogger(__name__)
 
 
-class SpotifyPlaybackTools:
-    """Tools for playback control, queue management, and history sync."""
+class SpotifyToolFacade:
+    """
+    Integrated Facade of Spotify API services and DB sync operations.
+    This class provides high-level methods that wrap SpotifyClient operations and database synchronization, making it easier to use in various contexts (e.g., agents, MCP server).
+    """
 
     def __init__(
         self,

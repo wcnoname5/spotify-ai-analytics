@@ -1,3 +1,3 @@
-from .playback import SpotifyPlaybackTools
+from .spotify_facade import SpotifyToolFacade
 
-__all__ = ["SpotifyPlaybackTools"]
+__all__ = ["SpotifyToolFacade"]
