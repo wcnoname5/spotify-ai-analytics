@@ -64,6 +64,9 @@ claude mcp add spotify-analytics -- uv run python apps/mcp/server.py
 # 4. Check if the connection is successful
 claude mcp list
 ```
+### MCP connection in VS Code 
+
+The `.vscode/mcp.json` have already done the connection. Open this project with VScode should connect to the MCP server.
 
 ### How do I know if I'm doing it right?
 

@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "spotifyMcp": {
+      "type": "stdio",
+      "command": "uv",
+      "cwd": "${workspaceFolder}",
+      "args": [
+        "run",
+        "python",
+        "apps/mcp/server.py"
+      ],
+      "envFile": "${workspaceFolder}/.env"
+    }
+  }
+}
