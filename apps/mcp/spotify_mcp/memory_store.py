@@ -7,7 +7,7 @@ import logging
 from typing import Annotated
 
 from pydantic import Field
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from spotify_mcp.config import DEFAULT_USER_ID, LTM_DB
 

@@ -3,7 +3,7 @@ import logging
 from typing import Annotated, List, Optional
 
 from pydantic import Field
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from spotify_mcp.utils import to_error_response
 from spotify_mcp.config import (

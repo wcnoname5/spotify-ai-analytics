@@ -7,7 +7,7 @@ import logging
 from typing import Annotated, Optional
 
 from pydantic import Field
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from spotify_core.db.queries import is_history_empty
 from spotify_mcp.utils import to_error_response, utc_iso_to_local

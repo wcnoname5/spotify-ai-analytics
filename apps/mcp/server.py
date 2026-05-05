@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from dotenv import load_dotenv
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from spotify_core.db.migrations import init_history_db, init_ltm_db, init_tokens_db
 from spotify_core.db.queries import is_history_empty

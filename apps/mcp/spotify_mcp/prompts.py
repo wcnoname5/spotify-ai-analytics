@@ -1,7 +1,7 @@
 """MCP prompt definitions for Spotify-Analytic MCP."""
 from textwrap import dedent
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.prompts.base import Message, UserMessage
+from fastmcp import FastMCP
+from fastmcp.prompts import Message
 
 
 SETUP_PROMPT = dedent("""
@@ -158,13 +158,13 @@ def register_prompts(mcp: FastMCP) -> None:
 
         messages: list[Message] = []
         if warnings:
-            messages.append(UserMessage(
+            messages.append(Message(
                 "Some prompt arguments were invalid and have been corrected. "
                 "Please mention this briefly to the user, then proceed with the "
                 "analysis using the corrected values below.\n\n"
                 + "\n".join(f"- {w}" for w in warnings)
             ))
-        messages.append(UserMessage(
+        messages.append(Message(
             REPORT_PROMPT_TEMPLATE.format(window_desc=window_desc, windows=windows)
         ))
         return messages
