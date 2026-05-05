@@ -17,11 +17,16 @@ A local MCP server that connects Claude Desktop / Claude Code to your Spotify li
 
 ## Quick start
 
-See **[doc/MCP_QUICKSTART.md](doc/MCP_QUICKSTART.md)** for the full setup guide.
+See **[MCP_QUICKSTART.md](doc/MCP_QUICKSTART.md)** for the full setup guide.
 
-Before starting, you need to create an app tor get the `SPOTIFY_CLIENT_ID` (check **[doc/MCP_QUICKSTART.md](doc/MCP_QUICKSTART.md#spotify_client_id)** for details).
+Before starting, you need to: 
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
-The short version: you need to run these scripts in your terminal:
+2. Create an app tor get the `SPOTIFY_CLIENT_ID` (check Section**[`SPOTIFY_CLIENT_ID`](doc/MCP_QUICKSTART.md#spotify_client_id)** for details).
+
+3. (*Optional but recommended*) Request your [Spotify streaming history](https://www.spotify.com/account/privacy/) and place the json files under `data/spotify_history/` folder (See also **[Section 3](doc/MCP_QUICKSTART.md#section-3--loading-history--database-initialization)**).
+
+Then you need to run these scripts in your terminal:
 
 ```bash
 # 1. Install dependencies
@@ -33,6 +38,9 @@ cp .env.example .env
 # 3. setup for DB initialization, Oath authentication
 uv run python scripts/setup.py
 ```
+## MCP client setup
+
+We provide setup instructions for the clients below: Claude Desktop, Claude CLI, and VS code.
 
 ### MCP connection in Claude Desktop (Recommended for GUI users)
 
@@ -56,6 +64,12 @@ uv run python scripts/setup.py
 
 3. Click `+ > Connectors` in the chat box; you should see `spotify-analytics` in the list.
 
+#### How do I know if I'm doing it right?
+
+If you've connected to Claude Desktop successfully, you can ask it directly!
+
+Click `+ > Connectors > Add from spotify-analytics` in the chat box. We provide a system prompt `Spotify-Analytic MCP Setup Guide` to help you get started.
+
 ### MCP connection in Claude CLI
 
 ```bash
@@ -66,16 +80,16 @@ claude mcp list
 ```
 ### MCP connection in VS Code 
 
-The `.vscode/mcp.json` have already done the connection. Open this project with VScode should connect to the MCP server.
+We have already done the connection configuration in the `.vscode/mcp.json`. Open this project with VScode should connect to the MCP server.
 
-### How do I know if I'm doing it right?
+## Example Usage
 
-If you've connected to Claude successfully, you can ask it directly!
+- Use `Listening Report Generator` Prompt (in Claude Desktop, click `+ > Connectors > Add from spotify-analytics` in the chat box). You can 
 
-Click `+ > Connectors > Add from spotify-analytics` in the chat box. We provide a system prompt `Spotify-Analytic MCP Setup Guide` to help you get started.
-
-## Examaple Use
-`Listening Report Generator` Prompt
+Or you can simply ask:
+    - Whose my favotie artist in 2023?
+    - Create a playlsit consists of my most played songs in 2025?
+    - recommend me some new songs based on my taste.
 
 ---
 ## Tech stack

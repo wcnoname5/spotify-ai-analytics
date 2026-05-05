@@ -8,7 +8,7 @@ Local MCP server that exposes Spotify history analytics and playback control as 
 
 - Python 3.13+ and [uv](https://docs.astral.sh/uv/getting-started/installation/) installed
 - A Spotify account (free or Premium — analytics tools work free, playback requires Premium)
-- A Spotify Developer app (free, takes 2 minutes to create)
+- A Spotify Developer app (Premium, takes 2 minutes to create)
 
 ---
 
@@ -78,6 +78,7 @@ SPOTIFY_USER_ID=your_username
 If omitted, defaults to `"default"`.
 
 </details>
+
 ---
 
 ## Section 3 — Loading history & Database initialization
