@@ -84,12 +84,12 @@ We have already done the connection configuration in the `.vscode/mcp.json`. Ope
 
 ## Example Usage
 
-- Use `Listening Report Generator` Prompt (in Claude Desktop, click `+ > Connectors > Add from spotify-analytics` in the chat box). You can 
+- Use `Listening Report Generator` Prompt Template (in Claude Desktop, click `+ > Connectors > Add from spotify-analytics` in the chat box). Claude can generate the detailed analysis report based on your spotify listening history.
 
 Or you can simply ask:
-    - Whose my favotie artist in 2023?
-    - Create a playlsit consists of my most played songs in 2025?
-    - recommend me some new songs based on my taste.
+- Whose my favotie artist in 2023?
+- Create a playlsit consists of my most played songs in 2025?
+- recommend me some new songs based on my taste.
 
 ---
 ## Tech stack
