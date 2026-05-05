@@ -2,6 +2,7 @@
 import sqlite3
 import pytest
 from datetime import datetime
+from spotify_core.db.errors import HistoryNotInitializedError
 from spotify_core.db.queries import is_history_empty
 from spotify_core.spotify_client.errors import (
     SpotifyAuthError,
@@ -94,4 +95,14 @@ class TestToErrorResponse:
     def test_unknown_exception_falls_through(self):
         result = to_error_response(RuntimeError("Network timeout"), "bob")
         assert result == {"error": "Network timeout"}
+        assert "requires_auth" not in result
+
+    def test_history_not_initialized_adds_requires_import(self):
+        result = to_error_response(
+            HistoryNotInitializedError("listening_history table missing"), "bob"
+        )
+        assert result["requires_import"] is True
+        assert "import_hint" in result
+        assert "listening_history" in result["error"]
+        # Must not be confused with an auth failure.
         assert "requires_auth" not in result

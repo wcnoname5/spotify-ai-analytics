@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import Callable, Optional
 
+from spotify_core.db.errors import HistoryNotInitializedError
 from spotify_core.spotify_client.errors import (
     SpotifyAuthError,
     SpotifyNoActiveDeviceError,
@@ -44,9 +45,21 @@ def to_error_response(
     - ``SpotifyPremiumRequiredError``: returns the canonical Premium message.
     - ``SpotifyNoActiveDeviceError``: when ``list_devices`` is provided, includes
       the available device list and a ``hint``.
+    - ``HistoryNotInitializedError``: adds ``requires_import`` and an ``import_hint``
+      pointing at the JSON-import or sync flow.
 
     Other exceptions are returned as ``{"error": str(exc)}``.
     """
+    if isinstance(exc, HistoryNotInitializedError):
+        logger.warning("history DB not initialized for user=%r: %s", user_id, exc)
+        return {
+            "error": str(exc),
+            "requires_import": True,
+            "import_hint": (
+                "Call import_history_from_json with your Spotify export folder, "
+                "or sync_history to pull recent plays from the API."
+            ),
+        }
     if isinstance(exc, SpotifyAuthError):
         logger.warning("auth error for user=%r: %s", user_id, exc)
         return {

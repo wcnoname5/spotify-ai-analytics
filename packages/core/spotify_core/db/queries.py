@@ -4,13 +4,34 @@ All functions take a db_path and return plain Python structures —
 no Polars or in-memory data loading required.
 """
 import logging
+import os
 from datetime import datetime
 from typing import Optional
+from .errors import HistoryNotInitializedError
 from .migrations import get_connection
 
 logger = logging.getLogger(__name__)
 
 _DATE_FMT = "%Y-%m-%d"
+
+
+def _ensure_history_db(db_path: str) -> None:
+    """Raise HistoryNotInitializedError if the file or listening_history table is missing."""
+    if not os.path.exists(db_path):
+        raise HistoryNotInitializedError(
+            f"History DB not found at {db_path}. Run import_history_from_json or sync_history first."
+        )
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='listening_history'"
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HistoryNotInitializedError(
+            f"listening_history table missing in {db_path}. Run import_history_from_json or sync_history first."
+        )
 
 
 def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> None:
@@ -46,6 +67,7 @@ def get_top_artists(
         List of {"artist_name": str, "total_ms": int, "play_count": int}.
     """
     _validate_date_range(start_date, end_date)
+    _ensure_history_db(db_path)
     logger.debug("get_top_artists: limit=%d start=%s end=%s", limit, start_date, end_date)
     where_clauses = ["artist_name IS NOT NULL"]
     params: list = []
@@ -103,6 +125,7 @@ def get_top_tracks(
         plus "track_id": str when show_track_id is True.
     """
     _validate_date_range(start_date, end_date)
+    _ensure_history_db(db_path)
     logger.debug("get_top_tracks: limit=%d start=%s end=%s", limit, start_date, end_date)
     where_clauses = ["track_name IS NOT NULL"]
     params: list = []
@@ -231,6 +254,7 @@ def get_listening_summary(
         }
     """
     _validate_date_range(start_date, end_date)
+    _ensure_history_db(db_path)
     logger.debug("get_listening_summary: start=%s end=%s", start_date, end_date)
     where_clauses = []
     params: list = [_SKIP_THRESHOLD_MS]
@@ -281,6 +305,7 @@ def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False)
         List of {"track_name", "artist_name", "album_name", "played_at", "ms_played"}
         plus "track_id": str when show_track_id is True.
     """
+    _ensure_history_db(db_path)
     logger.debug("get_recent_plays: limit=%d", limit)
     id_col = ", track_id" if show_track_id else ""
     sql = f"""
@@ -330,6 +355,7 @@ def get_listening_patterns(
         }
     """
     _validate_date_range(start_date, end_date)
+    _ensure_history_db(db_path)
     logger.debug("get_listening_patterns: start=%s end=%s", start_date, end_date)
     where_clauses = []
     params: list = []
@@ -414,50 +440,41 @@ def get_listening_patterns(
 
 
 def is_history_empty(db_path: str) -> bool:
-    """Return True if the DB file is missing, has no table, or has zero rows."""
-    import os
-    import sqlite3 as _sqlite3
+    """Return True if the DB file is missing, has no listening_history table, or has zero rows."""
     logger.debug("is_history_empty: db_path=%s", db_path)
-    if not os.path.exists(db_path):
-        logger.info("is_history_empty: DB file not found at %s", db_path)
-        return True
     try:
-        conn = get_connection(db_path)
-        try:
-            row = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()
-            empty = row[0] == 0
-            logger.info("is_history_empty: %s (row_count=%d)", empty, row[0])
-            return empty
-        except _sqlite3.OperationalError:
-            logger.warning("is_history_empty: listening_history table missing in %s", db_path)
-            return True
-        finally:
-            conn.close()
-    except Exception:
-        logger.exception("is_history_empty: failed to open db_path=%s", db_path)
+        _ensure_history_db(db_path)
+    except HistoryNotInitializedError as e:
+        logger.info("is_history_empty: %s", e)
         return True
 
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()
+        empty = row[0] == 0
+        logger.info("is_history_empty: %s (row_count=%d)", empty, row[0])
+        return empty
+    finally:
+        conn.close()
+
+
 def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
-    """Return the earliest and latest played_at timestamps in the DB, or None if empty."""
-    import os
-    import sqlite3 as _sqlite3
+    """Return the earliest and latest played_at timestamps, or None if the DB is uninitialized."""
     logger.debug("get_data_range: db_path=%s", db_path)
     try:
-        conn = get_connection(db_path)
-        try:
-            row = conn.execute("SELECT MIN(played_at) AS earliest, MAX(played_at) AS latest FROM listening_history").fetchone()
-            earliest = row["earliest"] if row else None
-            latest = row["latest"] if row else None
-            logger.info("get_data_range: earliest=%s, latest=%s", earliest, latest)
-            return (earliest, latest)
-        except _sqlite3.OperationalError:
-            logger.warning("get_data_range: listening_history table missing in %s", db_path)
-            return None
-        finally:
-            conn.close()
-    except FileNotFoundError as e:
-        logger.exception("get_data_range: DB file not found at %s", db_path)
+        _ensure_history_db(db_path)
+    except HistoryNotInitializedError as e:
+        logger.warning("get_data_range: %s", e)
         return None
-    except Exception:
-        logger.exception("get_data_range: failed to open db_path=%s", db_path)
-        return None
+
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT MIN(played_at) AS earliest, MAX(played_at) AS latest FROM listening_history"
+        ).fetchone()
+        earliest = row["earliest"] if row else None
+        latest = row["latest"] if row else None
+        logger.info("get_data_range: earliest=%s, latest=%s", earliest, latest)
+        return (earliest, latest)
+    finally:
+        conn.close()

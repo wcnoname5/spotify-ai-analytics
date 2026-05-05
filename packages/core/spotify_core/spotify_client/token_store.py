@@ -11,6 +11,9 @@ from typing import Union
 
 from cryptography.fernet import Fernet
 
+from .errors import (
+    SpotifyAuthError,
+)
 from spotify_core.db.migrations import get_connection
 
 logger = logging.getLogger(__name__)
@@ -90,11 +93,12 @@ def load_tokens(
                 (user_id,),
             ).fetchone()
         except Exception as e:
+            # TODO: handle this error more gracefully and throws the exception with a more specific message.
             if "no such table: spotify_tokens" in str(e).lower():
                 # throw a more specific error message for this common case
-                raise RuntimeError(f"Tokens database at {db_path} is not initialized. Call init_tokens_db() first.") from e
+                raise SpotifyAuthError(f"Tokens database at {db_path} is not initialized. Call init_tokens_db() first.") from e
             else:
-                raise RuntimeError(f"Error loading tokens for user {user_id} from {db_path}: {e}") from e
+                raise SpotifyAuthError(f"Error loading tokens for user {user_id} from {db_path}: {e}") from e
 
 
     if row is None:

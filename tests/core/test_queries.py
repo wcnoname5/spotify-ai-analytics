@@ -1,5 +1,7 @@
 """Tests for db/queries.py SQL analytics layer (Stage 6)."""
+import sqlite3
 import pytest
+from spotify_core.db.errors import HistoryDBError, HistoryNotInitializedError
 from spotify_core.db.migrations import init_history_db
 from spotify_core.db.migrations import get_connection
 from spotify_core.db.queries import (
@@ -7,6 +9,7 @@ from spotify_core.db.queries import (
     get_top_tracks,
     get_listening_summary,
     get_listening_patterns,
+    get_recent_plays,
 )
 
 
@@ -270,3 +273,38 @@ class TestGetListeningPatternsMostActiveDateDetail:
         # The detail query must not count Feb plays for that date.
         patterns = get_listening_patterns(seeded_db, end_date="2024-01-31")
         assert patterns["most_active_date_play_count"] == 1
+
+
+class TestHistoryNotInitializedError:
+    """Analytics queries should raise HistoryNotInitializedError when the DB
+    file is missing or the listening_history table has not been created."""
+
+    def test_subclass_of_history_db_error(self):
+        assert issubclass(HistoryNotInitializedError, HistoryDBError)
+
+    def test_missing_db_file_raises(self, tmp_path):
+        db = str(tmp_path / "nope.db")
+        with pytest.raises(HistoryNotInitializedError):
+            get_top_artists(db)
+
+    def test_missing_table_raises(self, tmp_path):
+        db = str(tmp_path / "no_table.db")
+        # Create the file but no listening_history table.
+        sqlite3.connect(db).close()
+        with pytest.raises(HistoryNotInitializedError):
+            get_top_artists(db)
+        with pytest.raises(HistoryNotInitializedError):
+            get_top_tracks(db)
+        with pytest.raises(HistoryNotInitializedError):
+            get_listening_summary(db)
+        with pytest.raises(HistoryNotInitializedError):
+            get_listening_patterns(db)
+        with pytest.raises(HistoryNotInitializedError):
+            get_recent_plays(db)
+
+    def test_initialized_empty_db_does_not_raise(self, tmp_path):
+        # Empty-but-initialized DB is a valid state — queries should return
+        # empty/None results, not raise HistoryNotInitializedError.
+        db = str(tmp_path / "empty.db")
+        init_history_db(db)
+        assert get_top_artists(db) == []
