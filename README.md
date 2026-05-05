@@ -82,7 +82,7 @@ Click `+ > Connectors > Add from spotify-analytics` in the chat box. We provide 
 
 | Layer | Choice |
 |---|---|
-| MCP framework | `mcp` Python SDK |
+| MCP framework | FastMCP |
 | Agent framework | LangGraph |
 | Local storage | SQLite |
 | Data processing | Polars |
