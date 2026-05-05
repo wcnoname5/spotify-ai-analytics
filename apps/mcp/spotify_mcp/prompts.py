@@ -1,7 +1,14 @@
 """MCP prompt definitions for Spotify-Analytic MCP."""
 from textwrap import dedent
+from typing import Annotated
+
+from pydantic import Field
+
 from fastmcp import FastMCP
 from fastmcp.prompts import Message
+
+from spotify_core.db.queries import get_data_range
+from spotify_mcp.config import DB_PATH
 
 
 SETUP_PROMPT = dedent("""
@@ -95,18 +102,32 @@ def register_prompts(mcp: FastMCP) -> None:
         ),
     )
     def generate_report(
-        year_span: str = "3",
-        start: str = "",
-        end: str = "",
+        year_span: Annotated[
+            str,
+            Field(
+                description=(
+                    "Number of recentyears to analyze (range 1-10) "
+                )
+            ),
+        ] = "3",
+        start: Annotated[
+            str,
+            Field(
+                description=(
+                    "Custom range start date in YYYY-MM-DD format. Optional."
+                )
+            ),
+        ] = "",
+        end: Annotated[
+            str,
+            Field(
+                description=(
+                    "Custom range end date in YYYY-MM-DD format. Optional."
+                )
+            ),
+        ] = "",
     ) -> list[Message]:
-        """Build a workflow prompt for an N-year (or custom-range) listening report.
-
-        Args:
-            year_span: Number of recent calendar years to analyze (default 3). Ignored if
-                both `start` and `end` are given.
-            start: Custom start date YYYY-MM-DD. Use with `end`.
-            end: Custom end date YYYY-MM-DD. Use with `start`.
-        """
+        """Build a workflow prompt for an N-year (or custom-range) listening report."""
         from datetime import datetime
 
         warnings: list[str] = []
@@ -119,10 +140,18 @@ def register_prompts(mcp: FastMCP) -> None:
         windows: list[tuple[str, str]] | None = None
         window_desc = ""
 
-        if start_s and end_s:
+        # Inspect available data range up front so we can fill in missing
+        # start/end and clamp out-of-range windows. get_data_range returns ISO
+        # timestamps (YYYY-MM-DDTHH:MM:SSZ); take the date portion only.
+        db_range = get_data_range(DB_PATH)
+        db_earliest = db_range[0][:10] if db_range and db_range[0] else None
+        db_latest = db_range[1][:10] if db_range and db_range[1] else None
+        # --- Custom range branch: triggered if user supplied either side ---
+        if start_s or end_s:
             valid = True
-            # check datetime format, time logic, then build windows and description
             for label, val in (("start", start_s), ("end", end_s)):
+                if not val:
+                    continue
                 try:
                     datetime.strptime(val, "%Y-%m-%d")
                 except ValueError:
@@ -130,14 +159,45 @@ def register_prompts(mcp: FastMCP) -> None:
                     valid = False
                     break
 
-            if valid and start_s >= end_s:
-                warnings.append(f"start '{start_s}' is not before end '{end_s}', ignoring custom range.")
+            eff_start, eff_end = start_s, end_s
+
+            # No start given → default to DB earliest (if any)
+            if valid and not eff_start:
+                if db_earliest:
+                    eff_start = db_earliest
+                else:
+                    warnings.append("`start` not given and DB has no data; falling back to year_span.")
+                    valid = False
+
+            # No end given → default to DB latest (if any)
+            if valid and not eff_end:
+                if db_latest:
+                    eff_end = db_latest
+                else:
+                    warnings.append("`end` not given and DB has no data; falling back to year_span.")
+                    valid = False
+            # edge case: catch "end" before "start"
+            if valid and eff_start >= eff_end:
+                warnings.append(
+                    f"`start` '{eff_start}' is not before `end` '{eff_end}', ignoring custom range."
+                )
                 valid = False
 
             if valid:
-                windows = [(start_s, end_s)]
-                window_desc = f"{start_s} → {end_s}"
+                if db_earliest and eff_start < db_earliest:
+                    warnings.append(
+                        f"`start` '{eff_start}' precedes earliest played date '{db_earliest}', clamping."
+                    )
+                    eff_start = db_earliest
+                if db_latest and eff_end > db_latest:
+                    warnings.append(
+                        f"`end` '{eff_end}' exceeds latest played date '{db_latest}', clamping."
+                    )
+                    eff_end = db_latest
+                windows = [(eff_start, eff_end)]
+                window_desc = f"{eff_start} → {eff_end}"
 
+        # --- N-year branch (also reached when custom range was rejected) ---
         if windows is None:
             try:
                 n_years = int(years_s)
@@ -150,17 +210,48 @@ def register_prompts(mcp: FastMCP) -> None:
                 n_years = 3
 
             current_year = datetime.now().year
-            windows = [
+            candidate = [
                 (f"{y}-01-01", f"{y}-12-31")
                 for y in range(current_year - n_years, current_year)
             ]
-            window_desc = f"the last {n_years} calendar years"
+
+            if db_earliest or db_latest:
+                clamped: list[tuple[str, str]] = []
+                for s, e in candidate: # start/end of the year window
+                    if db_earliest and e < db_earliest:
+                        continue
+                    if db_latest and s > db_latest:
+                        continue
+                    if db_earliest and s < db_earliest:
+                        s = db_earliest
+                    if db_latest and e > db_latest:
+                        e = db_latest
+                    clamped.append((s, e))
+                if len(clamped) < len(candidate):
+                    warnings.append(
+                        f"Some {n_years}-year windows lie outside available data "
+                        f"({db_earliest or '?'} → {db_latest or '?'}); using {len(clamped)} window(s)."
+                    )
+                windows = clamped
+                window_desc = (
+                    f"the last {n_years} calendar years "
+                    f"(clamped to available data {db_earliest or '?'} → {db_latest or '?'})"
+                )
+            else:
+                windows = candidate
+                window_desc = f"the last {n_years} calendar years"
+
+            if not windows:
+                warnings.append(
+                    "No analyzable windows after clamping to available data; "
+                    "consider running `import_history_from_json` or `sync_history`."
+                )
 
         messages: list[Message] = []
         if warnings:
             messages.append(Message(
                 "Some prompt arguments were invalid and have been corrected. "
-                "Please mention this briefly to the user, then proceed with the "
+                "Please mention these briefly to the user, then proceed with the "
                 "analysis using the corrected values below.\n\n"
                 + "\n".join(f"- {w}" for w in warnings)
             ))

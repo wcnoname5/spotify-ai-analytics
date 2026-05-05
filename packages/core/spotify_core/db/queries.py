@@ -436,3 +436,28 @@ def is_history_empty(db_path: str) -> bool:
     except Exception:
         logger.exception("is_history_empty: failed to open db_path=%s", db_path)
         return True
+
+def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
+    """Return the earliest and latest played_at timestamps in the DB, or None if empty."""
+    import os
+    import sqlite3 as _sqlite3
+    logger.debug("get_data_range: db_path=%s", db_path)
+    try:
+        conn = get_connection(db_path)
+        try:
+            row = conn.execute("SELECT MIN(played_at) AS earliest, MAX(played_at) AS latest FROM listening_history").fetchone()
+            earliest = row["earliest"] if row else None
+            latest = row["latest"] if row else None
+            logger.info("get_data_range: earliest=%s, latest=%s", earliest, latest)
+            return (earliest, latest)
+        except _sqlite3.OperationalError:
+            logger.warning("get_data_range: listening_history table missing in %s", db_path)
+            return None
+        finally:
+            conn.close()
+    except FileNotFoundError as e:
+        logger.exception("get_data_range: DB file not found at %s", db_path)
+        return None
+    except Exception:
+        logger.exception("get_data_range: failed to open db_path=%s", db_path)
+        return None

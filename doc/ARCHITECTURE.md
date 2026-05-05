@@ -66,7 +66,7 @@ spotify-ai-analytics/
 | Monorepo | `uv` workspace | No extra tooling needed |
 | Local DB | SQLite | Zero infra, single-user, file-based |
 | OAuth flow | PKCE + Authorization Code | Spotify mandates this as of Nov 2025 |
-| MCP framework | `mcp` Python SDK | Official SDK |
+| MCP framework | standalone `FastMCP` | have richer than class than official SDK |
 | Agent framework | LangGraph (already in use) | Keep, add memory layer |
 | Short-term memory | `SqliteSaver` (LangGraph checkpointer) | Per-session, per thread_id |
 | Long-term memory | `SqliteStore` (LangGraph store) | Cross-session, per user_id namespace |
