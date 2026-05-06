@@ -71,3 +71,4 @@ def test_collect_report_lists_all_checks(temp_install):
     }
     assert isinstance(report["actions_needed"], list)
     assert isinstance(report["ready"], bool)
+    assert "message" in report

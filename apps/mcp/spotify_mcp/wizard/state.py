@@ -3,8 +3,11 @@
 Each check reads the *current* state from disk/env and returns a bool. Used by
 the wizard to skip already-completed steps and by `spotify-mcp doctor`.
 """
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from spotify_core import env_file, paths
 
@@ -75,7 +78,8 @@ def tokens_valid() -> bool:
             _fernet_key_value().encode(),
         )
         return bool(tokens and tokens.get("refresh_token"))
-    except Exception:
+    except Exception as e:
+        logger.debug("tokens_valid check failed: %s", e)
         return False
 
 
@@ -117,9 +121,7 @@ def collect_report() -> dict:
         )
 
     return {
-        "ready": len(actions) == 0 or actions == [
-            a for a in actions if "Load history" in a
-        ],
+        "ready": all("Load history" in a for a in actions),
         "checks": checks,
         "actions_needed": actions,
         "message": "All set." if not actions else f"{len(actions)} action(s) required.",
