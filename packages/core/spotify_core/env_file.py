@@ -67,8 +67,12 @@ def upsert(path: Path, key: str, value: str) -> None:
     for line in lines:
         m = _LINE_RE.match(line)
         if m and m.group("key") == key:
-            updated.append(new_line)
-            replaced = True
+            # All lines with matching key are replaced with a single new line.
+            # If multiple lines with the same key exist, only the first is replaced
+            # with new_line and subsequent matching lines are skipped entirely.
+            if not replaced:
+                updated.append(new_line)
+                replaced = True
         else:
             updated.append(line)
 

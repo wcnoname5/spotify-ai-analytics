@@ -56,6 +56,22 @@ def test_upsert_appends_missing_key(tmp_path):
     assert env_file.read_key(env, "NEW_KEY") == "new_val"
 
 
+def test_upsert_replaces_all_duplicate_keys(tmp_path):
+    """When a key appears multiple times, upsert replaces ALL occurrences."""
+    env = tmp_path / ".env"
+    env.write_text("FOO=first\nBAR=keep\nFOO=second\n", encoding="utf-8")
+    env_file.upsert(env, "FOO", "new_value")
+
+    # All FOO lines should be replaced with a single new line
+    content = env.read_text(encoding="utf-8")
+    foo_count = content.count("FOO=")
+    assert foo_count == 1, f"Expected exactly 1 FOO= line, found {foo_count}"
+
+    # Verify the new value and that BAR is preserved
+    assert env_file.read_key(env, "FOO") == "new_value"
+    assert env_file.read_key(env, "BAR") == "keep"
+
+
 @pytest.mark.skipif(sys.platform == "win32", reason="chmod 0600 not enforced on Windows")
 def test_upsert_sets_mode_0600(tmp_path):
     env = tmp_path / ".env"
