@@ -5,13 +5,13 @@ requires-python = ">=3.13"
 dependencies = [
     "streamlit>=1.35",
     "plotly>=5.0",
-    "spotify-core",
-    "spotify-dataloader",
+    "spotify-analytics-core==0.1.0",
+    "spotify-analytics-dataloader==0.1.0",
 ]
 
 [tool.uv.sources]
-spotify-core = { workspace = true }
-spotify-dataloader = { workspace = true }
+spotify-analytics-core = { workspace = true }
+spotify-analytics-dataloader = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

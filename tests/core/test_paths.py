@@ -11,6 +11,11 @@ from spotify_core import paths
 def _clean_env(monkeypatch):
     monkeypatch.delenv("SPOTIFY_MCP_DATA_DIR", raising=False)
     monkeypatch.delenv("SPOTIFY_MCP_CONFIG_DIR", raising=False)
+    monkeypatch.delenv("SPOTIFY_DATA_PATH", raising=False)
+    monkeypatch.delenv("HISTORY_DB_PATH", raising=False)
+    monkeypatch.delenv("TOKENS_DB_PATH", raising=False)
+    monkeypatch.delenv("LTM_DB_PATH", raising=False)
+    monkeypatch.delenv("CHECKPOINTS_DB_PATH", raising=False)
 
 
 def test_data_dir_uses_env_override(monkeypatch, tmp_path):
