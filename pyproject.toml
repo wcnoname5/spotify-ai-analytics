@@ -22,9 +22,9 @@ dependencies = [
     "python-dotenv==1.2.1",
     "streamlit>=1.52.2",
     # workspace members — ensures uv sync at the root installs all transitive deps
-    "spotify-core",
-    "spotify-dataloader",
-    "spotify-mcp",
+    "spotify-analytics-core",
+    "spotify-analytics-dataloader",
+    "spotify-analytics-mcp",
     "spotify-web",
 ]
 
@@ -51,7 +51,7 @@ members = [
 ]
 
 [tool.uv.sources]
-spotify-core = { workspace = true }
-spotify-dataloader = { workspace = true }
-spotify-mcp = { workspace = true }
+spotify-analytics-core = { workspace = true }
+spotify-analytics-dataloader = { workspace = true }
+spotify-analytics-mcp = { workspace = true }
 spotify-web = { workspace = true }
