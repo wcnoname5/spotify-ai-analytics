@@ -18,7 +18,7 @@ from . import (
 
 
 def run_wizard(
-    install_claude_desktop: bool = False,
+    setup_claude_desktop: bool = False,
     import_path: Path | None = None,
     console: Console | None = None,
 ) -> None:
@@ -54,5 +54,5 @@ def run_wizard(
     if not state.history_has_data():
         history_import.run_step(console=console, import_path=None)
 
-    claude_desktop.run_step(console=console, install=install_claude_desktop)
+    claude_desktop.run_step(console=console, install=setup_claude_desktop)
     console.print("\n[bold green]Setup complete.[/bold green]")

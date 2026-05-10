@@ -27,6 +27,7 @@ console = Console()
 app = typer.Typer(
     name="spotify-mcp",
     no_args_is_help=False,
+    add_completion=False,
     help="Spotify MCP setup and management CLI.",
 )
 
@@ -35,14 +36,14 @@ app = typer.Typer(
 def _default(ctx: typer.Context) -> None:
     """Default action when no subcommand is given: run setup."""
     if ctx.invoked_subcommand is None:
-        _setup(install_claude_desktop=False, import_path=None)
+        _setup(setup_claude_desktop=False, import_path=None)
 
 
 @app.command()
 def setup(
-    install_claude_desktop: Annotated[
+    setup_claude_desktop: Annotated[
         bool,
-        typer.Option("--install-claude-desktop", help="Register the MCP server with Claude Desktop."),
+        typer.Option("--setup-claude-desktop", help="Register the MCP server with Claude Desktop."),
     ] = False,
     import_path: Annotated[
         Optional[Path],
@@ -50,13 +51,13 @@ def setup(
     ] = None,
 ) -> None:
     """Run the interactive setup wizard."""
-    _setup(install_claude_desktop=install_claude_desktop, import_path=import_path)
+    _setup(setup_claude_desktop=setup_claude_desktop, import_path=import_path)
 
 
-def _setup(install_claude_desktop: bool, import_path: Optional[Path]) -> None:
+def _setup(setup_claude_desktop: bool, import_path: Optional[Path]) -> None:
     """Internal helper shared by the default callback and the setup subcommand."""
     try:
-        run_wizard(install_claude_desktop=install_claude_desktop, import_path=import_path)
+        run_wizard(setup_claude_desktop=setup_claude_desktop, import_path=import_path)
     except NotImplementedError:
         console.print("[yellow]Setup wizard is not yet implemented.[/yellow]")
 

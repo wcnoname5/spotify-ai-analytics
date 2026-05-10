@@ -95,23 +95,24 @@ def run_step(console: Console, install: bool) -> None:
     entry = build_entry(script_path)
     snippet = json.dumps({"mcpServers": {"spotify-mcp": entry}}, indent=2)
 
-    if not install:
-        console.print("\n[bold]Add this to your Claude Desktop config:[/bold]\n")
-        console.print(Syntax(snippet, "json", theme="ansi_dark"))
-        console.print(f"\nConfig location: {default_config_path()}")
-        return
-
     cfg_path = default_config_path()
     if not cfg_path.exists():
-        console.print(
+        location_msg = (
             f"[yellow]Claude Desktop config not found at {cfg_path}.\n"
             "Open Claude Desktop → Help → Troubleshooting → Enable Developer Mode, then re-run.\n"
             "If the file still doesn't appear, open it via "
             "Developer Mode → Open App Config File... and paste the snippet below manually:[/yellow]\n"
         )
+    else:
+        location_msg = f"\nConfig location: {default_config_path()}"
+
+    if not install or not cfg_path.exists():
+        console.print("\n[bold]Add this to your Claude Desktop config:[/bold]\n")
+        console.print(location_msg)
         console.print(Syntax(snippet, "json", theme="ansi_dark"))
         return
 
+    # If we found the config file, show a diff and ask before writing.
     merged = compute_merged(cfg_path, entry)
     console.print("\n[bold]Proposed change to Claude Desktop config:[/bold]")
     console.print(diff_text(cfg_path, merged) or "(no diff — entry already present)")

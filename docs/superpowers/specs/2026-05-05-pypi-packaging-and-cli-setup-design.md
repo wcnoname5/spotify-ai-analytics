@@ -69,7 +69,7 @@ spotify-mcp setup
 | Command | Purpose |
 |---|---|
 | `spotify-mcp setup` | First-run wizard. Default if no subcommand. |
-| `spotify-mcp setup --install-claude-desktop` | Wizard + write Claude Desktop config |
+| `spotify-mcp setup -setup-claude-desktop` | Wizard + write Claude Desktop config |
 | `spotify-mcp setup --import <path>` | Skip wizard; import a Spotify JSON export into the existing install |
 | `spotify-mcp doctor` | Run `setup_check` and print report |
 | `spotify-mcp reauth` | Re-run OAuth flow only (recovery) |
@@ -137,7 +137,7 @@ spotify-mcp setup
 
    The import operation runs inside a single SQLite transaction; any per-record failure rolls back the whole import and reports which file/record failed.
 
-8. **Claude Desktop config.** Print the JSON snippet with absolute paths. If `--install-claude-desktop`:
+8. **Claude Desktop config.** Print the JSON snippet with absolute paths. If `--setup-claude-desktop`:
    - Resolve the script path via `shutil.which("spotify-mcp")` (Claude Desktop's spawn does not always inherit user PATH, so the config must use the absolute path). If `which` returns nothing, prompt the user to paste the absolute path.
    - Locate `claude_desktop_config.json` at the OS-specific path. If it does not exist (e.g., user installed the `.msi` build, or has not enabled Developer Mode), print the fallback: *"Open Claude Desktop → Help → Troubleshooting → Enable Developer Mode, then re-run this command."*
    - Back up the existing file to `claude_desktop_config.json.bak.<timestamp>`.
@@ -181,7 +181,7 @@ The previous "auto-detect checkout via parent-walking for `pyproject.toml`" idea
 | Path resolution unit tests | All three branches of priority logic, with mocked `platformdirs` and env-var fixtures |
 | CLI wizard tests | `typer.testing.CliRunner` with mocked browser-open, mocked OAuth callback, mocked filesystem; assert each step writes expected artifacts and the wizard resumes correctly when re-run mid-flow |
 | `spotify-mcp doctor` integration | Run against a freshly-`setup`'d temp dir; assert "ready" |
-| `--install-claude-desktop` | Write into a temp config file (existing + missing cases); assert backup created and JSON merged correctly |
+| `--setup-claude-desktop` | Write into a temp config file (existing + missing cases); assert backup created and JSON merged correctly |
 | MCP server tests | Update fixtures to use temp data dirs; remove tests for the deleted `setup` tool |
 
 ## 7. Out of Scope
