@@ -4,6 +4,10 @@ import os
 
 from dotenv import load_dotenv
 
+from spotify_core import paths
+
+if paths.env_file().exists():
+    load_dotenv(paths.env_file())
 load_dotenv()
 
 from spotify_core.config import settings
