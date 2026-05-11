@@ -50,7 +50,16 @@ def dbs_initialized() -> bool:
                 conn.execute(f"SELECT 1 FROM {table} LIMIT 0")
         except sqlite3.Error:
             return False
-    return paths.ltm_db().exists()
+    if not paths.ltm_db().exists():
+        return False
+    try:
+        with sqlite3.connect(paths.ltm_db()) as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
+            ).fetchone()
+            return bool(row and row[0] > 0)
+    except sqlite3.Error:
+        return False
 
 
 def tokens_valid() -> bool:
@@ -120,8 +129,9 @@ def collect_report() -> dict:
             "or option 2: sync recent 50 plays)"
         )
 
+    blocking = [a for a in actions if "Load history" not in a]
     return {
-        "ready": all("Load history" in a for a in actions),
+        "ready": not blocking,
         "checks": checks,
         "actions_needed": actions,
         "message": "All set." if not actions else f"{len(actions)} action(s) required.",

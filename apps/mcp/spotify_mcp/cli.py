@@ -5,6 +5,7 @@ Usage:
     spotify-mcp setup        # interactive setup wizard
     spotify-mcp doctor       # check environment readiness
     spotify-mcp reauth       # re-run OAuth flow
+    spotify-mcp serve        # start the MCP server (used by Claude Desktop)
 """
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ app = typer.Typer(
 def _default(ctx: typer.Context) -> None:
     """Default action when no subcommand is given: run setup."""
     if ctx.invoked_subcommand is None:
-        _setup(setup_claude_desktop=False, import_path=None)
+        ctx.invoke(setup)
 
 
 @app.command()
@@ -78,3 +79,25 @@ def reauth() -> None:
         _oauth_step.run_oauth(console=console, force=True)
     except NotImplementedError:
         console.print("[yellow]OAuth step is not yet implemented.[/yellow]")
+
+
+@app.command()
+def serve() -> None:
+    """Start the MCP server over stdio (invoked by Claude Desktop)."""
+    import logging
+    import os
+
+    from dotenv import load_dotenv
+
+    from spotify_core import paths
+    from spotify_core.logging import setup_mcp_logging
+
+    if paths.env_file().exists():
+        load_dotenv(paths.env_file())
+    load_dotenv(override=False)
+
+    _raw_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
+    setup_mcp_logging(level=logging.getLevelNamesMapping().get(_raw_level, logging.DEBUG))
+
+    from spotify_mcp._mcp import main
+    main()

@@ -6,9 +6,10 @@ from dotenv import load_dotenv
 
 from spotify_core import paths
 
+# Platformdirs .env wins; cwd .env is a dev convenience fallback only.
 if paths.env_file().exists():
     load_dotenv(paths.env_file())
-load_dotenv()
+load_dotenv(override=False)
 
 from spotify_core.config import settings
 
