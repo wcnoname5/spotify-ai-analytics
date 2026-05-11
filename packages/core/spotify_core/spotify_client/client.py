@@ -78,13 +78,13 @@ class SpotifyClient:
             SpotifyAuthError: If no token is found for the user even after refresh.
         """
         if is_token_expired(self.db_path, self.user_id):
-            logger.info("Token expired for user %s — refreshing", self.user_id)
+            logger.info("Token expired for user %s - refreshing", self.user_id)
             self._refresh_token()
 
         token_data = load_tokens(self.db_path, self.user_id, self.fernet_key)
         if token_data is None:
             raise SpotifyAuthError(
-                f"No token found for user {self.user_id!r} — run OAuth flow first."
+                f"No token found for user {self.user_id!r} - run OAuth flow first."
             )
         return token_data["access_token"]
 
@@ -97,7 +97,7 @@ class SpotifyClient:
         token_data = load_tokens(self.db_path, self.user_id, self.fernet_key)
         if token_data is None:
             raise SpotifyAuthError(
-                f"Cannot refresh — no stored token for user {self.user_id!r}."
+                f"Cannot refresh - no stored token for user {self.user_id!r}."
             )
 
         refresh_token = token_data["refresh_token"]
@@ -151,12 +151,12 @@ class SpotifyClient:
 
         # If 401, attempt a single refresh and retry.
         if response.status_code == 401:
-            logger.warning("Received 401 — refreshing token and retrying for user %s", self.user_id)
+            logger.warning("Received 401 - refreshing token and retrying for user %s", self.user_id)
             self._refresh_token()
             token_data = load_tokens(self.db_path, self.user_id, self.fernet_key)
             if token_data is None:
                 raise SpotifyAuthError(
-                    f"401 Unauthorized after refresh — token missing for user {self.user_id!r}."
+                    f"401 Unauthorized after refresh - token missing for user {self.user_id!r}."
                 )
             headers["Authorization"] = f"Bearer {token_data['access_token']}"
             response = self._client.request(method, url, headers=headers, **kwargs)

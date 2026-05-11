@@ -143,7 +143,7 @@ def is_token_expired(
         ).fetchone()
 
     if row is None:
-        logger.debug("is_token_expired: no row for user %s — treating as expired", user_id)
+        logger.debug("is_token_expired: no row for user %s - treating as expired", user_id)
         return True
 
     expires_at = _parse_expires_at(row["expires_at"])

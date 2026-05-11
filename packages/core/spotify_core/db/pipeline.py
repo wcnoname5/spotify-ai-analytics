@@ -319,7 +319,7 @@ def sync_api_up_to_date(
             anchor_dt = datetime.fromisoformat(anchor_str.replace("Z", "+00:00"))
             stop_at_ms = int(anchor_dt.timestamp() * 1000)
         except (ValueError, AttributeError):
-            logger.warning("Could not parse json_import anchor '%s' — no stop cursor", anchor_str)
+            logger.warning("Could not parse json_import anchor '%s' - no stop cursor", anchor_str)
 
     logger.debug(
         "sync_api_up_to_date: json_import anchor=%s stop_at_ms=%s max_calls=%d",
@@ -342,7 +342,7 @@ def sync_api_up_to_date(
             )
             if not items:
                 logger.info(
-                    "Call %d/%d: Spotify returned 0 items (API cache exhausted or no plays before %s) — stopping",
+                    "Call %d/%d: Spotify returned 0 items (API cache exhausted or no plays before %s) - stopping",
                     call_num + 1, max_calls, before_ms,
                 )
                 break
@@ -380,12 +380,12 @@ def sync_api_up_to_date(
             before_ms = int(before_ms) if before_ms else None
 
             if before_ms is None:
-                logger.info("No pagination cursor in API response after call %d — stopping", call_num + 1)
+                logger.info("No pagination cursor in API response after call %d - stopping", call_num + 1)
                 break
 
             if stop_at_ms is not None and before_ms <= stop_at_ms:
                 logger.info(
-                    "Call %d: before_ms=%d reached json_import anchor=%d — backfill complete",
+                    "Call %d: before_ms=%d reached json_import anchor=%d - backfill complete",
                     call_num + 1, before_ms, stop_at_ms,
                 )
                 break

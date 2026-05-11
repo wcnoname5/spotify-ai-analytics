@@ -20,9 +20,18 @@ def test_lifespan_writes_actionable_stderr_when_dbs_missing(monkeypatch, tmp_pat
     import spotify_core.paths as p
 
     importlib.reload(p)
-    sys.modules.pop("server", None)
-    sys.modules.pop("mcp", None)
-    from server import lifespan, mcp  # type: ignore
+    for mod in list(sys.modules):
+        if mod.startswith("spotify_mcp"):
+            monkeypatch.delitem(sys.modules, mod, raising=False)
+
+    apps_mcp_pkg = apps_mcp / "spotify_mcp"
+    assert apps_mcp_pkg.exists()
+
+    import spotify_mcp._mcp as _mcp_mod  # type: ignore
+
+    importlib.reload(_mcp_mod)
+    lifespan = _mcp_mod.lifespan
+    mcp = _mcp_mod.mcp
 
     async def _run():
         async with lifespan(mcp):

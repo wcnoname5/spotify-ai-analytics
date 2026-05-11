@@ -166,11 +166,11 @@ def run_pkce_flow(
     server.server_close()
 
     if not result:
-        raise RuntimeError("OAuth flow timed out — no callback received within 120 seconds.")
+        raise RuntimeError("OAuth flow timed out - no callback received within 120 seconds.")
     if "error" in result:
         raise RuntimeError(f"OAuth error: {result['error']}")
     if result.get("state") != state:
-        raise RuntimeError(f"State mismatch — possible CSRF. Expected {state!r}, got {result.get('state')!r}")
+        raise RuntimeError(f"State mismatch - possible CSRF. Expected {state!r}, got {result.get('state')!r}")
     if "code" not in result:
         raise RuntimeError("OAuth callback contained no authorization code.")
 

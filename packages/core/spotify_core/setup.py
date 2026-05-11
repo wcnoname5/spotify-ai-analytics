@@ -67,7 +67,7 @@ def run_setup(
         )
 
     if not fernet_key_str:
-        logger.warning("TOKEN_ENCRYPT_KEY not set — auto-generating a Fernet key")
+        logger.warning("TOKEN_ENCRYPT_KEY not set - auto-generating a Fernet key")
         from cryptography.fernet import Fernet
         from spotify_core.logging import PROJECT_ROOT
         new_key = Fernet.generate_key().decode()
@@ -82,12 +82,12 @@ def run_setup(
             logger.info("Auto-generated TOKEN_ENCRYPT_KEY saved to %s", env_path)
         else:
             logger.warning(
-                "No .env file found — add this line manually: TOKEN_ENCRYPT_KEY=%s", new_key
+                "No .env file found - add this line manually: TOKEN_ENCRYPT_KEY=%s", new_key
             )
         fernet_key_str = new_key
         os.environ["TOKEN_ENCRYPT_KEY"] = new_key
 
-    logger.info("Starting OAuth PKCE flow — your browser will open")
+    logger.info("Starting OAuth PKCE flow - your browser will open")
     token_data = run_pkce_flow(client_id=client_id)
     save_tokens(tokens_db, user_id, token_data, fernet_key_str.encode())
     logger.info("Tokens saved for user '%s' in %s", user_id, tokens_db)
@@ -108,7 +108,7 @@ def run_setup(
         result["json_stats"] = import_result
     else:
         logger.info(
-            "No Streaming*.json files found in %s — skipping JSON import. "
+            "No Streaming*.json files found in %s - skipping JSON import. "
             "Place your Streaming_History_Audio_*.json files there and re-run, or pass --json-dir.",
             json_dir,
         )
