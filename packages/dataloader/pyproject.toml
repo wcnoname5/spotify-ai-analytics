@@ -1,7 +1,18 @@
 [project]
-name = "spotify-dataloader"
+name = "spotify-analytics-dataloader"
 version = "0.1.0"
+description = "Data loading and transformation utilities for Spotify listening history exports."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "WC Chang" }]
 requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+]
 dependencies = [
     "polars>=1.0",
     "pydantic>=2.0",

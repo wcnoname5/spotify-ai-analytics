@@ -14,15 +14,16 @@ Local MCP server that exposes Spotify history analytics and playback control as 
 
 ## 1-minute setup summary
 
+*This doc is under development*
 ```bash
-# 1. Install dependencies
-uv sync
+# 1. build dist
+uv build apps/mcp
 
-# 2. Set SPOTIFY_CLIENT_ID in .env (only key you need to find manually — see Section 2)
-cp .env.example .env
+# 2. install packages
+uv tools install apps/mcp
 
-# 3. Initiate the DB and Authentication. (Or you can tell Claude to run this for you, see section 5) 
-uv run python scripts/setup.py
+# 3. terminal command
+spotify-mcp setup
 
 # 4. (Optional) Fill the gap between your JSON history and today, or fetch recent plays if you skipped JSON.
 uv run python scripts/sync_api.py
@@ -30,9 +31,9 @@ uv run python scripts/sync_api.py
 
 ---
 
-## Section 2 — Required environment variables
+## Section 2 — Required variables
 
-Open `.env` in a text editor. Fill in the one required value:
+After you run `spotify-mcp setup`, CLI will first jump into spotify developer webpage, you need to create an app and fill the `SPOTIFY_CLIENT_ID` to the terminal.
 
 ### `SPOTIFY_CLIENT_ID`
 
@@ -81,6 +82,8 @@ If omitted, defaults to `"default"`.
 ---
 
 ## Section 3 — Loading history & Database initialization
+
+Then the setup wizard will request for your listening history.
 
 ### Full history — Spotify JSON export (Recommended)
 
@@ -154,19 +157,6 @@ claude mcp list
 
 ---
 
-## Section 5 — Authentication
-
-Once MCP server is connected, you can ask Claude to handle setup:
-
-1. **Check status:** "Run `setup_check` to see what I'm missing."
-2. **Run setup:** "Run `setup` for me."
-
-Claude will initialize the database and open your browser for Spotify login. After you approve, tokens are saved locally. You only need to do this once.
-
-*Alternatively, run from terminal:* `uv run python scripts/setup.py`
-
----
-
 ## Section 6 — Available MCP tools
 
 ### Prompt
@@ -180,7 +170,6 @@ Claude will initialize the database and open your browser for Spotify login. Aft
 | Tool | Description | Requires auth |
 |------|-------------|---------------|
 | `setup_check` | Diagnose configuration — start here if anything is broken | No |
-| `setup` | Run full setup: init DBs, auto-generate encryption key, connect Spotify via browser OAuth | No |
 | `sync_history` | Fetch 50 most recent plays from Spotify API into local DB | Yes |
 | `import_history_from_json` | Bulk-import a folder of Spotify JSON export files | No |
 | `get_listening_summary` | Total plays, unique artists/tracks, date range | No |

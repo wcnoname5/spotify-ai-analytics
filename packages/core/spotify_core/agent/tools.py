@@ -308,4 +308,4 @@ def initialize_tools(loader: Optional[SpotifyDataLoader] = None):
         return tool_service.get_tools()
 
     # In package mode, a loader must be provided
-    raise ValueError("loader must be provided in package mode — pass a SpotifyDataLoader instance")
+    raise ValueError("loader must be provided in package mode - pass a SpotifyDataLoader instance")

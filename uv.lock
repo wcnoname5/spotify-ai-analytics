@@ -9,9 +9,9 @@ resolution-markers = [
 [manifest]
 members = [
     "spotify-ai-analytics",
-    "spotify-core",
-    "spotify-dataloader",
-    "spotify-mcp",
+    "spotify-analytics-core",
+    "spotify-analytics-dataloader",
+    "spotify-analytics-mcp",
     "spotify-web",
 ]
 
@@ -50,6 +50,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f7/c0/184a89bd5feba14ff3c41cfaf1dd8a82c05f5ceedbc92145e17042eb08a4/altair-6.0.0.tar.gz", hash = "sha256:614bf5ecbe2337347b590afb111929aa9c16c9527c4887d96c9bc7f6640756b4", size = 763834, upload-time = "2025-11-12T08:59:11.519Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/db/33/ef2f2409450ef6daa61459d5de5c08128e7d3edb773fefd0a324d1310238/altair-6.0.0-py3-none-any.whl", hash = "sha256:09ae95b53d5fe5b16987dccc785a7af8588f2dca50de1e7a156efa8a461515f8", size = 795410, upload-time = "2025-11-12T08:59:09.804Z" },
+]
+
+[[package]]
+name = "annotated-doc"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz", hash = "sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4", size = 7288, upload-time = "2025-11-10T22:07:42.062Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl", hash = "sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320", size = 5303, upload-time = "2025-11-10T22:07:40.673Z" },
 ]
 
 [[package]]
@@ -2210,6 +2219,15 @@ wheels = [
 ]
 
 [[package]]
+name = "shellingham"
+version = "1.5.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/15/8b3609fd3830ef7b27b655beb4b4e9c62313a4e8da8c676e142cc210d58e/shellingham-1.5.4.tar.gz", hash = "sha256:8dbca0739d487e5bd35ab3ca4b36e11c4078f3a234bfce294b0a0291363404de", size = 10310, upload-time = "2023-10-24T04:13:40.426Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/f9/0595336914c5619e5f28a1fb793285925a8cd4b432c9da0a987836c7f822/shellingham-1.5.4-py2.py3-none-any.whl", hash = "sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686", size = 9755, upload-time = "2023-10-24T04:13:38.866Z" },
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2256,9 +2274,9 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pytest" },
     { name = "python-dotenv" },
-    { name = "spotify-core" },
-    { name = "spotify-dataloader" },
-    { name = "spotify-mcp" },
+    { name = "spotify-analytics-core" },
+    { name = "spotify-analytics-dataloader" },
+    { name = "spotify-analytics-mcp" },
     { name = "spotify-web" },
     { name = "streamlit" },
 ]
@@ -2287,9 +2305,9 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "==2.12.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "python-dotenv", specifier = "==1.2.1" },
-    { name = "spotify-core", editable = "packages/core" },
-    { name = "spotify-dataloader", editable = "packages/dataloader" },
-    { name = "spotify-mcp", editable = "apps/mcp" },
+    { name = "spotify-analytics-core", editable = "packages/core" },
+    { name = "spotify-analytics-dataloader", editable = "packages/dataloader" },
+    { name = "spotify-analytics-mcp", editable = "apps/mcp" },
     { name = "spotify-web", editable = "apps/web" },
     { name = "streamlit", specifier = ">=1.52.2" },
 ]
@@ -2302,7 +2320,7 @@ dev = [
 ]
 
 [[package]]
-name = "spotify-core"
+name = "spotify-analytics-core"
 version = "0.1.0"
 source = { editable = "packages/core" }
 dependencies = [
@@ -2313,6 +2331,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-sqlite" },
+    { name = "platformdirs" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
@@ -2327,13 +2346,14 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.0" },
     { name = "langgraph", specifier = ">=1.0" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.3" },
+    { name = "platformdirs", specifier = ">=4.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
 ]
 
 [[package]]
-name = "spotify-dataloader"
+name = "spotify-analytics-dataloader"
 version = "0.1.0"
 source = { editable = "packages/dataloader" }
 dependencies = [
@@ -2348,20 +2368,26 @@ requires-dist = [
 ]
 
 [[package]]
-name = "spotify-mcp"
+name = "spotify-analytics-mcp"
 version = "0.1.0"
 source = { editable = "apps/mcp" }
 dependencies = [
     { name = "fastmcp" },
-    { name = "spotify-core" },
-    { name = "spotify-dataloader" },
+    { name = "platformdirs" },
+    { name = "rich" },
+    { name = "spotify-analytics-core" },
+    { name = "spotify-analytics-dataloader" },
+    { name = "typer" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastmcp", specifier = ">=2.0" },
-    { name = "spotify-core", editable = "packages/core" },
-    { name = "spotify-dataloader", editable = "packages/dataloader" },
+    { name = "platformdirs", specifier = ">=4.0" },
+    { name = "rich", specifier = ">=13.7" },
+    { name = "spotify-analytics-core", editable = "packages/core" },
+    { name = "spotify-analytics-dataloader", editable = "packages/dataloader" },
+    { name = "typer", specifier = ">=0.12" },
 ]
 
 [[package]]
@@ -2370,16 +2396,16 @@ version = "0.1.0"
 source = { editable = "apps/web" }
 dependencies = [
     { name = "plotly" },
-    { name = "spotify-core" },
-    { name = "spotify-dataloader" },
+    { name = "spotify-analytics-core" },
+    { name = "spotify-analytics-dataloader" },
     { name = "streamlit" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "plotly", specifier = ">=5.0" },
-    { name = "spotify-core", editable = "packages/core" },
-    { name = "spotify-dataloader", editable = "packages/dataloader" },
+    { name = "spotify-analytics-core", editable = "packages/core" },
+    { name = "spotify-analytics-dataloader", editable = "packages/dataloader" },
     { name = "streamlit", specifier = ">=1.35" },
 ]
 
@@ -2545,6 +2571,21 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d8/43/7935f8ea93fcb6680bc10a6fdbf534075c198eeead59150dd5ed68449642/trove_classifiers-2026.1.14.14.tar.gz", hash = "sha256:00492545a1402b09d4858605ba190ea33243d361e2b01c9c296ce06b5c3325f3", size = 16997, upload-time = "2026-01-14T14:54:50.526Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bb/4a/2e5583e544bc437d5e8e54b47db87430df9031b29b48d17f26d129fa60c0/trove_classifiers-2026.1.14.14-py3-none-any.whl", hash = "sha256:1f9553927f18d0513d8e5ff80ab8980b8202ce37ecae0e3274ed2ef11880e74d", size = 14197, upload-time = "2026-01-14T14:54:49.067Z" },
+]
+
+[[package]]
+name = "typer"
+version = "0.25.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "annotated-doc" },
+    { name = "click" },
+    { name = "rich" },
+    { name = "shellingham" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/51/9aed62104cea109b820bbd6c14245af756112017d309da813ef107d42e7e/typer-0.25.1.tar.gz", hash = "sha256:9616eb8853a09ffeabab1698952f33c6f29ffdbceb4eaeecf571880e8d7664cc", size = 122276, upload-time = "2026-04-30T19:32:16.964Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/f9/2b3ff4e56e5fa7debfaf9eb135d0da96f3e9a1d5b27222223c7296336e5f/typer-0.25.1-py3-none-any.whl", hash = "sha256:75caa44ed46a03fb2dab8808753ffacdbfea88495e74c85a28c5eefcf5f39c89", size = 58409, upload-time = "2026-04-30T19:32:18.271Z" },
 ]
 
 [[package]]

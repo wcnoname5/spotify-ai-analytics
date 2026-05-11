@@ -1,16 +1,33 @@
 [project]
-name = "spotify-mcp"
+name = "spotify-analytics-mcp"
 version = "0.1.0"
+description = "MCP server and CLI installer for the Spotify AI Analytics project."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "WC Chang" }]
 requires-python = ">=3.13"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+]
 dependencies = [
     "fastmcp>=2.0",
-    "spotify-core",
-    "spotify-dataloader",
+    "spotify-analytics-core==0.1.0",
+    "spotify-analytics-dataloader==0.1.0",
+    "typer>=0.12",
+    "rich>=13.7",
+    "platformdirs>=4.0",
 ]
 
+[project.scripts]
+spotify-mcp = "spotify_mcp.cli:app"
+
 [tool.uv.sources]
-spotify-core = { workspace = true }
-spotify-dataloader = { workspace = true }
+spotify-analytics-core = { workspace = true }
+spotify-analytics-dataloader = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
