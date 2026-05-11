@@ -1,0 +1,21 @@
+# .github/workflows/publish.yml
+on:
+  push:
+    tags: ["release/v*"]   # git tag release/v0.1.0
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Build all three packages
+        run: |
+          uv build packages/core
+          uv build packages/dataloader
+          uv build apps/mcp
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
