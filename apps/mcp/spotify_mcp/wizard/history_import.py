@@ -131,8 +131,8 @@ def _do_sync_recent(console: Console) -> None:
         from spotify_core.db.pipeline import sync_recent_plays  # type: ignore
     except ImportError:
         console.print(
-            "[yellow]Recent-plays sync not yet wired into the pipeline. "
-            "Run `uv run python scripts/sync_api.py` for now.[/yellow]"
+            "[yellow]`sync_recent_plays` is not yet implemented in the pipeline. "
+            "Run `spotify-mcp sync` from the terminal to pull recent plays.[/yellow]"
         )
         return
     inserted = sync_recent_plays(client, str(paths.history_db()))

@@ -6,7 +6,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional  # noqa: F401 — kept for write_with_backup return type
 
 from rich.console import Console
 from rich.syntax import Syntax
@@ -23,17 +23,12 @@ def default_config_path() -> Path:
     return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
 
 
-def resolve_script_path() -> Optional[str]:
-    """Find the absolute path to the installed `spotify-mcp` script.
-
-    Claude Desktop's spawn does not always inherit user PATH, so we must write
-    the resolved absolute path into the config.
-    """
-    return shutil.which("spotify-mcp")
-
-
-def build_entry(script_path: str) -> dict:
-    return {"command": script_path, "args": ["serve"]}
+def build_entry() -> dict:
+    """Build the MCP server entry using uvx so Claude Desktop users get automatic updates."""
+    return {
+        "command": "uvx",
+        "args": ["--from", "spotify-analytics-mcp", "spotify-mcp", "serve"],
+    }
 
 
 def compute_merged(config_path: Path, entry: dict) -> dict:
@@ -85,14 +80,7 @@ def run_step(console: Console, install: bool) -> None:
     With install=False, prints the snippet for manual copy. With install=True,
     locates the config, shows a diff, asks for confirmation, then writes with backup.
     """
-    script_path = resolve_script_path()
-    if script_path is None:
-        script_path = console.input(
-            "Could not auto-detect the `spotify-mcp` script path. "
-            "Please paste the absolute path: "
-        ).strip()
-
-    entry = build_entry(script_path)
+    entry = build_entry()
     snippet = json.dumps({"mcpServers": {"spotify-mcp": entry}}, indent=2)
 
     cfg_path = default_config_path()
