@@ -129,13 +129,31 @@ def _do_sync_recent(console: Console) -> None:
     )
     try:
         from spotify_core.db.pipeline import sync_api_to_db
+        from spotify_mcp.config import (
+            DB_PATH,
+            DEFAULT_USER_ID,
+            TOKENS_DB,
+            get_client_id,
+            get_fernet_key,
+        )
+        client_id = get_client_id()
+        fernet_key = get_fernet_key()
+        final_user_id = DEFAULT_USER_ID
     except ImportError as exc:
         console.print(
             f"[yellow]{exc}[/yellow]"
         )
         return
-    inserted = sync_api_to_db(client, str(paths.history_db()))
-    console.print(f"[green]Synced {inserted} recent plays.[/green]")
+    
+    result = sync_api_to_db(
+            db_path=DB_PATH,
+            tokens_db_path=TOKENS_DB,
+            user_id=final_user_id,
+            client_id=client_id,
+            fernet_key=fernet_key,
+        )
+    console.print(f"[green]✓ Synced {result['inserted']} new plays (cursor: {result['cursor_ms']} ms)[/green]")
+
 
 
 def run_step(console: Console, import_path: Path | None = None) -> None:
