@@ -1,21 +1,82 @@
-# .github/workflows/publish.yml
+# Publish spotify-analytics-* packages to PyPI via trusted publishers (OIDC).
+#
+# Trigger: push a tag matching  v*  (e.g.  git tag v0.2.0 && git push --tags)
+#
+# Version bump workflow:
+#   1. Update version in the relevant pyproject.toml(s)
+#   2. Commit: "chore: bump version to 0.2.0"
+#   3. Tag:    git tag v0.2.0
+#   4. Push:   git push && git push --tags
+#
+# Prerequisites — register THREE trusted publishers on PyPI (and TestPyPI):
+#   Package name              | Workflow file    | Environment
+#   spotify-analytics-core       publish.yaml       pypi   (and testpypi)
+#   spotify-analytics-dataloader publish.yaml       pypi   (and testpypi)
+#   spotify-analytics-mcp        publish.yaml       pypi   (and testpypi)
+
+name: Publish to PyPI
+
 on:
   push:
-    tags: ["release/v*"]   # git tag release/v0.1.0
+    tags: ["v*"]
 
 jobs:
-  publish:
+  # ── Stage 1: Build all three packages ──────────────────────────────
+  build:
+    name: Build distributions
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - name: Build all three packages
+
+      - name: Build all packages into dist/
         run: |
-          uv build packages/core
-          uv build packages/dataloader
-          uv build apps/mcp
+          uv build packages/core       --out-dir dist/
+          uv build packages/dataloader  --out-dir dist/
+          uv build apps/mcp            --out-dir dist/
+
+      - name: List built artifacts
+        run: ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  # ── Stage 2: Publish to TestPyPI ───────────────────────────────────
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/spotify-analytics-mcp
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: dist/
+          repository-url: https://test.pypi.org/legacy/
+
+  # ── Stage 3: Publish to PyPI (manual approval recommended) ─────────
+  publish-pypi:
+    name: Publish to PyPI
+    needs: publish-testpypi
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/spotify-analytics-mcp
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

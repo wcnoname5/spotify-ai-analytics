@@ -2326,10 +2326,6 @@ source = { editable = "packages/core" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
-    { name = "langchain-core" },
-    { name = "langchain-google-genai" },
-    { name = "langchain-openai" },
-    { name = "langgraph" },
     { name = "langgraph-checkpoint-sqlite" },
     { name = "platformdirs" },
     { name = "pydantic" },
@@ -2337,20 +2333,29 @@ dependencies = [
     { name = "python-dotenv" },
 ]
 
+[package.optional-dependencies]
+agent = [
+    { name = "langchain-core" },
+    { name = "langchain-google-genai" },
+    { name = "langchain-openai" },
+    { name = "langgraph" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "cryptography", specifier = ">=42.0" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "langchain-core", specifier = ">=1.0" },
-    { name = "langchain-google-genai", specifier = ">=4.0" },
-    { name = "langchain-openai", specifier = ">=1.0" },
-    { name = "langgraph", specifier = ">=1.0" },
+    { name = "langchain-core", marker = "extra == 'agent'", specifier = ">=1.0" },
+    { name = "langchain-google-genai", marker = "extra == 'agent'", specifier = ">=4.0" },
+    { name = "langchain-openai", marker = "extra == 'agent'", specifier = ">=1.0" },
+    { name = "langgraph", marker = "extra == 'agent'", specifier = ">=1.0" },
     { name = "langgraph-checkpoint-sqlite", specifier = ">=3.0.3" },
     { name = "platformdirs", specifier = ">=4.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
 ]
+provides-extras = ["agent"]
 
 [[package]]
 name = "spotify-analytics-dataloader"
