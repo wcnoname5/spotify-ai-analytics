@@ -128,14 +128,13 @@ def _do_sync_recent(console: Console) -> None:
         os.environ.get("TOKEN_ENCRYPT_KEY", "").encode(),
     )
     try:
-        from spotify_core.db.pipeline import sync_recent_plays  # type: ignore
-    except ImportError:
+        from spotify_core.db.pipeline import sync_api_to_db
+    except ImportError as exc:
         console.print(
-            "[yellow]`sync_recent_plays` is not yet implemented in the pipeline. "
-            "Run `spotify-mcp sync` from the terminal to pull recent plays.[/yellow]"
+            f"[yellow]{exc}[/yellow]"
         )
         return
-    inserted = sync_recent_plays(client, str(paths.history_db()))
+    inserted = sync_api_to_db(client, str(paths.history_db()))
     console.print(f"[green]Synced {inserted} recent plays.[/green]")
 
 
