@@ -2364,12 +2364,14 @@ source = { editable = "packages/dataloader" }
 dependencies = [
     { name = "polars" },
     { name = "pydantic" },
+    { name = "tzdata", marker = "sys_platform == 'win32'" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "polars", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2024.1" },
 ]
 
 [[package]]
