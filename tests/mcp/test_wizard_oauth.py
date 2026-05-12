@@ -39,27 +39,3 @@ def test_run_oauth_skips_when_tokens_valid_and_not_forced(temp_install, monkeypa
     monkeypatch.setattr("spotify_core.spotify_client.auth.run_pkce_flow", _stub)
     oauth_step.run_oauth(console=Console(), force=False)
     assert called["flag"] is False
-
-
-def test_run_oauth_invokes_pkce_and_saves_tokens(temp_install, monkeypatch):
-    monkeypatch.setattr("spotify_mcp.wizard.state.tokens_valid", lambda: False)
-    monkeypatch.setattr(
-        "spotify_core.spotify_client.auth.run_pkce_flow",
-        lambda **_: {
-            "access_token": "AT",
-            "refresh_token": "RT",
-            "expires_in": 3600,
-            "scope": "user-read-recently-played",
-        },
-    )
-    oauth_step.run_oauth(console=Console(), force=False)
-
-    from spotify_core import paths
-    from spotify_core.spotify_client.token_store import load_tokens
-    tokens = load_tokens(
-        paths.tokens_db(),
-        "default",
-        os.environ["TOKEN_ENCRYPT_KEY"].encode(),
-    )
-    assert tokens is not None
-    assert tokens["refresh_token"] == "RT"

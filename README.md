@@ -15,67 +15,46 @@ A local MCP server that connects Claude Desktop / Claude Code to your Spotify li
 
 ---
 
-## Quick start
+## Install
 
-See **[doc/MCP_QUICKSTART.md](doc/MCP_QUICKSTART.md)** for the full setup guide.
-
-Before starting, you need to create an app tor get the `SPOTIFY_CLIENT_ID` (check **[doc/MCP_QUICKSTART.md](doc/MCP_QUICKSTART.md#spotify_client_id)** for details).
-
-The short version: you need to run these scripts in your terminal:
+**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/)
 
 ```bash
-# 1. Install dependencies
-uv sync
-
-# 2. Create .env and go set SPOTIFY_CLIENT_ID in .env file
-cp .env.example .env
-
-# 3. setup for DB initialization, Oath authentication
-uv run python scripts/setup.py
+uvx --from spotify-analytics-mcp spotify-mcp setup
 ```
+The wizard will guide you through:
+
+- Creating a Spotify developer app
+- OAuth login
+- Importing your listening history
+- Registering with Claude Desktop
+
 
 ### MCP connection in Claude Desktop (Recommended for GUI users)
 
 1. In Claude Desktop, click the settings (≡ mark in the top-left), go to `Help > Troubleshooting > Enable Developer Mode`. After you enable Developer Mode, go to `Developer > Open App Config File...` to open `claude_desktop_config.json` and add this block:
 
-    ```json
-    {
+  ```json
+  {
     "mcpServers": {
-        "spotify-analytics": {
-        "command": "uv",
-        "args": ["run", "python", "C:\\Path\\To\\spotify-ai-analytics\\apps\\mcp\\server.py"],
-        "cwd": "C:\\Path\\To\\spotify-ai-analytics"
-        }
+      "spotify-analytics": {
+        "command": "spotify-mcp",
+        "args": ["serve"]
+      }
     }
-    }
-    ```
-
-    For best results, use absolute paths for `args` and `cwd`. Use `\\` for Windows and `/` for macOS.
+  }
+  ```
 
 2. Click `Developer > Reload MCP Configuration` in Claude Desktop (or simply restart) after saving.
 
 3. Click `+ > Connectors` in the chat box; you should see `spotify-analytics` in the list.
 
-### MCP connection in Claude CLI
 
-```bash
-# 3. Add to Claude (CLI)
-claude mcp add spotify-analytics -- uv run python apps/mcp/server.py
-# 4. Check if the connection is successful
-claude mcp list
-```
-### MCP connection in VS Code 
 
-The `.vscode/mcp.json` have already done the connection. Open this project with VScode should connect to the MCP server.
-
-### How do I know if I'm doing it right?
-
-If you've connected to Claude successfully, you can ask it directly!
-
-Click `+ > Connectors > Add from spotify-analytics` in the chat box. We provide a system prompt `Spotify-Analytic MCP Setup Guide` to help you get started.
 
 ## Examaple Use
-`Listening Report Generator` Prompt
+
+Click `+ > Connectors > Listening Report Generator` prompt to generate your personal listening history report!
 
 ---
 ## Tech stack
@@ -96,9 +75,7 @@ Click `+ > Connectors > Add from spotify-analytics` in the chat box. We provide 
 packages/core/        # Shared packages: analytics, agent, memory, db, spotify_client
 packages/dataloader/  # Data ingestion (Polars + Pydantic)
 apps/mcp/             # MCP server entry point
-apps/web/             # Web app (Phase 2, skeleton only)
+apps/web/             # Web app (skeleton only)
 data/                 # Local SQLite DBs and JSON exports
 scripts/              # Setup, sync, and inspection scripts
 ```
-
-Phase 2 (FastAPI + Streamlit web app) is planned but deferred. See [ARCHITECTURE.md](doc/ARCHITECTURE.md) for the full spec.
