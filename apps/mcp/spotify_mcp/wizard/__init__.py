@@ -1,8 +1,6 @@
 """Setup wizard orchestration — composes resumable steps."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from rich.console import Console
 
 from spotify_core import paths
@@ -19,19 +17,11 @@ from . import (
 
 def run_wizard(
     setup_claude_desktop: bool = False,
-    import_path: Path | None = None,
     console: Console | None = None,
 ) -> None:
-    """Run the setup wizard, skipping any already-completed step.
-
-    With ``import_path``, skip the wizard and just import that file/dir.
-    """
+    """Run the setup wizard, skipping any already-completed step."""
     console = console or Console()
     paths.ensure_dirs()
-
-    if import_path is not None:
-        history_import.run_step(console=console, import_path=import_path)
-        return
 
     if not state.has_client_id():
         spotify_app.run_step(console=console)

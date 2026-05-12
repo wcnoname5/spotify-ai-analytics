@@ -3,6 +3,7 @@
 Usage:
     spotify-mcp              # defaults to 'setup'
     spotify-mcp setup        # interactive setup wizard
+    spotify-mcp import-history [--from <path>]
     spotify-mcp doctor       # check environment readiness
     spotify-mcp reauth       # re-run OAuth flow
     spotify-mcp sync         # sync recent plays from Spotify API
@@ -19,6 +20,7 @@ import typer
 from rich.console import Console
 
 from spotify_mcp.wizard import run_wizard
+from spotify_mcp.wizard import history_import as _history_import
 from spotify_mcp.wizard import oauth_step as _oauth_step
 from spotify_mcp.wizard import state as _state
 
@@ -47,21 +49,28 @@ def setup(
         bool,
         typer.Option("--setup-claude-desktop", help="Register the MCP server with Claude Desktop."),
     ] = False,
-    import_path: Annotated[
-        Optional[Path],
-        typer.Option("--import", help="Path to a Spotify history export to import."),
-    ] = None,
 ) -> None:
     """Run the interactive setup wizard."""
-    _setup(setup_claude_desktop=setup_claude_desktop, import_path=import_path)
+    _setup(setup_claude_desktop=setup_claude_desktop)
 
 
-def _setup(setup_claude_desktop: bool, import_path: Optional[Path]) -> None:
+def _setup(setup_claude_desktop: bool) -> None:
     """Internal helper shared by the default callback and the setup subcommand."""
     try:
-        run_wizard(setup_claude_desktop=setup_claude_desktop, import_path=import_path)
+        run_wizard(setup_claude_desktop=setup_claude_desktop)
     except NotImplementedError:
         console.print("[yellow]Setup wizard is not yet implemented.[/yellow]")
+
+
+@app.command("import-history")
+def import_history(
+    from_path: Annotated[
+        Optional[Path],
+        typer.Option("--from", help="Path to a Spotify history export file or folder to import."),
+    ] = None,
+) -> None:
+    """Import Spotify listening history from a JSON export file or folder."""
+    _history_import.import_history(console=console, import_path=from_path)
 
 
 @app.command()
@@ -107,6 +116,7 @@ def sync(
     from spotify_core.logging import setup_logging
     from spotify_mcp.config import DB_PATH, TOKENS_DB, get_client_id, get_fernet_key
 
+    paths.ensure_dirs()
     if paths.env_file().exists():
         load_dotenv(paths.env_file())
 
@@ -155,6 +165,19 @@ def sync(
 
 
 @app.command()
+def path() -> None:
+    """Print the default path to save the local SQLite database and Configuration files"""
+    from dotenv import load_dotenv
+
+    from spotify_core import paths
+
+    if paths.env_file().exists():
+        load_dotenv(paths.env_file())
+    config_dir = paths.config_dir()
+    data_dir = paths.data_dir()
+    console.print(f"[yellow]Config directory: {config_dir}; Data directory: {data_dir}[/yellow]")
+
+@app.command()
 def serve() -> None:
     """Start the MCP server over stdio (invoked by Claude Desktop)."""
     import logging
@@ -165,6 +188,7 @@ def serve() -> None:
     from spotify_core import paths
     from spotify_core.logging import setup_mcp_logging
 
+    paths.ensure_dirs()
     if paths.env_file().exists():
         load_dotenv(paths.env_file())
     load_dotenv(override=False)

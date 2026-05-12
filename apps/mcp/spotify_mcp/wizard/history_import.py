@@ -3,7 +3,7 @@
 UX rule: never make the user type a path. Primary UX is a native folder
 picker (tkinter filedialog). On headless systems where Tk can't open a
 window, falls back to scanning cwd. Power users can pass
-`spotify-mcp setup --import <path>` to skip the prompt entirely.
+`spotify-mcp import-history --from <path>` to skip the prompt entirely.
 """
 import logging
 import os
@@ -85,7 +85,7 @@ def _confirm_use_cwd(console: Console, files: list[Path]) -> bool:
         console.print(
             "[yellow]GUI picker unavailable and no Streaming_History_Audio_*.json files in the "
             "current directory. Drop the files into the current folder (or `cd` to where they are) "
-            "and re-run `spotify-mcp setup`. Or use `spotify-mcp setup --import <path>` directly."
+            "and re-run `spotify-mcp setup`. Or use `spotify-mcp import-history` directly."
             "[/yellow]"
         )
         return False
@@ -112,6 +112,33 @@ def _do_import(console: Console, files: list[Path]) -> None:
         f"Duplicates skipped: {result['skipped_duplicated']}, "
         f"parse errors: {result['skipped_parse_error']}"
     )
+
+
+def import_history(console: Console, import_path: Path | None = None) -> None:
+    """Import history from a path, or open the folder picker when no path is provided."""
+    if import_path is not None:
+        from spotify_core.db.pipeline import import_json_to_db
+
+        result = import_json_to_db(str(import_path), str(paths.history_db()))
+        console.print(
+            f"[green]Imported {result['inserted']} rows from {import_path}.[/green]"
+        )
+        return
+
+    selected_dir = pick_dir_via_gui()
+    if selected_dir is not None:
+        files = scan_dir(selected_dir)
+        if not files:
+            console.print(
+                f"[yellow]No Streaming_History_Audio_*.json files found in {selected_dir}.[/yellow]"
+            )
+            return
+        _do_import(console, files)
+        return
+
+    cwd_files = scan_dir(Path.cwd())
+    if _confirm_use_cwd(console, cwd_files):
+        _do_import(console, cwd_files)
 
 
 def _do_sync_recent(console: Console) -> None:
@@ -159,12 +186,7 @@ def _do_sync_recent(console: Console) -> None:
 def run_step(console: Console, import_path: Path | None = None) -> None:
     """Either import from a fixed path (--import flag) or run the interactive choice."""
     if import_path is not None:
-        from spotify_core.db.pipeline import import_json_to_db
-
-        result = import_json_to_db(str(import_path), str(paths.history_db()))
-        console.print(
-            f"[green]Imported {result['inserted']} rows from {import_path}.[/green]"
-        )
+        import_history(console=console, import_path=import_path)
         return
 
     console.print(Panel.fit(_REQUEST_BANNER, title="Step 5 / 6: Load listening history"))
@@ -177,19 +199,4 @@ def run_step(console: Console, import_path: Path | None = None) -> None:
         _do_sync_recent(console)
         return
 
-    # choice == "import" — try GUI first, fall back to cwd scan
-    selected_dir = pick_dir_via_gui()
-    if selected_dir is not None:
-        files = scan_dir(selected_dir)
-        if not files:
-            console.print(
-                f"[yellow]No Streaming_History_Audio_*.json files found in {selected_dir}.[/yellow]"
-            )
-            return
-        _do_import(console, files)
-        return
-
-    # GUI unavailable or cancelled — offer cwd scan as fallback
-    cwd_files = scan_dir(Path.cwd())
-    if _confirm_use_cwd(console, cwd_files):
-        _do_import(console, cwd_files)
+    import_history(console=console)
