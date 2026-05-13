@@ -176,7 +176,11 @@ s around `=`)
 
 ## Developer Debug
 
-Run official MCP inspector (requires Node.js):
+Run official MCP inspector (requires Node.js) in local server:
 ```bash
-npx @modelcontextprotocol/inspector spotify-mcp serve
+npx @modelcontextprotocol/inspector uv run --package spotify-analytics-mcp spotify-mcp serve
+```
+or using FastMCP CLI
+```bash
+uv run fastmcp dev inspector
 ```

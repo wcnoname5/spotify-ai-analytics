@@ -36,7 +36,9 @@ if not get_fernet_key():
         'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
     )
 
-from spotify_mcp._mcp import main  # noqa: E402 — must come after env/logging setup
+from spotify_mcp._mcp import main, mcp  # noqa: E402 — must come after env/logging setup
+
+__all__ = ["main", "mcp"]
 
 if __name__ == "__main__":
     main()
