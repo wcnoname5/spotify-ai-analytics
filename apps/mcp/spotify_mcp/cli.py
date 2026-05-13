@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -36,8 +37,30 @@ app = typer.Typer(
 )
 
 
+def _version_callback(value: bool) -> None:
+    if not value:
+        return
+    try:
+        v = _pkg_version("spotify-analytics-mcp")
+    except PackageNotFoundError:
+        v = "unknown (running from source?)"
+    console.print(f"spotify-analytics-mcp {v}")
+    raise typer.Exit()
+
+
 @app.callback(invoke_without_command=True)
-def _default(ctx: typer.Context) -> None:
+def _default(
+    ctx: typer.Context,
+    _version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            help="Show the installed version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
     """Default action when no subcommand is given: run setup."""
     if ctx.invoked_subcommand is None:
         ctx.invoke(setup)

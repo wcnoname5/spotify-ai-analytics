@@ -2,8 +2,13 @@
 #
 # Trigger: push a tag matching  v*  (e.g.  git tag v0.2.0 && git push --tags)
 #
+# Pre-release tags (PEP 440: aN, bN, rcN, .devN, .postN) only publish to
+# TestPyPI — use them to smoke-test the workflow without burning a real
+# version number on PyPI. Examples:  v0.2.0rc1, v0.2.0a1, v0.2.0b2
+# Stable tags (e.g. v0.2.0) publish to both TestPyPI and PyPI.
+#
 # Version bump workflow:
-#   1. Update version in the relevant pyproject.toml(s)
+#   1. uv run python scripts/bump.py 0.2.0   (or: scripts/bump.py 0.2.0rc1)
 #   2. Commit: "chore: bump version to 0.2.0"
 #   3. Tag:    git tag v0.2.0
 #   4. Push:   git push && git push --tags
@@ -28,6 +33,23 @@ on:
     tags: ["v*"]
 
 jobs:
+  # ── Detect whether this tag is a PEP 440 pre-release ───────────────
+  # Pre-release tags (v0.2.0rc1, v0.2.0a1, v0.2.0b1, v0.2.0.dev1) only
+  # publish to TestPyPI; stable tags publish to both.
+  detect-prerelease:
+    runs-on: ubuntu-latest
+    outputs:
+      is_prerelease: ${{ steps.check.outputs.is_prerelease }}
+    steps:
+      - id: check
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ (a|b|rc|\.dev)[0-9]+$ ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Pre-release tag ${GITHUB_REF_NAME} — skipping PyPI publish."
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # ── Stage 1: Build all three packages ──────────────────────────────
   build:
     name: Build distributions
@@ -114,7 +136,8 @@ jobs:
   # ── Stage 3: Publish to PyPI (one job per package) ─────────────────
   pypi-core:
     name: PyPI — core
-    needs: [testpypi-core, testpypi-dataloader, testpypi-mcp]
+    needs: [testpypi-core, detect-prerelease]
+    if: needs.detect-prerelease.outputs.is_prerelease == 'false'
     runs-on: ubuntu-latest
     environment:
       name: pypi-core
@@ -133,7 +156,8 @@ jobs:
 
   pypi-dataloader:
     name: PyPI — dataloader
-    needs: [testpypi-core, testpypi-dataloader, testpypi-mcp]
+    needs: [testpypi-dataloader, detect-prerelease]
+    if: needs.detect-prerelease.outputs.is_prerelease == 'false'
     runs-on: ubuntu-latest
     environment:
       name: pypi-dataloader
@@ -152,7 +176,10 @@ jobs:
 
   pypi-mcp:
     name: PyPI — mcp
-    needs: [testpypi-core, testpypi-dataloader, testpypi-mcp]
+    # mcp depends on core and dataloader at runtime; wait until they're on
+    # PyPI so `pip install spotify-analytics-mcp` can resolve its deps.
+    needs: [testpypi-mcp, pypi-core, pypi-dataloader, detect-prerelease]
+    if: needs.detect-prerelease.outputs.is_prerelease == 'false'
     runs-on: ubuntu-latest
     environment:
       name: pypi-mcp
