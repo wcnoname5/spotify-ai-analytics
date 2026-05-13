@@ -2321,7 +2321,7 @@ dev = [
 
 [[package]]
 name = "spotify-analytics-core"
-version = "0.1.2"
+version = "0.1.2rc1"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "cryptography" },
@@ -2359,7 +2359,7 @@ provides-extras = ["agent"]
 
 [[package]]
 name = "spotify-analytics-dataloader"
-version = "0.1.2"
+version = "0.1.2rc1"
 source = { editable = "packages/dataloader" }
 dependencies = [
     { name = "polars" },
@@ -2376,7 +2376,7 @@ requires-dist = [
 
 [[package]]
 name = "spotify-analytics-mcp"
-version = "0.1.2"
+version = "0.1.2rc1"
 source = { editable = "apps/mcp" }
 dependencies = [
     { name = "fastmcp" },
