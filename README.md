@@ -62,7 +62,7 @@ Click `+ > Connectors > Listening Report Generator` prompt to generate your pers
 | Layer | Choice |
 |---|---|
 | MCP framework | `mcp` Python SDK |
-| Agent framework | LangGraph |
+| Agent framework | LangGraph (On progress) |
 | Local storage | SQLite |
 | Data processing | Polars |
 | OAuth | PKCE |

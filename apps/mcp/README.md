@@ -1,16 +1,17 @@
 # spotify-analytics-mcp
 
-MCP server and `spotify-mcp` setup CLI for Spotify AI Analytics.
+An MCP server that connects Claude Desktop / Claude Code to your Spotify listening history — query your stats, control playback, and generate playlists through natural language.
 
-```
-uvx --from spotify-analytics-mcp spotify-mcp  
+Ships with a `spotify-mcp` CLI that walks you through Spotify app registration, OAuth login, history import, and Claude Desktop wiring.
+
+## Quick Start
+
+```bash
+uvx --from spotify-analytics-mcp spotify-mcp setup
 ```
 
-```
-uvx --from spotify-analytics-mcp spotify-mcp sync 
-```
+See [the project README](https://github.com/wcnoname5/spotify-ai-analytics#readme) for prerequisites and full setup instructions.
 
-See help for all command details
-```
-uvx --from spotify-analytics-mcp spotify-mcp --help 
+```bash
+uvx --from spotify-analytics-mcp spotify-mcp --help
 ```
