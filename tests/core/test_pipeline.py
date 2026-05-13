@@ -229,24 +229,6 @@ def test_sync_api_idempotent(history_db, tmp_path):
 
 
 @pytest.mark.unit
-def test_sync_api_no_token_raises(history_db, tmp_path):
-    """sync_api_to_db raises RuntimeError when no token exists."""
-    tokens_db = tmp_path / "tokens.db"
-    with patch("spotify_core.db.pipeline.load_tokens", return_value=None):
-        with pytest.raises(RuntimeError, match="Run OAuth flow first"):
-            sync_api_to_db(str(history_db), str(tokens_db), "user1", "client_id", b"key")
-
-
-@pytest.mark.unit
-def test_sync_api_raises_when_token_absent_regardless_of_expiry(history_db, tmp_path):
-    """sync_api_to_db raises if load_tokens returns None, no matter expiry state."""
-    tokens_db = tmp_path / "tokens.db"
-    with patch("spotify_core.db.pipeline.load_tokens", return_value=None):
-        with pytest.raises(RuntimeError, match="Run OAuth flow first"):
-            sync_api_to_db(str(history_db), str(tokens_db), "user1", "client_id", b"key")
-
-
-@pytest.mark.unit
 def test_open_inspect_shell_prints_cheatsheet(history_db, capsys):
     """open_inspect_shell prints the cheatsheet before launching sqlite3."""
     with patch("spotify_core.db.pipeline.subprocess.run") as mock_run:

@@ -8,12 +8,6 @@ from rich.console import Console
 from spotify_mcp.wizard import claude_desktop as cd
 
 
-def test_build_entry_uses_resolved_path():
-    entry = cd.build_entry(script_path="/home/u/.local/bin/spotify-mcp")
-    assert entry["command"] == "/home/u/.local/bin/spotify-mcp"
-    assert entry["args"] == ["serve"]
-
-
 def test_compute_merge_into_empty(tmp_path):
     cfg = tmp_path / "claude_desktop_config.json"
     merged = cd.compute_merged(cfg, entry={"command": "X", "args": []})

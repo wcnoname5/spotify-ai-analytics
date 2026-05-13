@@ -15,6 +15,7 @@ def test_help_lists_subcommands():
     assert "setup" in result.output
     assert "doctor" in result.output
     assert "reauth" in result.output
+    
 
 
 def test_doctor_runs_without_arguments():
