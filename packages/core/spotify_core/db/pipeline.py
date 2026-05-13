@@ -215,7 +215,8 @@ def sync_api_to_db(
     token_data = load_tokens(tokens_db_path, user_id, fernet_key)
     if token_data is None:
         raise RuntimeError(
-            "Fernet key is invalid or missing. Run OAuth flow first: uv run python scripts/setup.py"
+            f"No OAuth tokens found for user '{user_id}'. "
+            "Run the OAuth flow first: spotify-mcp reauth"
         )
 
     # Read current cursor from sync_state
@@ -299,7 +300,8 @@ def sync_api_up_to_date(
     token_data = load_tokens(tokens_db_path, user_id, fernet_key)
     if token_data is None:
         raise RuntimeError(
-            "Fernet key is invalid or missing. Run OAuth flow first: uv run python scripts/init_db.py --auth"
+            f"No OAuth tokens found for user '{user_id}'. "
+            "Run the OAuth flow first: spotify-mcp reauth"
         )
 
     # Anchor: latest played_at from json_import — stop backfill once we reach it.

@@ -5,6 +5,7 @@ Usage:
     spotify-mcp setup        # interactive setup wizard
     spotify-mcp doctor       # check environment readiness
     spotify-mcp reauth       # re-run OAuth flow
+    spotify-mcp sync         # sync recent plays from Spotify API
     spotify-mcp serve        # start the MCP server (used by Claude Desktop)
 """
 from __future__ import annotations
@@ -79,6 +80,78 @@ def reauth() -> None:
         _oauth_step.run_oauth(console=console, force=True)
     except NotImplementedError:
         console.print("[yellow]OAuth step is not yet implemented.[/yellow]")
+
+
+@app.command()
+def sync(
+    user_id: Annotated[
+        Optional[str],
+        typer.Option("--user-id", help="Spotify user ID (defaults to SPOTIFY_USER_ID from .env)"),
+    ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="Enable verbose logging"),
+    ] = False,
+) -> None:
+    """Fetch recent plays from Spotify API and upsert into local database.
+
+    This syncs the most recent ~50 plays. Run this periodically to keep
+    your local history up to date.
+    """
+    import os
+
+    from dotenv import load_dotenv
+
+    from spotify_core import env_file as _env_file
+    from spotify_core import paths
+    from spotify_core.logging import setup_logging
+    from spotify_mcp.config import DB_PATH, TOKENS_DB, get_client_id, get_fernet_key
+
+    if paths.env_file().exists():
+        load_dotenv(paths.env_file())
+
+    # Setup logging
+    level = logging.DEBUG if verbose else logging.getLevelNamesMapping().get(
+        os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
+    )
+    setup_logging(log_name="sync", level=level)
+
+    # Determine user ID: CLI flag > wizard config > "default" (matches OAuth default)
+    final_user_id = (
+        user_id
+        or _env_file.read_key(paths.env_file(), "SPOTIFY_USER_ID")
+        or "default"
+    )
+
+    # Check required credentials
+    try:
+        client_id = get_client_id()
+        fernet_key = get_fernet_key()
+    except Exception as exc:
+        console.print(f"[red]Error: {exc}[/red]")
+        raise typer.Exit(code=1)
+
+    # Run sync
+    try:
+        from spotify_core.db.pipeline import sync_api_to_db
+
+        logger.info("Syncing recent plays for user '%s'", final_user_id)
+        result = sync_api_to_db(
+            db_path=DB_PATH,
+            tokens_db_path=TOKENS_DB,
+            user_id=final_user_id,
+            client_id=client_id,
+            fernet_key=fernet_key,
+        )
+        logger.info(
+            "Inserted %d rows, cursor updated to %d ms",
+            result["inserted"], result["cursor_ms"]
+        )
+        console.print(f"[green]✓ Synced {result['inserted']} new plays (cursor: {result['cursor_ms']} ms)[/green]")
+    except Exception as exc:
+        logger.error("Sync failed: %s", exc)
+        console.print(f"[red]Error: {exc}[/red]")
+        raise typer.Exit(code=1)
 
 
 @app.command()

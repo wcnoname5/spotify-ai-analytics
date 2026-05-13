@@ -65,9 +65,7 @@ def to_error_response(
         return {
             "error": str(exc),
             "requires_auth": True,
-            "auth_command": (
-                f"uv run python scripts/init_db.py --auth --user-id {user_id}"
-            ),
+            "auth_command": "spotify-mcp reauth",
         }
     if isinstance(exc, SpotifyPremiumRequiredError):
         return {"error": "Spotify Premium required for playback control."}

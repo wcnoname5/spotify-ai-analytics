@@ -96,7 +96,7 @@ def load_tokens(
             # TODO: handle this error more gracefully and throws the exception with a more specific message.
             if "no such table: spotify_tokens" in str(e).lower():
                 # throw a more specific error message for this common case
-                raise SpotifyAuthError(f"Tokens database at {db_path} is not initialized. Call init_tokens_db() first.") from e
+                raise SpotifyAuthError(f"Tokens database at {db_path} is not initialized.") from e
             else:
                 raise SpotifyAuthError(f"Error loading tokens for user {user_id} from {db_path}: {e}") from e
 

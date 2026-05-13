@@ -1,0 +1,170 @@
+# Publish spotify-analytics-* packages to PyPI via trusted publishers (OIDC).
+#
+# Trigger: push a tag matching  v*  (e.g.  git tag v0.2.0 && git push --tags)
+#
+# Version bump workflow:
+#   1. Update version in the relevant pyproject.toml(s)
+#   2. Commit: "chore: bump version to 0.2.0"
+#   3. Tag:    git tag v0.2.0
+#   4. Push:   git push && git push --tags
+#
+# Prerequisites — register SIX trusted publishers (3 on PyPI + 3 on TestPyPI):
+#
+#   On PyPI (https://pypi.org/manage/account/publishing/):
+#     Project name                  | Owner      | Repo                  | Workflow       | Environment
+#     spotify-analytics-core        | wcnoname5  | spotify-ai-analytics  | publish.yaml   | pypi-core
+#     spotify-analytics-dataloader  | wcnoname5  | spotify-ai-analytics  | publish.yaml   | pypi-dataloader
+#     spotify-analytics-mcp         | wcnoname5  | spotify-ai-analytics  | publish.yaml   | pypi-mcp
+#
+#   On TestPyPI (https://test.pypi.org/manage/account/publishing/):
+#     spotify-analytics-core        | wcnoname5  | spotify-ai-analytics  | publish.yaml   | testpypi-core
+#     spotify-analytics-dataloader  | wcnoname5  | spotify-ai-analytics  | publish.yaml   | testpypi-dataloader
+#     spotify-analytics-mcp         | wcnoname5  | spotify-ai-analytics  | publish.yaml   | testpypi-mcp
+
+name: Publish to PyPI
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  # ── Stage 1: Build all three packages ──────────────────────────────
+  build:
+    name: Build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Build all packages into dist/
+        run: |
+          uv build packages/core       --out-dir dist/
+          uv build packages/dataloader  --out-dir dist/
+          uv build apps/mcp            --out-dir dist/
+
+      - name: List built artifacts
+        run: ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  # ── Stage 2: Publish to TestPyPI (one job per package) ─────────────
+  testpypi-core:
+    name: TestPyPI — core
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi-core
+      url: https://test.pypi.org/p/spotify-analytics-core
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - run: mkdir -p upload && cp dist/spotify_analytics_core-* upload/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload/
+          repository-url: https://test.pypi.org/legacy/
+
+  testpypi-dataloader:
+    name: TestPyPI — dataloader
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi-dataloader
+      url: https://test.pypi.org/p/spotify-analytics-dataloader
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - run: mkdir -p upload && cp dist/spotify_analytics_dataloader-* upload/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload/
+          repository-url: https://test.pypi.org/legacy/
+
+  testpypi-mcp:
+    name: TestPyPI — mcp
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi-mcp
+      url: https://test.pypi.org/p/spotify-analytics-mcp
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - run: mkdir -p upload && cp dist/spotify_analytics_mcp-* upload/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload/
+          repository-url: https://test.pypi.org/legacy/
+
+  # ── Stage 3: Publish to PyPI (one job per package) ─────────────────
+  pypi-core:
+    name: PyPI — core
+    needs: [testpypi-core, testpypi-dataloader, testpypi-mcp]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-core
+      url: https://pypi.org/p/spotify-analytics-core
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - run: mkdir -p upload && cp dist/spotify_analytics_core-* upload/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload/
+
+  pypi-dataloader:
+    name: PyPI — dataloader
+    needs: [testpypi-core, testpypi-dataloader, testpypi-mcp]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-dataloader
+      url: https://pypi.org/p/spotify-analytics-dataloader
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - run: mkdir -p upload && cp dist/spotify_analytics_dataloader-* upload/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload/
+
+  pypi-mcp:
+    name: PyPI — mcp
+    needs: [testpypi-core, testpypi-dataloader, testpypi-mcp]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi-mcp
+      url: https://pypi.org/p/spotify-analytics-mcp
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - run: mkdir -p upload && cp dist/spotify_analytics_mcp-* upload/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload/
