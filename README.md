@@ -50,8 +50,6 @@ The wizard will guide you through:
 3. Click `+ > Connectors` in the chat box; you should see `spotify-analytics` in the list.
 
 
-
-
 ## Examaple Use
 
 Click `+ > Connectors > Listening Report Generator` prompt to generate your personal listening history report!
