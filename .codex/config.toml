@@ -1,0 +1,7 @@
+[mcp_servers.spotify-analytics]
+args = [
+    "run",
+    "python",
+    "apps/mcp/server.py",
+]
+command = "uv"

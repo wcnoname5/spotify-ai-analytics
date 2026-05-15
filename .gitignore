@@ -220,5 +220,3 @@ data/spotify_history/*
 !data/spotify_history/sample_history.json
 # logs
 logs/
-# Internal planning docs (superpowers/Claude Code session artifacts)
-docs/superpowers/
