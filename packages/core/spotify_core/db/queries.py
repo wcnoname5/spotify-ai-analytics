@@ -46,7 +46,7 @@ def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> 
                     f"arg {label}={value!r} must be ISO format 'YYYY-MM-DD'"
                 )
     if start_date and end_date and start_date > end_date:
-        logger.warning("start_date %s is after end_date %s — query will return no rows", start_date, end_date)
+        logger.warning("start_date %s is after end_date %s - query will return no rows", start_date, end_date)
 
 
 def get_top_artists(

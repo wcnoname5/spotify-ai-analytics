@@ -96,7 +96,7 @@ def load_tokens(
             # TODO: handle this error more gracefully and throws the exception with a more specific message.
             if "no such table: spotify_tokens" in str(e).lower():
                 # throw a more specific error message for this common case
-                raise SpotifyAuthError(f"Tokens database at {db_path} is not initialized. Call init_tokens_db() first.") from e
+                raise SpotifyAuthError(f"Tokens database at {db_path} is not initialized.") from e
             else:
                 raise SpotifyAuthError(f"Error loading tokens for user {user_id} from {db_path}: {e}") from e
 
@@ -143,7 +143,7 @@ def is_token_expired(
         ).fetchone()
 
     if row is None:
-        logger.debug("is_token_expired: no row for user %s — treating as expired", user_id)
+        logger.debug("is_token_expired: no row for user %s - treating as expired", user_id)
         return True
 
     expires_at = _parse_expires_at(row["expires_at"])

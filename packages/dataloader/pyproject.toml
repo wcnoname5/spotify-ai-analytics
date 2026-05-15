@@ -1,11 +1,31 @@
 [project]
-name = "spotify-dataloader"
-version = "0.1.0"
-requires-python = ">=3.13"
+name = "spotify-analytics-dataloader"
+version = "0.1.2"
+description = "Data loading and transformation utilities for Spotify listening history exports."
+readme = "README.md"
+license = { text = "MIT" }
+license-files = ["LICENSE"]
+authors = [{ name = "WC Chang" }]
+requires-python = ">=3.12"
+keywords = ["spotify", "dataloader", "polars", "listening-history"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+]
 dependencies = [
     "polars>=1.0",
     "pydantic>=2.0",
+    "tzdata>=2024.1; sys_platform == 'win32'",
 ]
+
+[project.urls]
+Homepage = "https://github.com/wcnoname5/spotify-ai-analytics"
+Repository = "https://github.com/wcnoname5/spotify-ai-analytics"
+Issues = "https://github.com/wcnoname5/spotify-ai-analytics/issues"
 
 [build-system]
 requires = ["hatchling"]

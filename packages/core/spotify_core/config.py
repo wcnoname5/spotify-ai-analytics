@@ -1,19 +1,18 @@
-import os
 import logging
 from pathlib import Path
 from typing import Optional
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
 
-# Project root directory (spotify-ai-analytics/)
-# 4 .parent calls from packages/core/spotify_core/config.py reaches the project root
-PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.resolve()
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from spotify_core import paths
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(PROJECT_ROOT / ".env"),
-        env_file_encoding='utf-8',
-        extra='ignore'
+        env_file=str(paths.env_file()),
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     # API Keys
@@ -25,24 +24,15 @@ class Settings(BaseSettings):
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
     openai_model: str = Field(default="gpt-4", alias="OPENAI_MODEL")
 
-    # Data Paths
-    _default_data_path: Path = PROJECT_ROOT / "data" / "spotify_history"
-    spotify_data_path: Path = Field(default=_default_data_path, alias="SPOTIFY_DATA_PATH")
+    # Data paths — defaults flow through paths.py so platformdirs / env override
+    # both work without touching this class.
+    spotify_data_path: Path = Field(default_factory=paths.spotify_history_dir, alias="SPOTIFY_DATA_PATH")
     spotify_user_id: str = Field(default="default", alias="SPOTIFY_USER_ID")
 
-    # DB paths — overridable via env vars; resolved relative to PROJECT_ROOT when not absolute
-    history_db_path: Path = Field(
-        default=PROJECT_ROOT / "data" / "history.db", alias="HISTORY_DB_PATH"
-    )
-    tokens_db_path: Path = Field(
-        default=PROJECT_ROOT / "data" / "tokens.db", alias="TOKENS_DB_PATH"
-    )
-    ltm_db_path: Path = Field(
-        default=PROJECT_ROOT / "data" / "ltm.db", alias="LTM_DB_PATH"
-    )
-    checkpoints_db_path: Path = Field(
-        default=PROJECT_ROOT / "data" / "checkpoints.db", alias="CHECKPOINTS_DB_PATH"
-    )
+    history_db_path: Path = Field(default_factory=paths.history_db, alias="HISTORY_DB_PATH")
+    tokens_db_path: Path = Field(default_factory=paths.tokens_db, alias="TOKENS_DB_PATH")
+    ltm_db_path: Path = Field(default_factory=paths.ltm_db, alias="LTM_DB_PATH")
+    checkpoints_db_path: Path = Field(default_factory=paths.checkpoints_db, alias="CHECKPOINTS_DB_PATH")
 
     @field_validator(
         "spotify_data_path",
@@ -55,20 +45,21 @@ class Settings(BaseSettings):
     @classmethod
     def resolve_path(cls, v: str | Path) -> Path:
         if isinstance(v, str):
-            path = Path(v)
+            path = Path(v).expanduser()
             if not path.is_absolute():
-                return (PROJECT_ROOT / path).resolve()
+                # Relative paths resolve against the data dir, not cwd, so behavior
+                # is stable regardless of where the user invoked the command from.
+                return (paths.data_dir() / path).resolve()
             return path.resolve()
         return v
 
     def validate_paths(self):
-        """Check if critical paths exist and warn if they don't."""
         logger = logging.getLogger(__name__)
         if not self.spotify_data_path.exists():
-            logger.warning(f"SPOTIFY_DATA_PATH not found: {self.spotify_data_path}")
-            logger.warning("Please ensure your Spotify history JSON files are in that directory.")
+            logger.warning("SPOTIFY_DATA_PATH not found: %s", self.spotify_data_path)
+            logger.warning("Place your Streaming_History_Audio_*.json files there.")
         else:
-            logger.info(f"Spotify history data path verified: {self.spotify_data_path}")
+            logger.info("Spotify history data path verified: %s", self.spotify_data_path)
 
-# Initialize settings
+
 settings = Settings()

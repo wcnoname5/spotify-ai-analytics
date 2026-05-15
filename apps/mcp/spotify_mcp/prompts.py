@@ -1,6 +1,6 @@
 """MCP prompt definitions for Spotify-Analytic MCP."""
 from textwrap import dedent
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -10,28 +10,12 @@ from fastmcp.prompts import Message
 from spotify_core.db.queries import get_data_range
 from spotify_mcp.config import DB_PATH
 
-
-SETUP_PROMPT = dedent("""
-    You are a helpful assistant that guides users through the setup process of the Spotify-Analytic MCP.
-
-    ## First-Time Setup (run in order)
-    1. **Check what's missing** — call `setup_check`. It will tell you exactly what still needs to be done.
-       1.1. If `SPOTIFY_CLIENT_ID` is not set in `.env`, tell the user to create a Spotify Developer
-            account, create an app, and set the `SPOTIFY_CLIENT_ID` environment variable.
-       1.2. Recommend the user download their data at https://www.spotify.com/account/privacy/ and
-            place the `Streaming_History_Audio_*.json` files in `data/spotify_history/`.
-    2. **Connect Spotify** — call the `setup` tool. It auto-generates a Fernet key (if needed),
-       initialises all databases, and opens a browser tab for Spotify login. Tokens are stored
-       encrypted automatically.
-    3. **Load history** — either:
-       - *Full export*: download data at https://www.spotify.com/account/privacy/, place the
-         `Streaming_History_Audio_*.json` files in `data/spotify_history/`, then call
-         `import_history_from_json`.
-       - *Recent plays only*: call `sync_history` (fetches the last 50 plays from the Spotify API).
-""").strip()
-
+LANGUAGE_NAMES = {"en": "English", "cht": "Traditional Chinese (zh-TW)"}
 
 REPORT_PROMPT_TEMPLATE = dedent("""
+    Respond entirely in {language_name}. Keep tool names, date strings, and
+    artist/track names as-is — do not translate them.
+
     Generate a Spotify listening report covering {window_desc}.
 
     ## Workflow
@@ -69,7 +53,7 @@ REPORT_PROMPT_TEMPLATE = dedent("""
     only render text.
 
     ## Edge cases
-    - Empty DB → suggest `import_history_from_json` or call `sync_history`, then stop.
+    - Empty DB → suggest to run setup or sync history then exit gracefully.
     - Single period only → render a single-period summary, skip trend comparisons.
     - User asks for genre breakdown → there is no genre field; infer from artist names and note
       the caveat.
@@ -82,16 +66,6 @@ REPORT_PROMPT_TEMPLATE = dedent("""
 
 def register_prompts(mcp: FastMCP) -> None:
     """Register all MCP prompts on the given server."""
-
-    @mcp.prompt(
-        name="how_to_setup",
-        title="Spotify-Analytic MCP Setup Guide",
-        description="Check which setup steps are still needed and run setup for the user.",
-    )
-    def how_to_setup() -> str:
-        """Guide the user through first-time setup."""
-        return SETUP_PROMPT
-
 
     @mcp.prompt(
         name="generate_report",
@@ -126,12 +100,23 @@ def register_prompts(mcp: FastMCP) -> None:
                 )
             ),
         ] = "",
+        language: Annotated[
+            Literal["en", "cht"],
+            Field(
+                description=(
+                    "Output language: 'cht' for Traditional Chinese (Default), 'en' for English"
+                )
+            ),
+        ] = "cht",
     ) -> list[Message]:
         """Build a workflow prompt for an N-year (or custom-range) listening report."""
         from datetime import datetime
-
+        if language not in ("en", "cht"):
+            raise ValueError(f"Invalid language '{language}'. Must be 'en' or 'cht'.")
         warnings: list[str] = []
-
+        if language not in LANGUAGE_NAMES:
+            warnings.append(f"Unsupported language '{language}', defaulting to Traditional Chinese.")
+            language = "cht"
         # Coerce everything to string up front — guards against None / int / etc.
         years_s = str(year_span) if year_span is not None else "3"
         start_s = str(start) if start else ""
@@ -256,7 +241,11 @@ def register_prompts(mcp: FastMCP) -> None:
                 + "\n".join(f"- {w}" for w in warnings)
             ))
         messages.append(Message(
-            REPORT_PROMPT_TEMPLATE.format(window_desc=window_desc, windows=windows)
+            REPORT_PROMPT_TEMPLATE.format(
+                language_name=LANGUAGE_NAMES[language],
+                window_desc=window_desc,
+                windows=windows,
+            )
         ))
         return messages
 

@@ -14,16 +14,6 @@ if sys.platform == "win32":
         pass
 
 
-def _find_project_root(anchor: str = ".env.example") -> Path:
-    """Walk upward from this file until an anchor file is found."""
-    for parent in Path(__file__).resolve().parents:
-        if (parent / anchor).exists():
-            return parent
-    raise RuntimeError(f"Could not find project root (no '{anchor}' found)")
-
-
-PROJECT_ROOT = _find_project_root()
-
 _LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
 
@@ -57,10 +47,12 @@ def setup_logging(
     Returns:
         Path of the log file opened.
     """
+    from spotify_core import paths  # lazy import to avoid circular dependency
+
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     folder = "test" if mode == "test" else "app"
     prefix = log_name or ("test_debug" if mode == "test" else "app_debug")
-    log_file = PROJECT_ROOT / "logs" / folder / f"{prefix}-{timestamp}.log"
+    log_file = paths.data_dir() / "logs" / folder / f"{prefix}-{timestamp}.log"
     return _setup(log_file, level, _stream or sys.stdout)
 
 

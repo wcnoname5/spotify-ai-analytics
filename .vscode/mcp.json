@@ -2,14 +2,13 @@
   "servers": {
     "spotifyMcp": {
       "type": "stdio",
-      "command": "uv",
-      "cwd": "${workspaceFolder}",
+      "command": "uvx",
       "args": [
-        "run",
-        "python",
-        "apps/mcp/server.py"
+        "--from",
+        "spotify-analytics-mcp",
+        "spotify-mcp",
+        "serve"
       ],
-      "envFile": "${workspaceFolder}/.env"
     }
   }
 }
