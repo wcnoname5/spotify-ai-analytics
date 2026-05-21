@@ -61,8 +61,7 @@ class TestSyncHistoryAuthError:
 
         assert isinstance(result, dict)
         assert result.get("requires_auth") is True
-        assert "auth_command" in result
-        assert "test_user" in result["auth_command"]
+        assert result["auth_command"] == "spotify-mcp reauth"
 
     def test_initialized_but_no_token_row_returns_requires_auth(
         self, mcp_with_temp_paths

@@ -61,7 +61,7 @@ class TestToErrorResponse:
     def test_auth_error_adds_requires_auth(self):
         result = to_error_response(SpotifyAuthError("No token found"), "bob")
         assert result["requires_auth"] is True
-        assert "bob" in result["auth_command"]
+        assert result["auth_command"] == "spotify-mcp reauth"
         assert "No token found" in result["error"]
 
     def test_premium_error_returns_canonical_message(self):
