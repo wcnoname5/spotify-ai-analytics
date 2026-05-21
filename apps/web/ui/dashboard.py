@@ -1,144 +1,242 @@
+"""DB-backed analytics dashboard (Streamlit page)."""
+import datetime
+import logging
+
 import streamlit as st
-from spotify_dataloader import (
-    get_summary,
-    get_raw_df
+
+from spotify_core.config import settings
+from spotify_core.db.pipeline import sync_api_to_db
+from spotify_core.db.queries import (
+    get_daily_activity_pattern,
+    get_daily_trend,
+    get_listening_summary,
+    get_monthly_trend,
+    get_recent_plays,
+    get_top_artists,
+    get_top_tracks,
+    get_weekly_trend,
+    is_history_empty,
 )
-from track_analysis import render_track_artist_analysis
-from time_analysis import render_time_analysis
+from spotify_web.charts import daily_activity_figure, trend_figure
+from spotify_web.config import get_sync_args
+from spotify_web.formatting import format_duration_ms, spotify_uri_to_url
 
-# Cached wrapper for summary by time (using hash table)
-# use start_date& end_date to generate cache keys (fingerprint)
-# Upon activation, it would check if fingerprint exists
-# if yes, it would use figerprint to retrieve cached result
-# else it would perform a new query and cache the result
-@st.cache_data(ttl= 15, max_entries=5)
-def _get_summary_cached(df, start_date=None, end_date=None):
-    return get_summary(df, start_date=start_date, end_date=end_date)
+logger = logging.getLogger(__name__)
 
-def render_dashboard(loader):
-    st.title("Analytics Dashboard for Spotify Data")
+_DB_PATH = str(settings.history_db_path)
+_CACHE_TTL = 30
 
-    # Initialize session state for filtering
-    if "artist_filter" not in st.session_state:
-        st.session_state.artist_filter = ""
-    if "applied_start_date" not in st.session_state:
-        st.session_state.applied_start_date = None
-    if "applied_end_date" not in st.session_state:
-        st.session_state.applied_end_date = None
 
-    summary = get_summary(loader.df)
+@st.cache_data(ttl=_CACHE_TTL)
+def _summary(start, end):
+    return get_listening_summary(_DB_PATH, start_date=start, end_date=end)
 
-    if summary['total_records'] == 0:
-        st.warning("No Spotify history data found. Please check your data/spotify_history folder.")
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _top_artists(start, end, limit=5):
+    return get_top_artists(_DB_PATH, limit=limit, start_date=start, end_date=end)
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _top_tracks(start, end, limit=5):
+    return get_top_tracks(
+        _DB_PATH, limit=limit, start_date=start, end_date=end, show_track_id=True
+    )
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _activity(start, end):
+    return get_daily_activity_pattern(_DB_PATH, start_date=start, end_date=end)
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _daily(start, end):
+    return get_daily_trend(_DB_PATH, start_date=start, end_date=end)
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _weekly(start, end):
+    return get_weekly_trend(_DB_PATH, start_date=start, end_date=end)
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _monthly(start, end):
+    return get_monthly_trend(_DB_PATH, start_date=start, end_date=end)
+
+
+@st.cache_data(ttl=_CACHE_TTL)
+def _recent():
+    return get_recent_plays(_DB_PATH, limit=50, show_track_id=True)
+
+
+def _period_dates() -> tuple[str, str]:
+    """Render the period filter; return (start_iso, end_iso) date strings."""
+    today = datetime.date.today()
+    choice = st.radio(
+        "分析區間",
+        ["本周", "本月", "自訂時間"],
+        horizontal=True,
+        key="period_choice",
+    )
+    if choice == "本周":
+        start = today - datetime.timedelta(days=today.weekday())
+        end = today
+    elif choice == "本月":
+        start = today.replace(day=1)
+        end = today
+    else:
+        c1, c2 = st.columns(2)
+        start = c1.date_input(
+            "開始", value=today - datetime.timedelta(days=30), key="custom_start"
+        )
+        end = c2.date_input("結束", value=today, key="custom_end")
+    return start.isoformat(), end.isoformat()
+
+
+def _run_sync() -> None:
+    """Pull recent plays from the Spotify API into the local DB."""
+    args = get_sync_args()
+    if not args["client_id"] or not args["fernet_key"]:
+        st.error(
+            "缺少 SPOTIFY_CLIENT_ID 或 TOKEN_ENCRYPT_KEY，請先執行 `spotify-mcp setup`。"
+        )
+        return
+    try:
+        result = sync_api_to_db(**args)
+        st.cache_data.clear()
+        st.toast(f"已同步 {result['inserted']} 筆新播放紀錄")
+    except RuntimeError as exc:
+        st.error(f"同步失敗：{exc}")
+    except Exception as exc:  # noqa: BLE001 - surface any sync error in the UI
+        logger.exception("Dashboard sync failed")
+        st.error(f"同步時發生錯誤：{exc}")
+
+
+def _stats_section(start: str, end: str) -> None:
+    st.subheader("Top Stats")
+    col_a, col_t = st.columns(2)
+    with col_a:
+        st.caption("Top Artists - by listening time")
+        artists = _top_artists(start, end, limit=15)
+        if artists:
+            st.dataframe(
+                [
+                    {
+                        "Artist": a["artist_name"],
+                        "Listening time": format_duration_ms(a["total_ms"]),
+                    }
+                    for a in artists
+                ],
+                hide_index=True,
+                width="stretch",
+            )
+        else:
+            st.info("此區間沒有資料。")
+    with col_t:
+        st.caption("Top Tracks - by play count")
+        tracks = _top_tracks(start, end, limit=15)
+        if tracks:
+            st.dataframe(
+                [
+                    {
+                        "Track": t["track_name"],
+                        "Artist": t["artist_name"],
+                        "Plays": t["play_count"],
+                        "Spotify": spotify_uri_to_url(t.get("track_id")),
+                    }
+                    for t in tracks
+                ],
+                column_config={
+                    "Spotify": st.column_config.LinkColumn(
+                        "Spotify", display_text="Open"
+                    )
+                },
+                hide_index=True,
+                width="stretch",
+            )
+        else:
+            st.info("此區間沒有資料。")
+
+
+def _trend_section(start: str, end: str) -> None:
+    """Render Plot 2, picking granularity from the period span."""
+    days = (
+        datetime.date.fromisoformat(end) - datetime.date.fromisoformat(start)
+    ).days + 1
+    if days <= 14:
+        rows, label_key, gran = _daily(start, end), "date", "daily"
+    elif days <= 92:
+        rows, label_key, gran = _weekly(start, end), "week_label", "weekly"
+    else:
+        rows, label_key, gran = _monthly(start, end), "month_label", "monthly"
+    if rows:
+        st.plotly_chart(trend_figure(rows, label_key, gran), width="stretch")
+    else:
+        st.info("此區間沒有資料。")
+
+
+def _recent_section() -> None:
+    st.subheader("Recently Played (last 50)")
+    rows = _recent()
+    if not rows:
+        st.info("資料庫沒有播放紀錄。")
+        return
+    st.dataframe(
+        [
+            {
+                "Played at": r["played_at"],
+                "Track": r["track_name"],
+                "Artist": r["artist_name"],
+                "Album": r["album_name"],
+                "Spotify": spotify_uri_to_url(r.get("track_id")),
+            }
+            for r in rows
+        ],
+        column_config={
+            "Spotify": st.column_config.LinkColumn("Spotify", display_text="Open")
+        },
+        hide_index=True,
+        width="stretch",
+    )
+
+
+def render_dashboard() -> None:
+    st.subheader("Dashboard")
+
+    col_filter, col_sync = st.columns([4, 1], vertical_alignment="top")
+    with col_sync:
+        if st.button("Sync", width="stretch"):
+            _run_sync()
+    with col_filter:
+        start, end = _period_dates()
+
+    if is_history_empty(_DB_PATH):
+        st.warning(
+            "資料庫沒有資料。請執行 `spotify-mcp setup` 匯入歷史，"
+            "或點右上 Sync 取得最近 50 筆播放。"
+        )
         return
 
-    # ===================== Header =================
-    st.header("Full Listening History")
-    # Use summary from loader to avoid redundant calculation
-    full_summary = summary
-
-    date_range = full_summary['date_range']
-    if date_range:
-        st.caption(f"Data Ranged From {date_range['start']} to {date_range['end']}")
-
+    summary = _summary(start, end)
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Tracks", f"{full_summary['total_records']:,}")
-    m2.metric("Listening Time (min)", f"{full_summary['total_listening_time']:,}")
-    m3.metric("Unique Artists", f"{full_summary['unique_artists'] or 0:,}")
-    m4.metric("Unique Tracks", f"{full_summary['unique_tracks'] or 0:,}")
+    m1.metric("Plays", f"{summary['total_plays']:,}")
+    m2.metric("Listening time", format_duration_ms(summary["total_ms_played"]))
+    m3.metric("Unique artists", f"{summary['unique_artists'] or 0:,}")
+    m4.metric("Unique tracks", f"{summary['unique_tracks'] or 0:,}")
 
     st.divider()
-    # ===================== global filters =================
-    with st.expander("Global Filters", expanded=True):
-        # Toggle for data tables
-        show_tables = not st.checkbox("Hide Data Tables", value=False)
-        # Get range from data (strings)
-        min_date_str = full_summary['date_range']['start'] if full_summary['date_range'] else None
-        max_date_str = full_summary['date_range']['end'] if full_summary['date_range'] else None
+    _stats_section(start, end)
 
-        if min_date_str and max_date_str:
-            import datetime
-            # Convert to date objects
-            min_d = datetime.date.fromisoformat(min_date_str)
-            max_d = datetime.date.fromisoformat(max_date_str)
-
-            # Place inputs and apply button in columns
-            col1, col2, col3 = st.columns([2, 2, 1], vertical_alignment="bottom")
-            with col1:
-                input_start = st.date_input(
-                    "Start Date",
-                    value=st.session_state.applied_start_date or min_d,
-                    min_value=min_d,
-                    max_value=max_d
-                    )
-            with col2:
-                input_end = st.date_input(
-                    "End Date",
-                    value=st.session_state.applied_end_date or max_d,
-                    min_value=min_d,
-                    max_value=max_d
-                )
-
-            with col3:
-                if st.button("Apply Filters", width="content"):
-                    st.session_state.applied_start_date = input_start
-                    st.session_state.applied_end_date = input_end
-                    st.rerun()
-
-            # Logic uses confirmed dates from session state
-            start_date = st.session_state.applied_start_date or min_d
-            end_date = st.session_state.applied_end_date or max_d
-            is_filtered = (start_date > min_d) or (end_date < max_d)
-        else:
-            start_date = None
-            end_date = None
-            is_filtered = False
-
-    # ===================== Summary =================
-    # Extra query is activated only if when filters are applied
-    st.header("Selected Date Range Summary")
-
-    if not is_filtered:
-        st.info("💡 Showing results for full date range.")
-        time_summary = full_summary
+    st.divider()
+    st.subheader("Daily Activity Pattern")
+    activity = _activity(start, end)
+    if activity:
+        st.plotly_chart(daily_activity_figure(activity), width="stretch")
     else:
-        with st.spinner("Calculating filtered summary..."):
-            time_summary = _get_summary_cached(loader.df, start_date=start_date, end_date=end_date)
+        st.info("此區間沒有資料。")
 
-    date_range_f = time_summary['date_range']
-    if date_range_f and is_filtered:
-        st.caption(f"First/Last Records within filtered range: {date_range_f['start']} to {date_range_f['end']}")
+    st.subheader("Listening Trend")
+    _trend_section(start, end)
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Tracks Listened", f"{time_summary['total_records']:,}")
-    m2.metric("Listening Time (min)", f"{time_summary['total_listening_time']:,}")
-    m3.metric("Unique Artists", f"{time_summary['unique_artists'] or 0:,}")
-    m4.metric("Unique Tracks", f"{time_summary['unique_tracks'] or 0:,}")
-
-    # =============== Track/Artist-Based Analysis ===============
     st.divider()
-    render_track_artist_analysis(loader, start_date, end_date, show_tables)
-
-    #  =============== Time-Based Analysis ===============
-    st.divider()
-    render_time_analysis(loader, start_date, end_date, show_tables)
-
-    # Raw Data Preview
-    if show_tables:
-        st.divider() # horizontal line
-        st.header("Raw Data Preview")
-        with st.spinner("Loading raw data..."):
-            raw_df = get_raw_df(loader.df, limit=100, start_date=start_date, end_date=end_date)
-            if not raw_df.is_empty():
-                st.dataframe(raw_df.to_pandas().set_axis(
-                        range(1, len(raw_df)+1), axis=0
-                    ),
-                    width="stretch"
-                )
-            else:
-                st.info("No data found for the selected date range.")
-
-if __name__ == "__main__":
-    # This is for standalone debugging only
-    st.set_page_config(page_title="Spotify AI Analytics", page_icon="🎵", layout="wide")
-    render_dashboard()
+    _recent_section()

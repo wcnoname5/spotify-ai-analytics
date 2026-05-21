@@ -29,6 +29,14 @@ The wizard will guide you through:
 - Importing your listening history
 - Registering with Claude Desktop
 
+### Launch the dashboard
+
+On Windows, double-click `scripts/run_dashboard.bat`.
+In Git Bash, macOS, or Linux, run `bash scripts/run_dashboard.sh` from the repo root.
+
+1. run `spotify-mcp doctor`
+2. if setup is incomplete, open `spotify-mcp setup`
+3. start Streamlit with `uv run streamlit run apps/web/ui/main_page.py`
 
 ### MCP connection in Claude Desktop (Recommended for GUI users)
 
