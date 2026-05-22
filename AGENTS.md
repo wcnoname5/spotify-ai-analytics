@@ -1,6 +1,6 @@
-# CLAUDE.md — Guide for Claude Code
+# Guide for Coding Agents
 
-This file tells Claude Code how to work in this repository.
+This file tells Coding Agents how to work in this repository.
 
 ---
 
@@ -8,9 +8,9 @@ This file tells Claude Code how to work in this repository.
 
 Spotify AI Analytics Agent. Combines:
 - LangGraph agent for NLP queries over Spotify history
+- MCP server for Claude Desktop/Code integration
 - Plotly dashboard for streaming history visualization
-- (Phase 1) MCP server for Claude Desktop/Code integration
-- (Phase 2) FastAPI + Streamlit web app
+- A LLM-based report analysis generation block based on the listening data
 
 **Current phase: Phase 1 — building MCP server.**
 
@@ -22,7 +22,7 @@ Spotify AI Analytics Agent. Combines:
 packages/core/        # Shared Python packages (analytics, agent, memory, db, spotify_client)
 packages/dataloader/  # Data ingestion (Polars + Pydantic)
 apps/mcp/             # MCP server entry point
-apps/web/             # Web app (Phase 2, skeleton only)
+apps/web/             # Web app (dashboard and report generation)
 data/                 # Local SQLite DBs and JSON exports — never commit data/*.db
 tests/                # Pytest suite
 ```
@@ -49,30 +49,6 @@ tests/                # Pytest suite
 - `packages/core` modules import from each other via package names (uv workspace)
 - `apps/mcp/` imports from `packages/core` only — no direct Spotify API calls
 - `apps/web/` imports from `packages/core` only
-
----
-
-## Memory Architecture (critical — read carefully)
-
-There are two separate LangGraph persistence objects. **Do not conflate them.**
-
-```python
-# SHORT-TERM: resets every new thread_id (new conversation)
-checkpointer = SqliteSaver.from_conn_string("data/checkpoints.db")
-
-# LONG-TERM: persists across all sessions, keyed by user_id
-store = SqliteStore.from_conn_string("data/ltm.db")
-```
-
-User preferences MUST go in `store`, not `checkpointer`.
-If a preference is stored in checkpointer state, it will vanish on the next conversation.
-
-LTM namespace convention:
-```python
-("user:{user_id}", "preferences")
-("user:{user_id}", "history_facts")
-("user:{user_id}", "feedback")
-```
 
 ---
 
@@ -112,11 +88,10 @@ uv run pytest -k "test_memory"         # run by keyword
 ```bash
 # Required for MCP and web both
 SPOTIFY_CLIENT_ID=
-SPOTIFY_CLIENT_SECRET=
-
-# Required for web only (Phase 2)
-GEMINI_API_KEY=       # or OPENAI_API_KEY
 TOKEN_ENCRYPT_KEY=    # Fernet key for token encryption
+
+# Required for web only
+GEMINI_API_KEY=       # or OPENAI_API_KEY
 
 # Optional
 LOG_LEVEL=INFO        # DEBUG for verbose output
