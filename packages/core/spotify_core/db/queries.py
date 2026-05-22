@@ -34,7 +34,7 @@ def _ensure_history_db(db_path: str) -> None:
 
 def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> None:
     """Raise ValueError on malformed dates; warn on illogical range."""
-    logger.debug("[Helper] _validate_date_range: %s to %s", start_date or "the beginning", end_date or "the end")
+    logger.debug("[Helper] _validate_date_range: {} to {}", start_date or "the beginning", end_date or "the end")
     for label, value in (("start_date", start_date), ("end_date", end_date)):
         if value is not None:
             try:
@@ -44,7 +44,7 @@ def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> 
                     f"arg {label}={value!r} must be ISO format 'YYYY-MM-DD'"
                 )
     if start_date and end_date and start_date > end_date:
-        logger.warning("start_date %s is after end_date %s - query will return no rows", start_date, end_date)
+        logger.warning("start_date {} is after end_date {} - query will return no rows", start_date, end_date)
 
 
 def _date_window(
@@ -85,7 +85,7 @@ def get_top_artists(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_top_artists: limit=%d start=%s end=%s", limit, start_date, end_date)
+    logger.debug("get_top_artists: limit={} start={} end={}", limit, start_date, end_date)
     where_clauses = ["artist_name IS NOT NULL"]
     date_clauses, params = _date_window(start_date, end_date)
     where_clauses += date_clauses
@@ -107,10 +107,10 @@ def get_top_artists(
     try:
         rows = conn.execute(sql, params).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_top_artists: returned %d artists", len(result))
+        logger.info("get_top_artists: returned {} artists", len(result))
         return result
     except Exception:
-        logger.exception("get_top_artists failed: db_path=%s", db_path)
+        logger.exception("get_top_artists failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -138,7 +138,7 @@ def get_top_tracks(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_top_tracks: limit=%d start=%s end=%s", limit, start_date, end_date)
+    logger.debug("get_top_tracks: limit={} start={} end={}", limit, start_date, end_date)
     where_clauses = ["track_name IS NOT NULL"]
     date_clauses, params = _date_window(start_date, end_date)
     where_clauses += date_clauses
@@ -163,10 +163,10 @@ def get_top_tracks(
     try:
         rows = conn.execute(sql, params).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_top_tracks: returned %d tracks", len(result))
+        logger.info("get_top_tracks: returned {} tracks", len(result))
         return result
     except Exception:
-        logger.exception("get_top_tracks failed: db_path=%s", db_path)
+        logger.exception("get_top_tracks failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -235,7 +235,7 @@ def _detect_tz_offset(conn) -> int:
         logger.debug("No conn_country data found; defaulting to UTC with offset 0")
         return 0 
     offset = _COUNTRY_UTC_OFFSET.get(row["conn_country"], 0)
-    logger.debug("Inferred timezone offset from conn_country %s: %s", row["conn_country"], offset)
+    logger.debug("Inferred timezone offset from conn_country {}: {}", row["conn_country"], offset)
     return offset
 
 
@@ -265,7 +265,7 @@ def get_listening_summary(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_listening_summary: start=%s end=%s", start_date, end_date)
+    logger.debug("get_listening_summary: start={} end={}", start_date, end_date)
     where_clauses, date_params = _date_window(start_date, end_date)
     params: list = [_SKIP_THRESHOLD_MS] + date_params
 
@@ -288,10 +288,10 @@ def get_listening_summary(
     try:
         row = conn.execute(sql, params).fetchone()
         result = dict(row)
-        logger.info("get_listening_summary: total_plays=%s", result.get("total_plays"))
+        logger.info("get_listening_summary: total_plays={}", result.get("total_plays"))
         return result
     except Exception:
-        logger.exception("get_listening_summary failed: db_path=%s", db_path)
+        logger.exception("get_listening_summary failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -310,7 +310,7 @@ def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False)
         plus "track_id": str when show_track_id is True.
     """
     _ensure_history_db(db_path)
-    logger.debug("get_recent_plays: limit=%d", limit)
+    logger.debug("get_recent_plays: limit={}", limit)
     id_col = ", track_id" if show_track_id else ""
     sql = f"""
         SELECT track_name, artist_name, album_name, played_at, ms_played{id_col}
@@ -322,10 +322,10 @@ def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False)
     try:
         rows = conn.execute(sql, (limit,)).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_recent_plays: returned %d rows", len(result))
+        logger.info("get_recent_plays: returned {} rows", len(result))
         return result
     except Exception:
-        logger.exception("get_recent_plays failed: db_path=%s", db_path)
+        logger.exception("get_recent_plays failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -360,7 +360,7 @@ def get_listening_patterns(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_listening_patterns: start=%s end=%s", start_date, end_date)
+    logger.debug("get_listening_patterns: start={} end={}", start_date, end_date)
     where_clauses, params = _date_window(start_date, end_date)
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
@@ -427,10 +427,10 @@ def get_listening_patterns(
             "most_active_date_total_ms": most_active_date_total_ms,
             "avg_plays_per_day": avg_plays_per_day,
         }
-        logger.info("get_listening_patterns: peak_hour=%s peak_day=%s", peak_hour, peak_day_of_week)
+        logger.info("get_listening_patterns: peak_hour={} peak_day={}", peak_hour, peak_day_of_week)
         return result
     except Exception:
-        logger.exception("get_listening_patterns failed: db_path=%s", db_path)
+        logger.exception("get_listening_patterns failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -438,18 +438,18 @@ def get_listening_patterns(
 
 def is_history_empty(db_path: str) -> bool:
     """Return True if the DB file is missing, has no listening_history table, or has zero rows."""
-    logger.debug("is_history_empty: db_path=%s", db_path)
+    logger.debug("is_history_empty: db_path={}", db_path)
     try:
         _ensure_history_db(db_path)
     except HistoryNotInitializedError as e:
-        logger.info("is_history_empty: %s", e)
+        logger.info("is_history_empty: {}", e)
         return True
 
     conn = get_connection(db_path)
     try:
         row = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()
         empty = row[0] == 0
-        logger.info("is_history_empty: %s (row_count=%d)", empty, row[0])
+        logger.info("is_history_empty: {} (row_count={})", empty, row[0])
         return empty
     finally:
         conn.close()
@@ -457,11 +457,11 @@ def is_history_empty(db_path: str) -> bool:
 
 def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
     """Return the earliest and latest played_at timestamps, or None if the DB is uninitialized."""
-    logger.debug("get_data_range: db_path=%s", db_path)
+    logger.debug("get_data_range: db_path={}", db_path)
     try:
         _ensure_history_db(db_path)
     except HistoryNotInitializedError as e:
-        logger.warning("get_data_range: %s", e)
+        logger.warning("get_data_range: {}", e)
         return None
 
     conn = get_connection(db_path)
@@ -471,7 +471,7 @@ def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
         ).fetchone()
         earliest = row["earliest"] if row else None
         latest = row["latest"] if row else None
-        logger.info("get_data_range: earliest=%s, latest=%s", earliest, latest)
+        logger.info("get_data_range: earliest={}, latest={}", earliest, latest)
         return (earliest, latest)
     finally:
         conn.close()
@@ -524,10 +524,10 @@ def _grouped_trend(
              "play_count": r["play_count"]}
             for r in rows
         ]
-        logger.info("_grouped_trend(%s): %d buckets", label_key, len(result))
+        logger.info("_grouped_trend({}): {} buckets", label_key, len(result))
         return result
     except Exception:
-        logger.exception("_grouped_trend failed: db_path=%s key=%s", db_path, label_key)
+        logger.exception("_grouped_trend failed: db_path={} key={}", db_path, label_key)
         raise
     finally:
         conn.close()
@@ -604,7 +604,7 @@ def get_daily_activity_pattern(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_daily_activity_pattern: start=%s end=%s", start_date, end_date)
+    logger.debug("get_daily_activity_pattern: start={} end={}", start_date, end_date)
     date_clauses, params = _date_window(start_date, end_date)
     where_sql = ("WHERE " + " AND ".join(date_clauses)) if date_clauses else ""
 
@@ -639,10 +639,10 @@ def get_daily_activity_pattern(
                 "total_ms": r["total_ms"] or 0,
             })
         result.sort(key=lambda d: (d["weekday_idx"], _SEGMENT_ORDER[d["segment"]]))
-        logger.info("get_daily_activity_pattern: %d (weekday, segment) rows", len(result))
+        logger.info("get_daily_activity_pattern: {} (weekday, segment) rows", len(result))
         return result
     except Exception:
-        logger.exception("get_daily_activity_pattern failed: db_path=%s", db_path)
+        logger.exception("get_daily_activity_pattern failed: db_path={}", db_path)
         raise
     finally:
         conn.close()

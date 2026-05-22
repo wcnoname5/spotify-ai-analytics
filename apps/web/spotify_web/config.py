@@ -36,6 +36,7 @@ def get_llm_config() -> dict:
          "default": {"provider": str, "model": str} | None}
     """
     models: list[dict] = []
+    # TODO: the os.getenv call in the future we may not load key from .env directly.
     if os.getenv("GEMINI_API_KEY"):
         models = [{"provider": "google", "model": m} for m in _GOOGLE_MODELS]
     return {"models": models, "default": models[0] if models else None}
