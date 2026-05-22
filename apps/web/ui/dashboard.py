@@ -21,6 +21,8 @@ from spotify_web.charts import daily_activity_figure, trend_figure
 from spotify_web.config import get_sync_args
 from spotify_web.formatting import format_duration_ms, spotify_uri_to_url
 
+from ai_block import render_ai_block
+
 _DB_PATH = str(settings.history_db_path)
 _CACHE_TTL = 30
 
@@ -251,3 +253,5 @@ def render_dashboard() -> None:
 
     st.divider()
     _recent_section()
+
+    render_ai_block(start, end)
