@@ -1,6 +1,6 @@
 """MCP tools that talk to the live Spotify Web API (playback + playlists)."""
-import logging
 from typing import Annotated, List, Optional
+from loguru import logger
 
 from pydantic import Field
 from fastmcp import FastMCP
@@ -14,9 +14,6 @@ from spotify_mcp.config import (
     get_fernet_key,
     make_client,
 )
-
-logger = logging.getLogger(__name__)
-
 
 def _make_tools(client, user_id: str):
     '''

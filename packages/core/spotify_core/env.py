@@ -7,13 +7,10 @@ remain thin wrappers that only call these helpers.
 from __future__ import annotations
 
 import os
-import logging
 from dotenv import load_dotenv
+from loguru import logger
 
 from spotify_core import paths
-
-logger = logging.getLogger(__name__)
-
 
 def ensure_dotenv_loaded() -> None:
     """Load the platform config `.env` if present, then a cwd .env fallback.

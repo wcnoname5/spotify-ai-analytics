@@ -3,14 +3,12 @@
 All functions take a db_path and return plain Python structures —
 no Polars or in-memory data loading required.
 """
-import logging
 import os
+from loguru import logger
 from datetime import datetime
 from typing import Optional
 from .errors import HistoryNotInitializedError
 from .migrations import get_connection
-
-logger = logging.getLogger(__name__)
 
 _DATE_FMT = "%Y-%m-%d"
 

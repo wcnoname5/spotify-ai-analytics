@@ -9,10 +9,10 @@ Required environment variables:
     SPOTIFY_CLIENT_ID   — Spotify app client ID
     TOKEN_ENCRYPT_KEY   — Fernet key bytes (base64-encoded) for token encryption
 """
-import logging
 import os
 
 from dotenv import load_dotenv
+from loguru import logger
 
 from spotify_core import paths
 from spotify_core.logging import setup_mcp_logging
@@ -23,10 +23,8 @@ if paths.env_file().exists():
     load_dotenv(paths.env_file())
 load_dotenv(override=False)
 
-_raw_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
-_log_file = setup_mcp_logging(level=logging.getLevelNamesMapping().get(_raw_level, logging.DEBUG))
-logger = logging.getLogger(__name__)
-logger.info("Logging to %s", _log_file)
+_log_file = setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
+logger.info("Logging to {}", _log_file)
 
 if not get_client_id():
     logger.warning("SPOTIFY_CLIENT_ID is not set. Set it in .env or as an environment variable.")

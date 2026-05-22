@@ -5,8 +5,8 @@ picker (tkinter filedialog). On headless systems where Tk can't open a
 window, falls back to scanning cwd. Power users can pass
 `spotify-mcp import-history --from <path>` to skip the prompt entirely.
 """
-import logging
 import os
+from loguru import logger
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -14,8 +14,6 @@ from rich.console import Console
 from rich.panel import Panel
 
 from spotify_core import paths
-
-log = logging.getLogger(__name__)
 
 _REQUEST_BANNER = (
     "[bold]Recommended:[/bold] request your full Spotify listening history from Spotify Privacy.\n"

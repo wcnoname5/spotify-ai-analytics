@@ -1,8 +1,8 @@
 """Shared helpers for the MCP server layer (not part of core — MCP-specific only)."""
 from __future__ import annotations
 
-import logging
 from datetime import datetime
+from loguru import logger
 from typing import Callable, Optional
 
 from spotify_core.db.errors import HistoryNotInitializedError
@@ -11,9 +11,6 @@ from spotify_core.spotify_client.errors import (
     SpotifyNoActiveDeviceError,
     SpotifyPremiumRequiredError,
 )
-
-logger = logging.getLogger(__name__)
-
 
 def utc_iso_to_local(utc_iso: str | None) -> str | None:
     """Convert a UTC ISO timestamp (e.g. '2024-01-15T08:30:00Z') to the system local timezone.

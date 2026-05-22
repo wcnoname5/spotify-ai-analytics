@@ -1,13 +1,11 @@
 """Pure resource factory. No Streamlit dependency."""
-import logging
 from typing import Optional, Tuple
+from loguru import logger
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from spotify_dataloader import SpotifyDataLoader
 from .tools import initialize_tools
 from ..config import settings
-
-logger = logging.getLogger(__name__)
 
 def build_llm(provider: str, api_key: str):
     """Build LLM instance from provider name and API key."""

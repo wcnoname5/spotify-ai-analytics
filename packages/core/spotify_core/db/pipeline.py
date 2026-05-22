@@ -1,7 +1,7 @@
 """Data pipeline: initialize, import, sync, and inspect the history DB."""
 import hashlib
-import logging
 import sqlite3
+from loguru import logger
 import subprocess
 import tempfile
 from datetime import datetime, timezone
@@ -12,8 +12,6 @@ from spotify_dataloader.data_loader import SpotifyDataLoader
 from .migrations import init_history_db as _migrations_init_history_db, get_connection
 from ..spotify_client.client import SpotifyClient
 from ..spotify_client.token_store import load_tokens
-
-logger = logging.getLogger(__name__)
 
 _CHEATSHEET = """
 === Spotify History DB — Quick Reference ===

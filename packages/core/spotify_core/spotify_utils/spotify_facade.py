@@ -9,14 +9,11 @@ Errors propagate as typed exceptions from ``spotify_core.spotify_client.errors``
 ``httpx.HTTPStatusError`` for other non-2xx responses. The presentation layer
 (MCP server, agent) is responsible for converting them into user-facing responses.
 """
-import logging
 from typing import Optional, List
+from loguru import logger
 
 from ..spotify_client.client import SpotifyClient
 from ..db.pipeline import sync_api_to_db
-
-logger = logging.getLogger(__name__)
-
 
 class SpotifyToolFacade:
     """

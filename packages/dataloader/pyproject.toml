@@ -20,6 +20,7 @@ dependencies = [
     "polars>=1.0",
     "pydantic>=2.0",
     "tzdata>=2024.1; sys_platform == 'win32'",
+    "loguru>=0.7",
 ]
 
 [project.urls]

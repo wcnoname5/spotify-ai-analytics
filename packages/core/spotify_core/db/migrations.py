@@ -1,12 +1,9 @@
 """Database initialization and migration utilities."""
 import sqlite3
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import Union
 from .schema import ALL_DDL, HISTORY_DDL, SPOTIFY_TOKENS_DDL
-
-logger = logging.getLogger(__name__)
-
 
 def init_db(db_path: Union[str, Path]) -> None:
     """Create all tables and indexes if they don't exist.

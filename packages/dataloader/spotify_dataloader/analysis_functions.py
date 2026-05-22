@@ -1,9 +1,7 @@
 import polars as pl
-import logging
+from loguru import logger
 from typing import Literal, Optional, Dict, TypedDict, Any, List, Union
 from datetime import date
-
-logger = logging.getLogger(__name__)
 
 class SummaryStats(TypedDict):
     total_records: int

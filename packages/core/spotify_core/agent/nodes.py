@@ -1,6 +1,6 @@
 import json
-import logging
 from datetime import datetime
+from loguru import logger
 from typing import Dict, Any, List
 from langchain_core.messages import ToolMessage, AIMessage
 
@@ -13,7 +13,6 @@ def make_nodes(llm, tools_list: list, tool_executor: dict):
 
     def intent_parser(state: AgentState) -> Dict[str, Any]:
         """Parse the user's intent and generate a strategic execution plan."""
-        logger = logging.getLogger(f'{__name__}.intent_parser')
         logger.info(f"Planning for input: {state['input']}")
 
         if llm is None:
@@ -35,7 +34,6 @@ def make_nodes(llm, tools_list: list, tool_executor: dict):
 
     def data_fetch(state: AgentState) -> Dict[str, Any]:
         """Execute tools based on the plan."""
-        logger = logging.getLogger(f'{__name__}.data_fetch')
         plan = state.get("plan")
         if not plan or not plan.tool_plan:
             return {"messages": []}
@@ -84,7 +82,6 @@ def make_nodes(llm, tools_list: list, tool_executor: dict):
 
     def analyst_node(state: AgentState) -> Dict[str, Any]:
         """Synthesize the final response."""
-        logger = logging.getLogger(f'{__name__}.analyst_node')
         if state.get("final_response"):
             return {"final_response": state["final_response"]}
 

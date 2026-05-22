@@ -3,8 +3,8 @@
 Covers DB write tools (sync_history, import_history_from_json) and analytics
 read tools (get_recent_playback, get_top_artists/tracks, get_listening_summary).
 """
-import logging
 from typing import Annotated, Optional
+from loguru import logger
 
 from pydantic import Field
 from fastmcp import FastMCP
@@ -19,9 +19,6 @@ from spotify_mcp.config import (
     get_client_id,
     get_fernet_key,
 )
-
-logger = logging.getLogger(__name__)
-
 
 def register(mcp: FastMCP) -> None:
     """Attach DB CRUD + analytics tools to the given FastMCP server."""

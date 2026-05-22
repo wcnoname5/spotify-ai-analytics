@@ -12,7 +12,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import logging
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Annotated, Optional
@@ -25,7 +24,7 @@ from spotify_mcp.wizard import history_import as _history_import
 from spotify_mcp.wizard import oauth_step as _oauth_step
 from spotify_mcp.wizard import state as _state
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 console = Console()
 
@@ -197,7 +196,6 @@ def path() -> None:
 @app.command()
 def serve() -> None:
     """Start the MCP server over stdio (invoked by Claude Desktop)."""
-    import logging
     import os
 
     from spotify_core import paths
@@ -207,8 +205,7 @@ def serve() -> None:
     paths.ensure_dirs()
     ensure_dotenv_loaded()
 
-    _raw_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
-    setup_mcp_logging(level=logging.getLevelNamesMapping().get(_raw_level, logging.DEBUG))
+    setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
 
     from spotify_mcp._mcp import main
     main()

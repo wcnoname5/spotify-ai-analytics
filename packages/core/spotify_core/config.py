@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import Optional
 
@@ -54,7 +54,6 @@ class Settings(BaseSettings):
         return v
 
     def validate_paths(self):
-        logger = logging.getLogger(__name__)
         if not self.spotify_data_path.exists():
             logger.warning("SPOTIFY_DATA_PATH not found: %s", self.spotify_data_path)
             logger.warning("Place your Streaming_History_Audio_*.json files there.")

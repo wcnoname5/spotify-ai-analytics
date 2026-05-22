@@ -3,8 +3,8 @@
 Tokens are encrypted before writing to SQLite and decrypted only here,
 inside the spotify_client module boundary.
 """
-import logging
 from contextlib import closing
+from loguru import logger
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Union
@@ -15,9 +15,6 @@ from .errors import (
     SpotifyAuthError,
 )
 from spotify_core.db.migrations import get_connection
-
-logger = logging.getLogger(__name__)
-
 
 def _parse_expires_at(raw: str) -> datetime:
     try:

@@ -3,8 +3,8 @@
 All Spotify API calls must go through this module — no direct httpx/requests
 calls to Spotify from other packages.
 """
-import logging
 from pathlib import Path
+from loguru import logger
 from typing import Optional, Sequence, Union
 
 import httpx
@@ -15,8 +15,6 @@ from .errors import (
     SpotifyPremiumRequiredError,
 )
 from .token_store import load_tokens, save_tokens, is_token_expired
-
-logger = logging.getLogger(__name__)
 
 BASE_URL = "https://api.spotify.com/v1"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"

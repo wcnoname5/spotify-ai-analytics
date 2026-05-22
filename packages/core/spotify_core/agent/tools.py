@@ -2,8 +2,8 @@
 Query tools for Spotify analytics agent.
 Provides structured tools for querying and aggregating listening history data.
 """
-import logging
 import polars as pl
+from loguru import logger
 from typing import Optional, Any, List, Dict
 from langchain_core.tools import tool
 from .schemas import ToolFreeQueryArgs, ToolFreeAggrgateArgs
@@ -25,13 +25,6 @@ class SpotifyQueryTools:
             data_loader: SpotifyDataLoader instance with loaded data
         """
         self.loader = data_loader
-        self._logger_prefix = (
-            f"{self.__class__.__module__}."
-            f"{self.__class__.__name__}"
-        )
-
-    def _get_logger(self, method_name: str):
-        return logging.getLogger(f"{self._logger_prefix}.{method_name}")
 
     def _check_limit(self, limit: Optional[int]):
         """
@@ -54,7 +47,6 @@ class SpotifyQueryTools:
             'unique_tracks'
             'unique_artists'
         """
-        logger = self._get_logger('get_summary_stats')
         logger.info("Getting listening history summary statistics")
         summary = analysis_functions.get_summary(self.loader.df)
         summary.pop("columns", None)  # Remove raw data from summary
@@ -72,7 +64,6 @@ class SpotifyQueryTools:
         Returns:
             List of dictionaries containing top artists and their total listening time
         """
-        logger = self._get_logger('get_top_artists')
         logger_msg = f"Getting top {limit} artists"
         if start_date:
             logger_msg += f" from {start_date}"
@@ -115,7 +106,6 @@ class SpotifyQueryTools:
         Returns:
             List of dictionaries containing top tracks
         """
-        logger = self._get_logger('get_top_tracks')
         logger_msg = f"Getting top {limit} tracks"
         if artist:
             logger_msg += f" for artist: {artist}"
@@ -159,7 +149,6 @@ class SpotifyQueryTools:
         Returns:
             List of dictionaries containing listening activity by time
         """
-        logger = self._get_logger('get_listening_by_time')
         valid_groups = ["hour", "month", "weekday"]
         if group_by not in valid_groups:
             group_by = "hour"
@@ -197,7 +186,6 @@ class SpotifyQueryTools:
              "limit": 3
             }
         """
-        logger = self._get_logger('free_query')
         logger.info(f"Executing free query with where: {where}, select: {select}, limit: {limit}")
         self._check_limit(limit)
 
@@ -245,7 +233,6 @@ class SpotifyQueryTools:
             descending = True,
             }
         """
-        logger = self._get_logger('free_aggregate')
         logger.info(f"Executing free aggregate with group_by: {group_by}, metrics: {metrics}, limit: {limit}")
         self._check_limit(limit)
 
@@ -299,8 +286,6 @@ def initialize_tools(loader: Optional[SpotifyDataLoader] = None):
     Returns:
         List of LangChain tools.
     """
-    logger = logging.getLogger(f'{__name__}.initialize_tools')
-
     # If loader is provided (injected), use it
     if loader is not None:
         logger.info("Using injected SpotifyDataLoader instance")

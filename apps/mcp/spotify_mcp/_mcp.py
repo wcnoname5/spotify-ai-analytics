@@ -4,8 +4,8 @@ This module owns the FastMCP app object so it can be imported by both the
 development entry point (apps/mcp/server.py) and the `spotify-mcp serve`
 CLI command without duplicating server logic.
 """
-import logging
 import sys
+from loguru import logger
 from contextlib import asynccontextmanager
 
 from fastmcp import FastMCP
@@ -13,9 +13,6 @@ from fastmcp import FastMCP
 from spotify_mcp import db_crud, spotify_control
 from spotify_mcp.config import get_client_id, get_fernet_key
 from spotify_mcp.prompts import register_prompts
-
-logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):

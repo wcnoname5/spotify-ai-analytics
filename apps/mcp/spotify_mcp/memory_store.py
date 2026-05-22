@@ -3,16 +3,13 @@
 Backed by langgraph's SqliteStore so the same memory file can be shared with
 the LangGraph agent in Phase 2 (see ARCHITECTURE.md §4.2).
 """
-import logging
 from typing import Annotated
+from loguru import logger
 
 from pydantic import Field
 from fastmcp import FastMCP
 
 from spotify_mcp.config import DEFAULT_USER_ID, LTM_DB
-
-logger = logging.getLogger(__name__)
-
 
 def register(mcp: FastMCP) -> None:
     # TODO: the memory schemas are still unstable. need to imporve error handling and validation here before opening to users.

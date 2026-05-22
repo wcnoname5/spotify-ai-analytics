@@ -3,11 +3,9 @@
 Each check reads the *current* state from disk/env and returns a bool. Used by
 the wizard to skip already-completed steps and by `spotify-mcp doctor`.
 """
-import logging
 import os
+from loguru import logger
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 from spotify_core import env_file, paths
 

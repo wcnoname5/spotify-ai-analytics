@@ -1,8 +1,8 @@
 """
 Data loader module for Spotify JSON history files.
 """
-import logging
 import polars as pl
+from loguru import logger
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Literal
 from pydantic import ValidationError
@@ -37,18 +37,10 @@ class SpotifyDataLoader:
         self.file_pattern = file_pattern
         self.strict_validation = strict_validation
 
-        # intialize logging pattern
-        self._logger_prefix = (
-            f"{self.__class__.__module__}."
-            f"{self.__class__.__name__}"
-        )
         # initialize df
         self._df: pl.DataFrame | None = None
         self._is_initialized: bool = False
         # NOTE: Lazy loading - initialize_data() is called on first access via the df property
-
-    def _get_logger(self, method_name: str):
-        return logging.getLogger(f"{self._logger_prefix}.{method_name}")
 
     # methods to get dataframes
     @property
@@ -69,7 +61,6 @@ class SpotifyDataLoader:
         """
         Process raw JSON data into a structured Polars DataFrame.
         """
-        logger = self._get_logger('initialize_data')
         logger.info("Processing raw JSON data into structured DataFrame")
         df = self._read_json_files(self.data_dir, self.file_pattern)
         if df.is_empty():
@@ -79,7 +70,6 @@ class SpotifyDataLoader:
 
     def _read_json_files(self, directory: Path, pattern: str = "Streaming*.json") -> pl.DataFrame:
         """Read JSON files in a directory matching the pattern into a Polars DataFrame."""
-        logger = self._get_logger('_read_json_files')
         # Use rglob to recursively find files matching the pattern
         json_files = list(directory.rglob(pattern))
         logger.info(f"Found {len(json_files)} JSON files matching '{pattern}' in {directory}")
@@ -110,7 +100,6 @@ class SpotifyDataLoader:
         """
         Normalize Spotify history to the standard schema with staged validation.
         """
-        logger = self._get_logger('_preprocess')
         initial_count = df.height
         logger.info(f"Starting preprocessing of {initial_count} raw records")
 
@@ -188,7 +177,6 @@ class SpotifyDataLoader:
             model_class: Pydantic model class to validate against
             sample_size: Number of records to sample (default: 10)
         """
-        logger = self._get_logger('_validate_sample')
         if df.is_empty():
             return
 

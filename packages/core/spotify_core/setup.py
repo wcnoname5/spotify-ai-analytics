@@ -1,15 +1,12 @@
 """Project setup workflow: init DBs, generate encryption key, run OAuth, import JSON history."""
-import logging
 import os
+from loguru import logger
 import re
 from pathlib import Path
 
 from spotify_core.config import settings
 from spotify_core.db.migrations import init_ltm_db, init_tokens_db
 from spotify_core.db.pipeline import import_json_to_db, init_history_db
-
-logger = logging.getLogger(__name__)
-
 
 def run_setup(
     user_id: str | None = None,
