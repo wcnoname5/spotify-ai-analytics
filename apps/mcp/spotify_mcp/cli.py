@@ -132,16 +132,14 @@ def sync(
     """
     import os
 
-    from dotenv import load_dotenv
-
     from spotify_core import env_file as _env_file
     from spotify_core import paths
     from spotify_core.logging import setup_logging
+    # Importing spotify_mcp.config runs ensure_dotenv_loaded() at module import,
+    # so .env is already in os.environ by the time this line returns.
     from spotify_mcp.config import DB_PATH, TOKENS_DB, get_client_id, get_fernet_key
 
     paths.ensure_dirs()
-    if paths.env_file().exists():
-        load_dotenv(paths.env_file())
 
     # Setup logging
     level = logging.DEBUG if verbose else logging.getLevelNamesMapping().get(
@@ -190,12 +188,8 @@ def sync(
 @app.command()
 def path() -> None:
     """Print the default path to save the local SQLite database and Configuration files"""
-    from dotenv import load_dotenv
-
     from spotify_core import paths
 
-    if paths.env_file().exists():
-        load_dotenv(paths.env_file())
     config_dir = paths.config_dir()
     data_dir = paths.data_dir()
     console.print(f"[yellow]Config directory: {config_dir}; Data directory: {data_dir}[/yellow]")
@@ -206,15 +200,12 @@ def serve() -> None:
     import logging
     import os
 
-    from dotenv import load_dotenv
-
     from spotify_core import paths
+    from spotify_core.env import ensure_dotenv_loaded
     from spotify_core.logging import setup_mcp_logging
 
     paths.ensure_dirs()
-    if paths.env_file().exists():
-        load_dotenv(paths.env_file())
-    load_dotenv(override=False)
+    ensure_dotenv_loaded()
 
     _raw_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
     setup_mcp_logging(level=logging.getLevelNamesMapping().get(_raw_level, logging.DEBUG))

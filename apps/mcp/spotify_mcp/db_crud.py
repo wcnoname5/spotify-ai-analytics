@@ -188,7 +188,7 @@ def register(mcp: FastMCP) -> None:
 
         Returns:
             List of {"artist_name": str, "total_ms": int, "play_count": int}, ordered by total_ms desc.
-            If the DB is empty, returns [{"warning": ..., "next_steps": [...]}].
+            If the DB is empty, returns [{"warning": ...}].
         """
         logger.debug("[Tool] get_top_artists: limit=%d start=%s end=%s", limit, start_date, end_date)
         if is_history_empty(DB_PATH):
@@ -234,7 +234,7 @@ def register(mcp: FastMCP) -> None:
         Returns:
             List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int},
             plus "track_id": str when show_track_id is true. Ordered by play_count desc.
-            If the DB is empty, returns [{"warning": ..., "next_steps": [...]}].
+            If the DB is empty, returns [{"warning": ... }].
         """
         logger.debug("[Tool] get_top_tracks: limit=%d start=%s end=%s show_track_id=%s", limit, start_date, end_date, show_track_id)
         if is_history_empty(DB_PATH):

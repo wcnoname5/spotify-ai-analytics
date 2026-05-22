@@ -1,34 +1,12 @@
 """Sync-credential resolution for the dashboard's Sync button.
 
-Mirrors apps/mcp/spotify_mcp/config.py: SPOTIFY_CLIENT_ID and TOKEN_ENCRYPT_KEY
-are read from the environment (after loading the platformdirs .env), while the
-DB paths and user id come from spotify_core.config.settings.
+SPOTIFY_CLIENT_ID and TOKEN_ENCRYPT_KEY are read from the environment (after
+loading the platformdirs .env), while DB paths and user id come from settings.
 """
-import os
+from spotify_core.env import ensure_dotenv_loaded, get_client_id, get_fernet_key
 
-from dotenv import load_dotenv
-
-from spotify_core import paths
-
-# Platformdirs .env wins; a cwd .env is a dev-convenience fallback only.
-if paths.env_file().exists():
-    load_dotenv(paths.env_file())
-load_dotenv(override=False)
-
-# Imported after load_dotenv so settings sees the platformdirs .env, matching
-# apps/mcp/spotify_mcp/config.py.
+ensure_dotenv_loaded()
 from spotify_core.config import settings
-
-
-def get_client_id() -> str:
-    """Read SPOTIFY_CLIENT_ID from the environment at call time."""
-    return os.getenv("SPOTIFY_CLIENT_ID", "")
-
-
-def get_fernet_key() -> bytes:
-    """Read TOKEN_ENCRYPT_KEY from the environment at call time, as bytes."""
-    raw = os.getenv("TOKEN_ENCRYPT_KEY", "")
-    return raw.encode() if raw else b""
 
 
 def get_sync_args() -> dict:
