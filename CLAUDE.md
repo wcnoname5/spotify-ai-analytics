@@ -93,6 +93,12 @@ TOKEN_ENCRYPT_KEY=    # Fernet key for token encryption
 # Required for web only
 GEMINI_API_KEY=       # or OPENAI_API_KEY
 
+# AI report block (apps/web) — all optional; absence degrades gracefully
+GOOGLE_API_KEY=        # LLM provider for the AI report block (v1)
+LANGFUSE_PUBLIC_KEY=   # Langfuse tracing (all 3 keys needed, or none)
+LANGFUSE_SECRET_KEY=
+LANGFUSE_HOST=
+
 # Optional
 LOG_LEVEL=INFO        # DEBUG for verbose output
 ```
