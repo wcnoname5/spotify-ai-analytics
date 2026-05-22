@@ -69,6 +69,19 @@ def _recent():
     return get_recent_plays(_DB_PATH, limit=50, show_track_id=True)
 
 
+def _format_played_at(played_at: str | None) -> str | None:
+    if played_at is None:
+        return None
+    try:
+        return (
+            datetime.datetime.fromisoformat(played_at.replace("Z", "+00:00"))
+            .astimezone()
+            .strftime("%Y-%m-%d %H:%M")
+        )
+    except (TypeError, ValueError):
+        return played_at
+
+
 def _period_dates() -> tuple[str, str]:
     """Render the period filter; return (start_iso, end_iso) date strings."""
     today = datetime.date.today()
@@ -184,7 +197,7 @@ def _recent_section() -> None:
     st.dataframe(
         [
             {
-                "Played at": r["played_at"],
+                "Played at": _format_played_at(r["played_at"]),
                 "Track": r["track_name"],
                 "Artist": r["artist_name"],
                 "Album": r["album_name"],
