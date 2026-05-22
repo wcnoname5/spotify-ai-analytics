@@ -125,7 +125,6 @@ with:
 GEMINI_API_KEY=your_gemini_api_key_here
 
 # AI report block (apps/web) — all optional; absence degrades gracefully
-GOOGLE_API_KEY=
 ANTHROPIC_API_KEY=
 LANGFUSE_PUBLIC_KEY=
 LANGFUSE_SECRET_KEY=
@@ -151,7 +150,6 @@ with:
 GEMINI_API_KEY=       # or OPENAI_API_KEY
 
 # AI report block (apps/web) — all optional; absence degrades gracefully
-GOOGLE_API_KEY=        # LLM provider for the AI report block (v1)
 LANGFUSE_PUBLIC_KEY=   # Langfuse tracing (all 3 keys needed, or none)
 LANGFUSE_SECRET_KEY=
 LANGFUSE_HOST=
@@ -549,7 +547,7 @@ git commit -m "feat: add report data tools wrapping db/queries"
 
 ## Task 4: Provider factory — `report/models.py`
 
-`build_chat_model(provider, model)` dispatches on a provider name. Google is implemented; OpenAI/Anthropic are skeletons. `_GOOGLE_API_KEY` is resolved once at module import.
+`build_chat_model(provider, model)` dispatches on a provider name. Google is implemented; OpenAI/Anthropic are skeletons. `_GEMINI_API_KEY` is resolved once at module import.
 
 _(TDD: verify tests fail before implementing, pass after.)_
 
@@ -560,7 +558,7 @@ Create `tests/core/test_report_models.py`:
 ```python
 """Tests for spotify_core.report.models.build_chat_model.
 
-_GOOGLE_API_KEY is resolved at module import, so the tests patch the module
+_GEMINI_API_KEY is resolved at module import, so the tests patch the module
 attribute directly (monkeypatch.setattr) rather than the environment.
 """
 import pytest
@@ -570,15 +568,15 @@ from spotify_core.report.models import build_chat_model
 
 
 def test_google_returns_chat_model(monkeypatch):
-    monkeypatch.setattr(models, "_GOOGLE_API_KEY", "fake-key")
+    monkeypatch.setattr(models, "_GEMINI_API_KEY", "fake-key")
     chat = build_chat_model("google", "gemini-2.5-flash")
     from langchain_google_genai import ChatGoogleGenerativeAI
     assert isinstance(chat, ChatGoogleGenerativeAI)
 
 
 def test_google_missing_key_raises(monkeypatch):
-    monkeypatch.setattr(models, "_GOOGLE_API_KEY", None)
-    with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
+    monkeypatch.setattr(models, "_GEMINI_API_KEY", None)
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
         build_chat_model("google", "gemini-2.5-flash")
 
 
@@ -620,7 +618,7 @@ from ..env import ensure_dotenv_loaded
 # Kept at module scope (not inside build_chat_model) so a future config source
 # other than .env can be swapped in here without touching the factory.
 ensure_dotenv_loaded()
-_GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 def build_chat_model(provider: str, model: str) -> BaseChatModel:
@@ -636,15 +634,15 @@ def build_chat_model(provider: str, model: str) -> BaseChatModel:
     """
     logger.debug("build_chat_model: provider={} model={}", provider, model)
     if provider == "google":
-        if not _GOOGLE_API_KEY:
+        if not _GEMINI_API_KEY:
             raise ValueError(
-                "GOOGLE_API_KEY is not set. Add it to your .env to use the "
+                "GEMINI_API_KEY is not set. Add it to your .env to use the "
                 "AI report block."
             )
         from langchain_google_genai import ChatGoogleGenerativeAI
         logger.info("build_chat_model: ChatGoogleGenerativeAI model={}", model)
         return ChatGoogleGenerativeAI(
-            model=model, temperature=0.7, google_api_key=_GOOGLE_API_KEY
+            model=model, temperature=0.7, google_api_key=_GEMINI_API_KEY
         )
     if provider == "openai":
         # TODO: implement the OpenAI provider branch (ChatOpenAI).
@@ -1249,7 +1247,7 @@ from spotify_web.config import get_llm_config
 
 
 def test_get_llm_config_lists_google_models_when_key_set(monkeypatch):
-    monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
     config = get_llm_config()
     assert config["models"]
     assert all(m["provider"] == "google" for m in config["models"])
@@ -1257,7 +1255,7 @@ def test_get_llm_config_lists_google_models_when_key_set(monkeypatch):
 
 
 def test_get_llm_config_empty_without_key(monkeypatch):
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     config = get_llm_config()
     assert config["models"] == []
     assert config["default"] is None
@@ -1298,7 +1296,7 @@ def get_sync_args() -> dict:
 def get_llm_config() -> dict:
     """Return the LLM choices available to the AI report block.
 
-    Inspects the environment for provider API keys. In v1 only GOOGLE_API_KEY
+    Inspects the environment for provider API keys. In v1 only GEMINI_API_KEY
     yields usable models.
 
     Returns:
@@ -1306,7 +1304,7 @@ def get_llm_config() -> dict:
          "default": {"provider": str, "model": str} | None}
     """
     models: list[dict] = []
-    if os.getenv("GOOGLE_API_KEY"):
+    if os.getenv("GEMINI_API_KEY"):
         models = [{"provider": "google", "model": m} for m in _GOOGLE_MODELS]
     return {"models": models, "default": models[0] if models else None}
 ```
@@ -1378,7 +1376,7 @@ def render_ai_block(default_start: str, default_end: str) -> None:
     llm_config = get_llm_config()
     if not llm_config["models"]:
         st.info(
-            "尚未設定 LLM 金鑰。請在 .env 加入 `GOOGLE_API_KEY` 後重新啟動，"
+            "尚未設定 LLM 金鑰。請在 .env 加入 `GEMINI_API_KEY` 後重新啟動，"
             "即可使用 AI 分析。"
         )
         return
@@ -1481,7 +1479,7 @@ Expected: PASS — all `tests/core/test_report_*.py` and `tests/web/test_web_con
 
 - [ ] **Step 7: Manual smoke-test the AI block**
 
-Set `GOOGLE_API_KEY` in your platform `.env` (`uv run python -c "from spotify_core import paths; print(paths.env_file())"` prints its path).
+Set `GEMINI_API_KEY` in your platform `.env` (`uv run python -c "from spotify_core import paths; print(paths.env_file())"` prints its path).
 
 Run: `uv run streamlit run apps/web/ui/main_page.py --server.headless true`
 
@@ -1490,7 +1488,7 @@ Open the URL, scroll to the bottom of the Dashboard. Confirm:
 - Style and model dropdowns render; date inputs default to the dashboard period.
 - Clicking "✨ 產生分析" shows a spinner, then renders a Markdown article and a status caption.
 - If Langfuse keys are set, a "在 Langfuse 查看追蹤" link appears.
-- Temporarily unset `GOOGLE_API_KEY` and restart — confirm the "尚未設定 LLM 金鑰" notice appears.
+- Temporarily unset `GEMINI_API_KEY` and restart — confirm the "尚未設定 LLM 金鑰" notice appears.
 
 Stop the server with Ctrl+C.
 
