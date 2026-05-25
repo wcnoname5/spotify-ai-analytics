@@ -19,7 +19,9 @@ from spotify_core.db.queries import (
 )
 from spotify_web.charts import daily_activity_figure, trend_figure
 from spotify_web.config import get_sync_args
-from spotify_web.formatting import format_duration_ms, spotify_uri_to_url
+from spotify_web.formatting import format_duration_mins, spotify_uri_to_url
+
+from ai_block import render_ai_block
 
 _DB_PATH = str(settings.history_db_path)
 _CACHE_TTL = 30
@@ -134,7 +136,7 @@ def _stats_section(start: str, end: str) -> None:
                 [
                     {
                         "Artist": a["artist_name"],
-                        "Listening time": format_duration_ms(a["total_ms"]),
+                        "Listening time": format_duration_mins(a["total_mins"]),
                     }
                     for a in artists
                 ],
@@ -231,7 +233,7 @@ def render_dashboard() -> None:
     summary = _summary(start, end)
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Plays", f"{summary['total_plays']:,}")
-    m2.metric("Listening time", format_duration_ms(summary["total_ms_played"]))
+    m2.metric("Listening time", format_duration_mins(summary["total_mins_played"]))
     m3.metric("Unique artists", f"{summary['unique_artists'] or 0:,}")
     m4.metric("Unique tracks", f"{summary['unique_tracks'] or 0:,}")
 
@@ -251,3 +253,5 @@ def render_dashboard() -> None:
 
     st.divider()
     _recent_section()
+
+    render_ai_block(start, end)

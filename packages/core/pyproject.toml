@@ -34,6 +34,13 @@ agent = [
     "langchain-openai>=1.0",
     "langchain-google-genai>=4.0",
 ]
+report = [
+    "langgraph>=1.0",
+    "langchain-core>=1.0",
+    "langchain-google-genai>=4.0",
+    "langfuse>=3.0",
+    "loguru>=0.7",
+]
 
 [project.urls]
 Homepage = "https://github.com/wcnoname5/spotify-ai-analytics"

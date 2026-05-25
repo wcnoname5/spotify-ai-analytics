@@ -21,12 +21,12 @@ def daily_activity_figure(rows: list[dict]) -> go.Figure:
 
     Args:
         rows: Output of queries.get_daily_activity_pattern - dicts with
-            "weekday", "weekday_idx", "segment", "total_ms".
+            "weekday", "weekday_idx", "segment", "total_mins".
     """
     fig = go.Figure()
     for segment in _SEGMENT_ORDER:
         minutes_by_day = {
-            r["weekday"]: round((r["total_ms"] or 0) / 60_000)
+            r["weekday"]: r["total_mins"] or 0
             for r in rows
             if r["segment"] == segment
         }
@@ -58,7 +58,7 @@ def trend_figure(rows: list[dict], label_key: str, granularity: str) -> go.Figur
     fig = go.Figure(
         go.Bar(
             x=[r[label_key] for r in rows],
-            y=[round((r["total_ms"] or 0) / 60_000) for r in rows],
+            y=[r["total_mins"] or 0 for r in rows],
             marker_color="rgba(30, 160, 90, 0.85)",
         )
     )

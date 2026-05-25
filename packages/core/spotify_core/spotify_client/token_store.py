@@ -63,7 +63,7 @@ def save_tokens(
         )
         conn.commit()
 
-    logger.info("Tokens saved for user %s", user_id)
+    logger.info("Tokens saved for user {}", user_id)
 
 
 def load_tokens(
@@ -99,7 +99,7 @@ def load_tokens(
 
 
     if row is None:
-        logger.debug("No token row found for user %s", user_id)
+        logger.debug("No token row found for user {}", user_id)
         return None
 
     f = Fernet(fernet_key)
@@ -140,7 +140,7 @@ def is_token_expired(
         ).fetchone()
 
     if row is None:
-        logger.debug("is_token_expired: no row for user %s - treating as expired", user_id)
+        logger.debug("is_token_expired: no row for user {} - treating as expired", user_id)
         return True
 
     expires_at = _parse_expires_at(row["expires_at"])
@@ -153,7 +153,7 @@ def is_token_expired(
 
     expired = expires_at < now
     logger.debug(
-        "is_token_expired: user=%s expires_at=%s now=%s expired=%s",
+        "is_token_expired: user={} expires_at={} now={} expired={}",
         user_id,
         expires_at,
         now,
@@ -181,4 +181,4 @@ def delete_tokens(
         )
         conn.commit()
 
-    logger.info("Tokens deleted for user %s", user_id)
+    logger.info("Tokens deleted for user {}", user_id)

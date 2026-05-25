@@ -86,7 +86,7 @@ def tokens_valid() -> bool:
         )
         return bool(tokens and tokens.get("refresh_token"))
     except Exception as e:
-        logger.debug("tokens_valid check failed: %s", e)
+        logger.debug("tokens_valid check failed: {}", e)
         return False
 
 

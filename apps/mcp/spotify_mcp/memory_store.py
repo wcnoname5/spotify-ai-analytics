@@ -1,7 +1,6 @@
 """MCP tools backed by the long-term memory store (data/ltm.db).
 
-Backed by langgraph's SqliteStore so the same memory file can be shared with
-the LangGraph agent in Phase 2 (see ARCHITECTURE.md §4.2).
+TODO: LTM tools are still developing and not yet included to released mcp tools
 """
 from typing import Annotated
 from loguru import logger
@@ -35,16 +34,16 @@ def register(mcp: FastMCP) -> None:
         Writing the same key again overwrites the previous value.
         Use get_memory_summary to read back all stored preferences.
         """
-        logger.debug("[Tool] remember_preference: user_id=%s key=%r value=%r", user_id, key, value if len(value)<=100 else value[:100] + '...')
+        logger.debug("[Tool] remember_preference: user_id={} key={!r} value={!r}", user_id, key, value if len(value)<=100 else value[:100] + '...')
         try:
             from spotify_core.memory import get_store, get_user_namespace
             ns = get_user_namespace(user_id, "preferences")
             with get_store(LTM_DB) as store:
                 store.put(ns, key, {"value": value})
-            logger.info("[Tool] remember_preference success: user_id=%s key=%r value=%r", user_id, key, value if len(value)<=100 else value[:100] + '...')
+            logger.info("[Tool] remember_preference success: user_id={} key={!r} value={!r}", user_id, key, value if len(value)<=100 else value[:100] + '...')
             return {"status": "saved", "key": key, "value": value}
         except Exception as exc:
-            logger.error("[Tool] remember_preference failed: %s", exc)
+            logger.error("[Tool] remember_preference failed: {}", exc)
             return {"error": str(exc)}
 
     @mcp.tool(
@@ -65,7 +64,7 @@ def register(mcp: FastMCP) -> None:
         Use this at the start of a conversation to recall what is known about the user.
         Store new information with remember_preference.
         """
-        logger.debug("[Tool] get_memory_summary: user_id=%s", user_id)
+        logger.debug("[Tool] get_memory_summary: user_id={}", user_id)
         try:
             from spotify_core.memory import get_store, get_user_namespace
             summary: dict = {}
@@ -74,8 +73,8 @@ def register(mcp: FastMCP) -> None:
                     ns = get_user_namespace(user_id, key)
                     items = store.search(ns)
                     summary[key] = {item.key: item.value for item in items}
-            logger.info("[Tool] get_memory_summary success: user_id=%s", user_id)
+            logger.info("[Tool] get_memory_summary success: user_id={}", user_id)
             return summary
         except Exception as exc:
-            logger.error("[Tool] get_memory_summary failed: %s", exc)
+            logger.error("[Tool] get_memory_summary failed: {}", exc)
             return {"error": str(exc)}

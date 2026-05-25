@@ -55,10 +55,10 @@ class Settings(BaseSettings):
 
     def validate_paths(self):
         if not self.spotify_data_path.exists():
-            logger.warning("SPOTIFY_DATA_PATH not found: %s", self.spotify_data_path)
+            logger.warning("SPOTIFY_DATA_PATH not found: {}", self.spotify_data_path)
             logger.warning("Place your Streaming_History_Audio_*.json files there.")
         else:
-            logger.info("Spotify history data path verified: %s", self.spotify_data_path)
+            logger.info("Spotify history data path verified: {}", self.spotify_data_path)
 
 
 settings = Settings()

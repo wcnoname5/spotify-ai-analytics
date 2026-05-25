@@ -24,7 +24,7 @@ def utc_iso_to_local(utc_iso: str | None) -> str | None:
         dt = datetime.fromisoformat(utc_iso.replace("Z", "+00:00"))
         return dt.astimezone().isoformat()
     except (ValueError, TypeError):
-        logger.warning("utc_iso_to_local: failed to parse %r, returning unchanged", utc_iso)
+        logger.warning("utc_iso_to_local: failed to parse {!r}, returning unchanged", utc_iso)
         return utc_iso
 
 
@@ -48,7 +48,7 @@ def to_error_response(
     Other exceptions are returned as ``{"error": str(exc)}``.
     """
     if isinstance(exc, HistoryNotInitializedError):
-        logger.warning("history DB not initialized for user=%r: %s", user_id, exc)
+        logger.warning("history DB not initialized for user={!r}: {}", user_id, exc)
         return {
             "error": str(exc),
             "requires_import": True,
@@ -58,7 +58,7 @@ def to_error_response(
             ),
         }
     if isinstance(exc, SpotifyAuthError):
-        logger.warning("auth error for user=%r: %s", user_id, exc)
+        logger.warning("auth error for user={!r}: {}", user_id, exc)
         return {
             "error": str(exc),
             "requires_auth": True,
@@ -72,7 +72,7 @@ def to_error_response(
             try:
                 devices = list_devices()
             except Exception as inner:
-                logger.warning("Failed to list devices while enriching error: %s", inner)
+                logger.warning("Failed to list devices while enriching error: {}", inner)
         return {
             "error": "No active Spotify device found. Open Spotify on a device first.",
             "available_devices": devices,

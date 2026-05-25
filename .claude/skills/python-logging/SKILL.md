@@ -107,10 +107,9 @@ logger.bind(method="fetch_user").debug("user_id={}", user_id)
 
 ```python
 def fetch_user(user_id: str) -> dict:
-    logger.debug("fetch_user: user_id={}", user_id)
     try:
         result = db.get(user_id)
-        logger.info("fetch_user success: user_id={}", user_id)
+        logger.debug("fetch_user success: user_id={}", user_id)
         return result
     except Exception as exc:
         logger.error("fetch_user failed: user_id={} error={}", user_id, exc)
@@ -119,10 +118,27 @@ def fetch_user(user_id: str) -> dict:
 
 | Level | When to use |
 |---|---|
-| `DEBUG` | Entry, intermediate state, tracing values |
-| `INFO` | Successful completion of a meaningful operation |
-| `WARNING` | Recoverable issue, skipped item, degraded behavior |
+| `DEBUG` | Entry, intermediate state, tracing values, per-call success/result counts |
+| `INFO` | Key lifecycle events an operator would want to see in production (token refresh, OAuth flow, pipeline totals, setup complete) |
+| `WARNING` | Recoverable issue, skipped item, degraded behavior, missing config |
 | `ERROR` | Caught failure — operation failed, program continues |
 | `logger.exception(msg)` | Like ERROR but also dumps the traceback; use inside `except` |
+
+### INFO vs DEBUG — the critical distinction
+
+**INFO** is for things an operator would want to see at a glance without filtering. Ask: "Would I want to know this in production even if nothing went wrong?"
+
+**Use INFO for:**
+- Token refresh / OAuth lifecycle (`"Token refreshed for user %s"`)
+- One-time setup steps (`"Setup complete"`, `"OAuth flow started"`)
+- Batch/pipeline statistics (`"Imported: %d inserted, %d skipped"`)
+- Server ready messages
+
+**Use DEBUG for:**
+- Per-call success: `"get_top_artists: returned 10 artists"`, `"play_track success: uri=..."`
+- Result counts on individual queries
+- Entry parameters for API/DB methods
+
+Routine per-method "X success" logs belong at DEBUG. At INFO, every API call or query generates noise that drowns out real signals like warnings and errors.
 
 Use `logger.error("msg: {}", value)` (`{}` format), not f-strings — loguru only renders the string if that level is active.
