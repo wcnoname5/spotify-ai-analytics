@@ -181,7 +181,7 @@ def register(mcp: FastMCP) -> None:
             end_date: Optional inclusive end date filter in YYYY-MM-DD format.
 
         Returns:
-            List of {"artist_name": str, "total_ms": int, "play_count": int}, ordered by total_ms desc.
+            List of {"artist_name": str, "total_mins": int, "play_count": int}, ordered by total_mins desc.
             If the DB is empty, returns [{"warning": ...}].
         """
         if is_history_empty(DB_PATH):
@@ -225,7 +225,7 @@ def register(mcp: FastMCP) -> None:
             show_track_id: Include Spotify track URI in results (default false).
 
         Returns:
-            List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int},
+            List of {"track_name": str, "artist_name": str, "play_count": int, "total_mins": int},
             plus "track_id": str when show_track_id is true. Ordered by play_count desc.
             If the DB is empty, returns [{"warning": ... }].
         """
@@ -272,8 +272,8 @@ def register(mcp: FastMCP) -> None:
                 "unique_artists": int,
                 "earliest_played_at": str | None,
                 "latest_played_at": str | None,
-                "total_ms_played": int | None,
-                "avg_ms_per_play": float | None,
+                "total_mins_played": int | None,
+                "avg_mins_per_play": int | None,
                 "skip_rate": float | None,
             }
             If the DB is empty, returns {"warning": ..., "next_steps": [...]}.
@@ -328,7 +328,7 @@ def register(mcp: FastMCP) -> None:
                 "peak_day_of_week": str | None,            -- e.g. "Thursday" (local time)
                 "most_active_date": str | None,            -- YYYY-MM-DD (local date) with most plays
                 "most_active_date_play_count": int | None, -- how many plays on that date
-                "most_active_date_total_ms": int | None,   -- total ms listened on that date
+                "most_active_date_total_mins": int | None,  -- total minutes listened on that date
                 "avg_plays_per_day": float | None,         -- plays divided by distinct local calendar days
             }
             If the DB is empty, returns {"warning": ..., "next_steps": [...]}.

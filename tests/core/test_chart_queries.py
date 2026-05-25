@@ -35,10 +35,10 @@ def test_daily_activity_pattern_buckets(tmp_path):
         {"id": "3", "played_at": "2024-01-14T20:00:00Z", "ms_played": 180_000},  # Sunday, 19-23
     ])
     rows = get_daily_activity_pattern(db)
-    by_key = {(r["weekday"], r["segment"]): r["total_ms"] for r in rows}
-    assert by_key[("Monday", "0-6")] == 60_000
-    assert by_key[("Monday", "7-12")] == 120_000
-    assert by_key[("Sunday", "19-23")] == 180_000
+    by_key = {(r["weekday"], r["segment"]): r["total_mins"] for r in rows}
+    assert by_key[("Monday", "0-6")] == 1
+    assert by_key[("Monday", "7-12")] == 2
+    assert by_key[("Sunday", "19-23")] == 3
     mon = next(r for r in rows if r["weekday"] == "Monday")
     sun = next(r for r in rows if r["weekday"] == "Sunday")
     assert mon["weekday_idx"] == 0
@@ -53,7 +53,7 @@ def test_daily_activity_pattern_date_filter(tmp_path):
         {"id": "2", "played_at": "2024-02-08T03:00:00Z", "ms_played": 60_000},
     ])
     rows = get_daily_activity_pattern(db, start_date="2024-02-01")
-    assert sum(r["total_ms"] for r in rows) == 60_000
+    assert sum(r["total_mins"] for r in rows) == 1
 
 
 def test_daily_activity_pattern_empty_db(tmp_path):
@@ -72,8 +72,8 @@ def test_daily_trend(tmp_path):
     ])
     rows = get_daily_trend(db)
     assert rows == [
-        {"date": "2024-01-08", "total_ms": 180_000, "play_count": 2},
-        {"date": "2024-01-09", "total_ms": 90_000, "play_count": 1},
+        {"date": "2024-01-08", "total_mins": 3, "play_count": 2},
+        {"date": "2024-01-09", "total_mins": 1, "play_count": 1},
     ]
 
 
@@ -85,7 +85,7 @@ def test_daily_trend_date_filter(tmp_path):
         {"id": "2", "played_at": "2024-02-08T09:00:00Z", "ms_played": 90_000},
     ])
     rows = get_daily_trend(db, end_date="2024-01-31")
-    assert rows == [{"date": "2024-01-08", "total_ms": 60_000, "play_count": 1}]
+    assert rows == [{"date": "2024-01-08", "total_mins": 1, "play_count": 1}]
 
 
 def test_daily_trend_empty_db(tmp_path):
@@ -103,9 +103,9 @@ def test_weekly_trend(tmp_path):
     ])
     rows = get_weekly_trend(db)
     assert len(rows) == 2
-    assert all({"week_label", "total_ms", "play_count"} <= set(r) for r in rows)
+    assert all({"week_label", "total_mins", "play_count"} <= set(r) for r in rows)
     assert rows[0]["week_label"] < rows[1]["week_label"]
-    assert {r["total_ms"] for r in rows} == {60_000, 120_000}
+    assert {r["total_mins"] for r in rows} == {1, 2}
 
 
 def test_weekly_trend_empty_db(tmp_path):
@@ -124,8 +124,8 @@ def test_monthly_trend(tmp_path):
     ])
     rows = get_monthly_trend(db)
     assert rows == [
-        {"month_label": "2024-01", "total_ms": 100_000, "play_count": 2},
-        {"month_label": "2024-02", "total_ms": 120_000, "play_count": 1},
+        {"month_label": "2024-01", "total_mins": 1, "play_count": 2},
+        {"month_label": "2024-02", "total_mins": 2, "play_count": 1},
     ]
 
 

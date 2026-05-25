@@ -80,7 +80,7 @@ def get_top_artists(
         end_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
 
     Returns:
-        List of {"artist_name": str, "total_ms": int, "play_count": int}.
+        List of {"artist_name": str, "total_mins": int, "play_count": int}.
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
@@ -91,12 +91,12 @@ def get_top_artists(
     where_sql = " AND ".join(where_clauses)
     sql = f"""
         SELECT artist_name,
-               SUM(ms_played) AS total_ms,
+               SUM(ms_played) / 60000 AS total_mins,
                COUNT(*) AS play_count
         FROM listening_history
         WHERE {where_sql}
         GROUP BY artist_name
-        ORDER BY total_ms DESC
+        ORDER BY total_mins DESC
         LIMIT ?
     """
     params.append(limit)
@@ -131,7 +131,7 @@ def get_top_tracks(
         show_track_id: If True, include track_id (Spotify URI) in each result row.
 
     Returns:
-        List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int}
+        List of {"track_name": str, "artist_name": str, "play_count": int, "total_mins": int}
         plus "track_id": str when show_track_id is True.
     """
     _validate_date_range(start_date, end_date)
@@ -146,12 +146,12 @@ def get_top_tracks(
         SELECT track_name,
                artist_name,
                COUNT(*) AS play_count,
-               SUM(ms_played) AS total_ms
+               SUM(ms_played) / 60000 AS total_mins
                {id_col}
         FROM listening_history
         WHERE {where_sql}
         GROUP BY track_id
-        ORDER BY play_count DESC, total_ms DESC
+        ORDER BY play_count DESC, total_mins DESC
         LIMIT ?
     """
     params.append(limit)
@@ -171,6 +171,7 @@ def get_top_tracks(
 
 _SKIP_THRESHOLD_MS = 30_000
 
+# Day of Week Map
 _DOW_MAP = {
     "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday",
     "4": "Thursday", "5": "Friday", "6": "Saturday",
@@ -254,8 +255,8 @@ def get_listening_summary(
             "unique_artists": int,
             "earliest_played_at": str | None,
             "latest_played_at": str | None,
-            "total_ms_played": int | None,
-            "avg_ms_per_play": float | None,
+            "total_mins_played": int | None,
+            "avg_mins_per_play": int | None,
             "skip_rate": float | None,  -- fraction of plays < 30 s
         }
     """
@@ -272,8 +273,8 @@ def get_listening_summary(
             COUNT(DISTINCT artist_name) AS unique_artists,
             MIN(played_at) AS earliest_played_at,
             MAX(played_at) AS latest_played_at,
-            SUM(ms_played) AS total_ms_played,
-            AVG(ms_played) AS avg_ms_per_play,
+            SUM(ms_played) / 60000 AS total_mins_played,
+            CAST(AVG(ms_played) / 60000 AS INTEGER) AS avg_mins_per_play,
             SUM(CASE WHEN ms_played < ? THEN 1 ELSE 0 END) * 1.0
                 / NULLIF(COUNT(*), 0) AS skip_rate
         FROM listening_history
@@ -347,10 +348,10 @@ def get_listening_patterns(
         {
             "peak_hour": int | None,                  -- local hour-of-day 0-23 with most plays
             "peak_day_of_week": str | None,           -- e.g. "Thursday" (local time)
-            "most_active_date": str | None,           -- YYYY-MM-DD (local date) with most plays
-            "most_active_date_play_count": int | None,-- play count on most_active_date
-            "most_active_date_total_ms": int | None,  -- total ms played on most_active_date
-            "avg_plays_per_day": float | None,        -- plays / distinct local calendar days
+            "most_active_date": str | None,              -- YYYY-MM-DD (local date) with most plays
+            "most_active_date_play_count": int | None,   -- play count on most_active_date
+            "most_active_date_total_mins": int | None,   -- total minutes played on most_active_date
+            "avg_plays_per_day": float | None,           -- plays / distinct local calendar days
         }
     """
     _validate_date_range(start_date, end_date)
@@ -391,7 +392,7 @@ def get_listening_patterns(
         most_active_date = row["d"] if row else None
 
         most_active_date_play_count = None
-        most_active_date_total_ms = None
+        most_active_date_total_mins = None
         if most_active_date:
             # Combine the date-equality condition with the existing date-range filter so
             # the detail stats are scoped to the same window used to pick the date.
@@ -399,13 +400,13 @@ def get_listening_patterns(
             detail_where = "WHERE " + " AND ".join(detail_clauses)
             detail_params = [most_active_date] + params
             row = conn.execute(
-                f"SELECT COUNT(*) AS play_count, SUM(ms_played) AS total_ms "
+                f"SELECT COUNT(*) AS play_count, SUM(ms_played) / 60000 AS total_mins "
                 f"FROM listening_history {detail_where}",
                 detail_params,
             ).fetchone()
             if row:
                 most_active_date_play_count = row["play_count"]
-                most_active_date_total_ms = row["total_ms"]
+                most_active_date_total_mins = row["total_mins"]
 
         row = conn.execute(
             f"SELECT COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT date({local_ts})), 0) AS avg "
@@ -419,7 +420,7 @@ def get_listening_patterns(
             "peak_day_of_week": peak_day_of_week,
             "most_active_date": most_active_date,
             "most_active_date_play_count": most_active_date_play_count,
-            "most_active_date_total_ms": most_active_date_total_ms,
+            "most_active_date_total_mins": most_active_date_total_mins,
             "avg_plays_per_day": avg_plays_per_day,
         }
         logger.debug("get_listening_patterns: peak_hour={} peak_day={}", peak_hour, peak_day_of_week)
@@ -488,7 +489,7 @@ def _grouped_trend(
         label_key: Dict key under which the bucket label is returned.
 
     Returns:
-        List of {label_key: str, "total_ms": int, "play_count": int}, ordered
+        List of {label_key: str, "total_mins": int, "play_count": int}, ordered
         by bucket ascending.
     """
     _validate_date_range(start_date, end_date)
@@ -504,7 +505,7 @@ def _grouped_trend(
         bucket_expr = group_expr.format(ts=local_ts)
         sql = f"""
             SELECT {bucket_expr} AS bucket,
-                   SUM(ms_played) AS total_ms,
+                   SUM(ms_played) / 60000 AS total_mins,
                    COUNT(*) AS play_count
             FROM listening_history
             {where_sql}
@@ -513,7 +514,7 @@ def _grouped_trend(
         """
         rows = conn.execute(sql, params).fetchall()
         result = [
-            {label_key: r["bucket"], "total_ms": r["total_ms"] or 0,
+            {label_key: r["bucket"], "total_mins": r["total_mins"] or 0,
              "play_count": r["play_count"]}
             for r in rows
         ]
@@ -533,7 +534,7 @@ def get_daily_trend(
     """Per-calendar-day listening totals (local date) from history.db.
 
     Returns:
-        List of {"date": "YYYY-MM-DD", "total_ms": int, "play_count": int},
+        List of {"date": "YYYY-MM-DD", "total_mins": int, "play_count": int},
         ordered by date ascending.
     """
     return _grouped_trend(db_path, start_date, end_date, "date({ts})", "date")
@@ -546,16 +547,16 @@ def get_weekly_trend(
 ) -> list[dict]:
     """Per-week listening totals from history.db.
 
-    Weeks are Monday-based. Labels are formatted as "YYYY/MM/DD-" using the
-    Monday (week start) date.
+    Weeks are Monday-based. Labels are the ISO date of the week's Monday.
 
     Returns:
-        List of {"week_label": "YYYY-WNN", "total_ms": int, "play_count": int},
+        List of {"week_label": "YYYY-MM-DD", "total_mins": int, "play_count": int},
         ordered by week ascending.
     """
-    # TODO: week label should be formatted as "YYYY/MM/DD-" using the Monday (week start) date.
     return _grouped_trend(
-        db_path, start_date, end_date, "strftime('%Y-W%W', {ts})", "week_label"
+        db_path, start_date, end_date,
+        "date({ts}, '-' || ((strftime('%w', {ts}) + 6) % 7) || ' days')",
+        "week_label",
     )
 
 
@@ -567,7 +568,7 @@ def get_monthly_trend(
     """Per-month listening totals from history.db.
 
     Returns:
-        List of {"month_label": "YYYY-MM", "total_ms": int, "play_count": int},
+        List of {"month_label": "YYYY-MM", "total_mins": int, "play_count": int},
         ordered by month ascending.
     """
     return _grouped_trend(
@@ -593,7 +594,7 @@ def get_daily_activity_pattern(
 
     Returns:
         List of {"weekday": str, "weekday_idx": int, "segment": str,
-        "total_ms": int}, ordered by weekday (Monday..Sunday) then segment.
+        "total_mins": int}, ordered by weekday (Monday..Sunday) then segment.
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
@@ -616,7 +617,7 @@ def get_daily_activity_pattern(
                     WHEN {hour_expr} BETWEEN 13 AND 18 THEN '13-18'
                     ELSE '19-23'
                 END AS segment,
-                SUM(ms_played) AS total_ms
+                SUM(ms_played) / 60000 AS total_mins
             FROM listening_history
             {where_sql}
             GROUP BY dow, segment
@@ -629,7 +630,7 @@ def get_daily_activity_pattern(
                 "weekday": _DOW_MAP[dow],
                 "weekday_idx": (int(dow) + 6) % 7,  # 0 = Mon .. 6 = Sun
                 "segment": r["segment"],
-                "total_ms": r["total_ms"] or 0,
+                "total_mins": r["total_mins"] or 0,
             })
         result.sort(key=lambda d: (d["weekday_idx"], _SEGMENT_ORDER[d["segment"]]))
         logger.debug("get_daily_activity_pattern: {} (weekday, segment) rows", len(result))

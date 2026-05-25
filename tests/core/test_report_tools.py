@@ -48,7 +48,7 @@ def test_top_artists_tool_returns_rows(tmp_path):
         {"start_date": "2024-01-01", "end_date": "2024-01-31"}
     )
     assert rows[0]["artist_name"] == "Radiohead"
-    assert rows[0]["total_ms"] == 300_000
+    assert rows[0]["total_mins"] == 5
 
 
 def test_trend_tools_return_expected_keys(tmp_path):

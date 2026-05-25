@@ -16,12 +16,12 @@ def spotify_uri_to_url(uri: Optional[str]) -> Optional[str]:
     return f"https://open.spotify.com/track/{track_id}"
 
 
-def format_duration_ms(ms: Optional[int]) -> str:
-    """Format a millisecond duration as a human string, e.g. '3h 12m' or '45m'."""
-    if not ms or ms < 0:
+
+def format_duration_mins(mins: Optional[int]) -> str:
+    """Format a minute duration as a human string, e.g. '3h 12m' or '45m'."""
+    if not mins or mins < 0:
         return "0m"
-    total_minutes = ms // 60_000
-    hours, minutes = divmod(total_minutes, 60)
+    hours, minutes = divmod(mins, 60)
     if hours:
         return f"{hours}h {minutes}m"
     return f"{minutes}m"

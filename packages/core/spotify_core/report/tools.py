@@ -13,8 +13,6 @@ from ..db import queries
 
 def make_report_tools(db_path: str) -> list[BaseTool]:
     """Build the drafter's data tools, each bound to db_path via closure."""
-    logger.debug("make_report_tools: db_path={}", db_path)
-
     @tool
     def get_listening_summary(start_date: str, end_date: str) -> dict:
         """Overall listening stats for the date range: total plays, listening

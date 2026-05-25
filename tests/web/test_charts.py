@@ -10,11 +10,10 @@ def test_daily_activity_figure_empty():
 
 def test_daily_activity_figure_values():
     rows = [
-        {"weekday": "Monday", "weekday_idx": 0, "segment": "7-12", "total_ms": 600_000},
+        {"weekday": "Monday", "weekday_idx": 0, "segment": "7-12", "total_mins": 10},
     ]
     fig = daily_activity_figure(rows)
     seg_trace = next(t for t in fig.data if t.name == "7-12")
-    # Monday is the first weekday; 600_000 ms = 10 minutes.
     assert seg_trace.y[0] == 10
     assert tuple(seg_trace.x) == (
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
@@ -22,7 +21,7 @@ def test_daily_activity_figure_values():
 
 
 def test_trend_figure_values():
-    rows = [{"date": "2024-01-01", "total_ms": 600_000, "play_count": 3}]
+    rows = [{"date": "2024-01-01", "total_mins": 10, "play_count": 3}]
     fig = trend_figure(rows, "date", "daily")
     assert len(fig.data) == 1
     assert tuple(fig.data[0].x) == ("2024-01-01",)
