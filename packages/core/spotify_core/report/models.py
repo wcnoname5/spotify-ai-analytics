@@ -18,6 +18,7 @@ from ..env import ensure_dotenv_loaded
 ensure_dotenv_loaded()
 # comment: GEMINI_API_KEY has already existed so let's keep this name instead of GOOGLE_API_KEY.
 _GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 def build_chat_model(provider: str, model: str) -> BaseChatModel:
@@ -44,8 +45,13 @@ def build_chat_model(provider: str, model: str) -> BaseChatModel:
             model=model, temperature=0.7, google_api_key=_GEMINI_API_KEY
         )
     if provider == "openai":
-        # TODO: implement the OpenAI provider branch (ChatOpenAI).
-        raise NotImplementedError("OpenAI provider is not implemented yet.")
+        if not _OPENAI_API_KEY:
+            raise ValueError(
+                "OPENAI_API_KEY is not set. Add it to your .env to use OpenAI models."
+            )
+        from langchain_openai import ChatOpenAI
+        logger.info("build_chat_model: ChatOpenAI model={}", model)
+        return ChatOpenAI(model=model, temperature=0.7, api_key=_OPENAI_API_KEY)
     if provider == "anthropic":
         # TODO: implement the Anthropic provider branch (ChatAnthropic).
         raise NotImplementedError("Anthropic provider is not implemented yet.")

@@ -22,9 +22,17 @@ def test_google_missing_key_raises(monkeypatch):
         build_chat_model("google", "gemini-2.5-flash")
 
 
-def test_openai_skeleton_raises():
-    with pytest.raises(NotImplementedError):
-        build_chat_model("openai", "gpt-4o")
+def test_openai_returns_chat_model(monkeypatch):
+    monkeypatch.setattr(models, "_OPENAI_API_KEY", "fake-key")
+    chat = build_chat_model("openai", "gpt-5.4-mini")
+    from langchain_openai import ChatOpenAI
+    assert isinstance(chat, ChatOpenAI)
+
+
+def test_openai_missing_key_raises(monkeypatch):
+    monkeypatch.setattr(models, "_OPENAI_API_KEY", None)
+    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+        build_chat_model("openai", "gpt-5.4-mini")
 
 
 def test_anthropic_skeleton_raises():

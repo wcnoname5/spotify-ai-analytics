@@ -10,8 +10,9 @@ from spotify_core.env import ensure_dotenv_loaded, get_client_id, get_fernet_key
 ensure_dotenv_loaded()
 from spotify_core.config import settings
 
-# LLM models offered by the AI report block, per provider. v1 ships Google only.
-_GOOGLE_MODELS = ["gemini-2.5-flash", "gemini-2.5-pro"]
+# LLM models offered by the AI report block, per provider.
+_GOOGLE_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
+_OPENAI_MODELS = ["gpt-5.4-mini", "gpt-5.4"]
 
 
 def get_sync_args() -> dict:
@@ -38,5 +39,7 @@ def get_llm_config() -> dict:
     models: list[dict] = []
     # TODO: the os.getenv call in the future we may not load key from .env directly.
     if os.getenv("GEMINI_API_KEY"):
-        models = [{"provider": "google", "model": m} for m in _GOOGLE_MODELS]
+        models += [{"provider": "google", "model": m} for m in _GOOGLE_MODELS]
+    if os.getenv("OPENAI_API_KEY"):
+        models += [{"provider": "openai", "model": m} for m in _OPENAI_MODELS]
     return {"models": models, "default": models[0] if models else None}

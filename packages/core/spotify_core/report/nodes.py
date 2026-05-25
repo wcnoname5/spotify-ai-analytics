@@ -47,7 +47,7 @@ def make_report_nodes(tools: list):
                 draft = response.content
                 break
             logger.debug("drafter_node: iteration {}, {} tool call(s)",
-                         i, len(tool_calls))
+                         i+1, len(tool_calls))
             for tool_call in tool_calls:
                 report_tool = tools_by_name.get(tool_call["name"])
                 if report_tool is None:
