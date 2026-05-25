@@ -1,6 +1,6 @@
-# Guide for Coding Agents
+# CLAUDE.md — Guide for Claude Code
 
-This file tells Coding Agents how to work in this repository.
+This file tells Claude Code how to work in this repository.
 
 ---
 
@@ -90,8 +90,11 @@ uv run pytest -k "test_memory"         # run by keyword
 SPOTIFY_CLIENT_ID=
 TOKEN_ENCRYPT_KEY=    # Fernet key for token encryption
 
-# Required for web only
+# AI report block (apps/web) — all optional; absence degrades gracefully
 GEMINI_API_KEY=       # or OPENAI_API_KEY
+LANGFUSE_PUBLIC_KEY=   # Langfuse tracing (all 3 keys needed, or none)
+LANGFUSE_SECRET_KEY=
+LANGFUSE_BASE_URL=
 
 # Optional
 LOG_LEVEL=INFO        # DEBUG for verbose output

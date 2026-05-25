@@ -4,7 +4,7 @@ from spotify_core.report.prompts import REVIEWER_RUBRIC, STYLE_TEMPLATES
 
 
 def test_langfuse_callbacks_empty_without_keys(monkeypatch):
-    for k in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+    for k in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL"):
         monkeypatch.delenv(k, raising=False)
     assert get_langfuse_callbacks() == []
 

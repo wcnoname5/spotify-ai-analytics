@@ -94,7 +94,7 @@ TOKEN_ENCRYPT_KEY=    # Fernet key for token encryption
 GEMINI_API_KEY=       # or OPENAI_API_KEY
 LANGFUSE_PUBLIC_KEY=   # Langfuse tracing (all 3 keys needed, or none)
 LANGFUSE_SECRET_KEY=
-LANGFUSE_HOST=
+LANGFUSE_BASE_URL=
 
 # Optional
 LOG_LEVEL=INFO        # DEBUG for verbose output
