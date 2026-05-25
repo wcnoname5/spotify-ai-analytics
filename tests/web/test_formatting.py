@@ -1,5 +1,5 @@
 """Tests for spotify_web.formatting."""
-from spotify_web.formatting import spotify_uri_to_url, format_duration_ms
+from spotify_web.formatting import spotify_uri_to_url, format_duration_mins
 
 
 def test_uri_to_url_valid():
@@ -24,16 +24,16 @@ def test_uri_to_url_empty_track_id():
 
 
 def test_format_duration_zero():
-    assert format_duration_ms(0) == "0m"
+    assert format_duration_mins(0) == "0m"
 
 
 def test_format_duration_none():
-    assert format_duration_ms(None) == "0m"
+    assert format_duration_mins(None) == "0m"
 
 
 def test_format_duration_minutes_only():
-    assert format_duration_ms(45 * 60_000) == "45m"
+    assert format_duration_mins(45) == "45m"
 
 
 def test_format_duration_hours_and_minutes():
-    assert format_duration_ms((3 * 60 + 12) * 60_000) == "3h 12m"
+    assert format_duration_mins(3 * 60 + 12) == "3h 12m"

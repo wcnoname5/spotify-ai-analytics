@@ -35,6 +35,7 @@ class ReviewVerdict(BaseModel):
 class ReportState(TypedDict):
     """Mutable state threaded through the report graph."""
     style: str
+    period_type: str  # "weekly" | "monthly" | "custom"
     start_date: str
     end_date: str
     draft: str

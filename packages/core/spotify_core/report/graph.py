@@ -32,6 +32,7 @@ def generate_report(
     end_date: str,
     db_path: str,
     model: BaseChatModel,
+    period_type: str = "custom",
 ) -> ReportResult:
     """Run the report graph end-to-end and return a UI-friendly result.
 
@@ -41,9 +42,12 @@ def generate_report(
         end_date: ISO "YYYY-MM-DD" range end.
         db_path: Path to history.db.
         model: The chat model used by both the drafter and the reviewer.
+        period_type: "weekly" (last completed week), "monthly" (last completed
+            month), or "custom" (arbitrary range — the drafter adapts depth to
+            the range length).
     """
-    logger.info("generate_report: style={} range={}..{}",
-                style, start_date, end_date)
+    logger.info("generate_report: style={} period_type={} range={}..{}",
+                style, period_type, start_date, end_date)
     tools = make_report_tools(db_path)
     graph = build_report_graph(tools)
     callbacks = get_langfuse_callbacks()
@@ -53,6 +57,7 @@ def generate_report(
     }
     initial: ReportState = {
         "style": style,
+        "period_type": period_type,
         "start_date": start_date,
         "end_date": end_date,
         "draft": "",

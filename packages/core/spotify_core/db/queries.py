@@ -553,6 +553,7 @@ def get_weekly_trend(
         List of {"week_label": "YYYY-MM-DD", "total_mins": int, "play_count": int},
         ordered by week ascending.
     """
+    
     return _grouped_trend(
         db_path, start_date, end_date,
         "date({ts}, '-' || ((strftime('%w', {ts}) + 6) % 7) || ' days')",

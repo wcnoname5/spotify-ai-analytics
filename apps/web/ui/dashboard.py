@@ -22,6 +22,7 @@ from spotify_web.config import get_sync_args
 from spotify_web.formatting import format_duration_mins, spotify_uri_to_url
 
 from ai_block import render_ai_block
+from spotify_web.period_filter import DASHBOARD_PERIOD_OPTION, render_period_dates
 
 _DB_PATH = str(settings.history_db_path)
 _CACHE_TTL = 30
@@ -80,30 +81,6 @@ def _format_played_at(played_at: str | None) -> str | None:
         )
     except (TypeError, ValueError):
         return played_at
-
-
-def _period_dates() -> tuple[str, str]:
-    """Render the period filter; return (start_iso, end_iso) date strings."""
-    today = datetime.date.today()
-    choice = st.radio(
-        "分析區間",
-        ["本周", "本月", "自訂時間"],
-        horizontal=True,
-        key="period_choice",
-    )
-    if choice == "本周":
-        start = today - datetime.timedelta(days=today.weekday())
-        end = today
-    elif choice == "本月":
-        start = today.replace(day=1)
-        end = today
-    else:
-        c1, c2 = st.columns(2)
-        start = c1.date_input(
-            "開始", value=today - datetime.timedelta(days=30), key="custom_start"
-        )
-        end = c2.date_input("結束", value=today, key="custom_end")
-    return start.isoformat(), end.isoformat()
 
 
 def _run_sync() -> None:
@@ -221,7 +198,9 @@ def render_dashboard() -> None:
         if st.button("Sync", width="stretch"):
             _run_sync()
     with col_filter:
-        start, end = _period_dates()
+        start, end, _ = render_period_dates(
+            "dashboard_period", DASHBOARD_PERIOD_OPTION
+        )
 
     if is_history_empty(_DB_PATH):
         st.warning(
@@ -254,4 +233,4 @@ def render_dashboard() -> None:
     st.divider()
     _recent_section()
 
-    render_ai_block(start, end)
+    render_ai_block()

@@ -7,7 +7,7 @@ from loguru import logger
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 
-from .prompts import REVIEWER_RUBRIC, STYLE_TEMPLATES
+from .prompts import REVIEWER_RUBRIC, compose_drafter_system
 from .state import ReportState, ReviewVerdict, extract_tool_log
 
 # Hard caps that guarantee the graph terminates.
@@ -21,15 +21,25 @@ def make_report_nodes(tools: list):
 
     def drafter_node(state: ReportState, config: RunnableConfig) -> dict:
         """Write (or revise) the report, calling data tools in a bounded loop."""
-        logger.info("drafter_node: style={} revision={}",
-                    state["style"], state["revision_count"])
+        logger.info("drafter_node: style={} period_type={} revision={}",
+                    state["style"], state.get("period_type", "custom"),
+                    state["revision_count"])
         model = config["configurable"]["model"]
         model_with_tools = model.bind_tools(tools)
 
-        system = STYLE_TEMPLATES[state["style"]]
+        system = compose_drafter_system(
+            period_type=state.get("period_type", "custom"),
+            style=state["style"],
+        )
+        period_label = {
+            "weekly": "上一個已結束的週次",
+            "monthly": "上一個已結束的月份",
+            "custom": "使用者自訂的時間區間",
+        }.get(state.get("period_type", "custom"), "使用者自訂的時間區間")
         user = (
             f"請分析使用者從 {state['start_date']} 到 {state['end_date']} "
-            f"的聽歌資料，並寫出文章。"
+            f"（{period_label}）的聽歌資料，依系統提示中對應 period_type 的"
+            f"框架呼叫工具並寫出文章。"
         )
         messages = [SystemMessage(content=system), HumanMessage(content=user)]
         if state["review_feedback"]:
@@ -87,7 +97,9 @@ def make_report_nodes(tools: list):
         messages = [
             SystemMessage(content=REVIEWER_RUBRIC),
             HumanMessage(content=(
-                f"指定風格：{state['style']}\n\n"
+                f"指定風格：{state['style']}\n"
+                f"指定 period_type：{state.get('period_type', 'custom')}\n"
+                f"分析區間：{state['start_date']} ~ {state['end_date']}\n\n"
                 f"草稿：\n{state['draft']}\n\n"
                 f"草稿作者實際取得的資料：\n{tool_summary}"
             )),

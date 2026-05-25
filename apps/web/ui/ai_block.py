@@ -1,5 +1,4 @@
 """AI 聽歌分析 — report-generation section of the dashboard (Streamlit)."""
-import datetime
 
 import streamlit as st
 from loguru import logger
@@ -11,14 +10,16 @@ from spotify_core.report.models import build_chat_model
 
 from spotify_web.config import get_llm_config
 
+from spotify_web.period_filter import render_period_dates
+
 _DB_PATH = str(settings.history_db_path)
 
 # Style key -> UI label.
 _STYLES = {
     "monthly_review": "📅 月度回顧",
     "roast": "🔥 毒舌",
-    "gentle": "😊 溫和",
-    "critic": "🎼 專業樂評",
+    # "gentle": "😊 溫和",
+    # "critic": "🎼 專業樂評",
 }
 
 
@@ -35,13 +36,8 @@ def _render_report(result, model_label: str) -> None:
         st.caption(f"[在 Langfuse 查看追蹤]({result.trace_url})")
 
 
-def render_ai_block(default_start: str, default_end: str) -> None:
-    """Render the AI report section below the dashboard.
-
-    Args:
-        default_start: ISO date the date pickers default to (dashboard period).
-        default_end: ISO date the date pickers default to.
-    """
+def render_ai_block() -> None:
+    """Render the AI report section below the dashboard."""
     st.divider()
     st.subheader("🤖 AI 聽歌分析")
 
@@ -73,13 +69,12 @@ def render_ai_block(default_start: str, default_end: str) -> None:
             key="ai_model",
         )
 
-    col_start, col_end = st.columns(2)
-    start = col_start.date_input(
-        "開始", value=datetime.date.fromisoformat(default_start), key="ai_start"
-    )
-    end = col_end.date_input(
-        "結束", value=datetime.date.fromisoformat(default_end), key="ai_end"
-    )
+    start, end, period_type = render_period_dates("ai_period")
+    st.session_state["ai_filter"] = {
+        "start": start,
+        "end": end,
+        "period_type": period_type,
+    }
 
     if st.button("✨ 產生分析", key="ai_generate"):
         st.session_state.pop("ai_report", None)
@@ -91,10 +86,11 @@ def render_ai_block(default_start: str, default_end: str) -> None:
                 )
                 result = generate_report(
                     style=style,
-                    start_date=start.isoformat(),
-                    end_date=end.isoformat(),
+                    start_date=start,
+                    end_date=end,
                     db_path=_DB_PATH,
                     model=model,
+                    period_type=period_type,
                 )
             st.session_state["ai_report"] = result
             st.session_state["ai_report_model"] = (
