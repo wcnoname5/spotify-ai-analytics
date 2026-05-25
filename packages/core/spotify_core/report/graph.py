@@ -37,7 +37,7 @@ def generate_report(
     """Run the report graph end-to-end and return a UI-friendly result.
 
     Args:
-        style: One of "monthly_review", "roast", "gentle", "critic".
+        style: One of "listening_review", "roast".
         start_date: ISO "YYYY-MM-DD" range start.
         end_date: ISO "YYYY-MM-DD" range end.
         db_path: Path to history.db.

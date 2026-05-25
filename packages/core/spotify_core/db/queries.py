@@ -232,7 +232,6 @@ def _detect_tz_offset(conn) -> int:
         logger.debug("No conn_country data found; defaulting to UTC with offset 0")
         return 0 
     offset = _COUNTRY_UTC_OFFSET.get(row["conn_country"], 0)
-    logger.debug("Inferred timezone offset from conn_country {}: {}", row["conn_country"], offset)
     return offset
 
 
@@ -306,7 +305,7 @@ def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False)
         plus "track_id": str when show_track_id is True.
     """
     _ensure_history_db(db_path)
-    logger.debug("get_recent_plays: limit={}", limit)
+
     id_col = ", track_id" if show_track_id else ""
     sql = f"""
         SELECT track_name, artist_name, album_name, played_at, ms_played{id_col}
@@ -553,7 +552,7 @@ def get_weekly_trend(
         List of {"week_label": "YYYY-MM-DD", "total_mins": int, "play_count": int},
         ordered by week ascending.
     """
-    
+
     return _grouped_trend(
         db_path, start_date, end_date,
         "date({ts}, '-' || ((strftime('%w', {ts}) + 6) % 7) || ' days')",

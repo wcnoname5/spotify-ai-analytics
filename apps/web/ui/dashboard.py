@@ -70,6 +70,28 @@ def _recent():
     return get_recent_plays(_DB_PATH, limit=50, show_track_id=True)
 
 
+def _previous_period(start: str, period_type: str) -> tuple[str, str] | None:
+    """Return (prev_start, prev_end) for the immediately preceding week/month."""
+    s = datetime.date.fromisoformat(start)
+    if period_type == "weekly":
+        prev_end = s - datetime.timedelta(days=1)
+        prev_start = prev_end - datetime.timedelta(days=6)
+    elif period_type == "monthly":
+        prev_end = s - datetime.timedelta(days=1)
+        prev_start = prev_end.replace(day=1)
+    else:
+        return None
+    return prev_start.isoformat(), prev_end.isoformat()
+
+
+def _delta_pct(current, previous) -> str | None:
+    """% change vs previous; None when previous is 0/None to avoid div-by-zero."""
+    if not previous:
+        return None
+    pct = (current - previous) / previous * 100
+    return f"{pct:+.1f}%"
+
+
 def _format_played_at(played_at: str | None) -> str | None:
     if played_at is None:
         return None
@@ -193,14 +215,16 @@ def _recent_section() -> None:
 def render_dashboard() -> None:
     st.subheader("Dashboard")
 
-    col_filter, col_sync = st.columns([4, 1], vertical_alignment="top")
+    col_filter, col_period, col_sync = st.columns([2, 2, 1], vertical_alignment="top")
     with col_sync:
         if st.button("Sync", width="stretch"):
             _run_sync()
     with col_filter:
-        start, end, _ = render_period_dates(
+        start, end, period_type = render_period_dates(
             "dashboard_period", DASHBOARD_PERIOD_OPTION
         )
+    with col_period:
+        st.metric("Period", f"{start} ~ {end}")
 
     if is_history_empty(_DB_PATH):
         st.warning(
@@ -210,11 +234,31 @@ def render_dashboard() -> None:
         return
 
     summary = _summary(start, end)
+    prev_range = _previous_period(start, period_type)
+    prev_summary = _summary(*prev_range) if prev_range else None
+
+    def _d(key: str) -> str | None:
+        if prev_summary is None:
+            return None
+        return _delta_pct(summary.get(key) or 0, prev_summary.get(key) or 0)
+
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Plays", f"{summary['total_plays']:,}")
-    m2.metric("Listening time", format_duration_mins(summary["total_mins_played"]))
-    m3.metric("Unique artists", f"{summary['unique_artists'] or 0:,}")
-    m4.metric("Unique tracks", f"{summary['unique_tracks'] or 0:,}")
+    m1.metric("Plays", f"{summary['total_plays']:,}", delta=_d("total_plays"))
+    m2.metric(
+        "Listening time",
+        format_duration_mins(summary["total_mins_played"]),
+        delta=_d("total_mins_played"),
+    )
+    m3.metric(
+        "Unique artists",
+        f"{summary['unique_artists'] or 0:,}",
+        delta=_d("unique_artists"),
+    )
+    m4.metric(
+        "Unique tracks",
+        f"{summary['unique_tracks'] or 0:,}",
+        delta=_d("unique_tracks"),
+    )
 
     st.divider()
     _stats_section(start, end)

@@ -75,17 +75,17 @@ def test_drafter_records_tool_calls_and_reviewer_approves(tmp_path):
                 _tool_call("c1", "get_top_artists",
                            {"start_date": "2024-01-01", "end_date": "2024-01-31"})
             ]),
-            AIMessage(content="# 月度回顧\n你聽了 A。"),
+            AIMessage(content="# 收聽回顧\n你聽了 A。"),
         ],
         review_verdicts=[ReviewVerdict(approved=True, feedback="")],
     )
     result = generate_report(
-        style="monthly_review", start_date="2024-01-01", end_date="2024-01-31",
+        style="listening_review", start_date="2024-01-01", end_date="2024-01-31",
         db_path=db, model=model,
     )
     assert result.approved is True
     assert result.revision_count == 0
-    assert result.text == "# 月度回顧\n你聽了 A。"
+    assert result.text == "# 收聽回顧\n你聽了 A。"
     assert [r.name for r in result.tool_log] == ["get_top_artists"]
     assert result.tool_log[0].success is True
     assert result.trace_url is None
@@ -127,7 +127,7 @@ def test_revision_cap_terminates(tmp_path):
         ],
     )
     result = generate_report(
-        style="critic", start_date="2024-01-01", end_date="2024-01-31",
+        style="roast", start_date="2024-01-01", end_date="2024-01-31",
         db_path=db, model=model,
     )
     # Cap is 2 rejections: 1 initial draft + 1 revision, then a forced end.
@@ -152,7 +152,7 @@ def test_drafter_hits_tool_iteration_cap(tmp_path):
         review_verdicts=[ReviewVerdict(approved=True, feedback="")],
     )
     result = generate_report(
-        style="monthly_review", start_date="2024-01-01", end_date="2024-01-31",
+        style="listening_review", start_date="2024-01-01", end_date="2024-01-31",
         db_path=db, model=model,
     )
     # On hitting the cap the draft must be the last AIMessage's prose content,

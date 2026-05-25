@@ -16,10 +16,8 @@ _DB_PATH = str(settings.history_db_path)
 
 # Style key -> UI label.
 _STYLES = {
-    "monthly_review": "📅 月度回顧",
+    "listening_review": "📅 收聽回顧",
     "roast": "🔥 毒舌",
-    # "gentle": "😊 溫和",
-    # "critic": "🎼 專業樂評",
 }
 
 
@@ -39,7 +37,7 @@ def _render_report(result, model_label: str) -> None:
 def render_ai_block() -> None:
     """Render the AI report section below the dashboard."""
     st.divider()
-    st.subheader("🤖 AI 聽歌分析")
+    st.subheader("收聽記錄分析報告")
 
     if is_history_empty(_DB_PATH):
         st.info("資料庫沒有播放紀錄，無法產生分析。")
@@ -80,7 +78,7 @@ def render_ai_block() -> None:
         st.session_state.pop("ai_report", None)
         st.session_state.pop("ai_report_model", None)
         try:
-            with st.spinner("AI 正在分析你的聽歌資料…"):
+            with st.spinner("正在分析你的聆聽資料…"):
                 model = build_chat_model(
                     model_choice["provider"], model_choice["model"]
                 )

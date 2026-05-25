@@ -31,16 +31,19 @@ def make_report_nodes(tools: list):
             period_type=state.get("period_type", "custom"),
             style=state["style"],
         )
+
         period_label = {
             "weekly": "上一個已結束的週次",
             "monthly": "上一個已結束的月份",
             "custom": "使用者自訂的時間區間",
         }.get(state.get("period_type", "custom"), "使用者自訂的時間區間")
+
         user = (
             f"請分析使用者從 {state['start_date']} 到 {state['end_date']} "
             f"（{period_label}）的聽歌資料，依系統提示中對應 period_type 的"
             f"框架呼叫工具並寫出文章。"
         )
+        
         messages = [SystemMessage(content=system), HumanMessage(content=user)]
         if state["review_feedback"]:
             messages.append(HumanMessage(content=(

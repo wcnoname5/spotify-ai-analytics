@@ -14,9 +14,9 @@ def test_get_trace_url_none_without_callbacks():
 
 
 def test_style_templates_include_required_styles():
-    # monthly_review and roast are the must-have styles; the set may grow or
+    # listening_review and roast are the must-have styles; the set may grow or
     # shrink, so this asserts a subset rather than an exact match.
-    assert {"monthly_review", "roast"} <= set(STYLE_TEMPLATES)
+    assert {"listening_review", "roast"} <= set(STYLE_TEMPLATES)
     assert all(v.strip() for v in STYLE_TEMPLATES.values())
 
 
