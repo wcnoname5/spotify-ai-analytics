@@ -25,7 +25,7 @@ def init_db(db_path: Union[str, Path]) -> None:
             conn.execute(ddl)
         conn.commit()
 
-    logger.info(f"Database initialized at {db_path}")
+    logger.info("Database initialized at {}", db_path)
 
 # These are fields only in streaming history exports, but not in the API data.
 _HISTORY_COLUMNS = {
@@ -44,7 +44,7 @@ def _migrate_history_db(conn: sqlite3.Connection) -> None:
     for col, col_type in _HISTORY_COLUMNS.items():
         if col not in existing:
             conn.execute(f"ALTER TABLE listening_history ADD COLUMN {col} {col_type}")
-            logger.info("Migration: added column %s %s to listening_history", col, col_type)
+            logger.info("Migration: added column {} {} to listening_history", col, col_type)
 
 
 def init_history_db(db_path: Union[str, Path]) -> None:
@@ -69,7 +69,7 @@ def init_history_db(db_path: Union[str, Path]) -> None:
         _migrate_history_db(conn)
         conn.commit()
 
-    logger.info("History database initialized at %s", db_path)
+    logger.info("History database initialized at {}", db_path)
 
 
 def init_tokens_db(db_path: Union[str, Path]) -> None:
@@ -90,7 +90,7 @@ def init_tokens_db(db_path: Union[str, Path]) -> None:
         conn.execute(SPOTIFY_TOKENS_DDL)
         conn.commit()
 
-    logger.info("Tokens database initialized at %s", db_path)
+    logger.info("Tokens database initialized at {}", db_path)
 
 def init_ltm_db(db_path: Union[str, Path]) -> None:
     """Create ltm.db with the LangGraph SqliteStore schema.
@@ -119,7 +119,7 @@ def init_ltm_db(db_path: Union[str, Path]) -> None:
                 # setup() may not be exposed or may already have run during __enter__.
                 pass
 
-    logger.info("LTM database initialized at %s", db_path)
+    logger.info("LTM database initialized at {}", db_path)
 
 
 def get_connection(db_path: Union[str, Path]) -> sqlite3.Connection:

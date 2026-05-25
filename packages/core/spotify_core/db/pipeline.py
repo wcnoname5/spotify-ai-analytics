@@ -59,7 +59,7 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
     """
     json_path = Path(json_dir)
     if not list(json_path.rglob("Streaming*.json")):
-        logger.warning("No Streaming*.json files found in %s", json_dir)
+        logger.warning("No Streaming*.json files found in {}", json_dir)
         return {"inserted": 0, "skipped_duplicated": 0, "skipped_parse_error": 0}
 
     loader = SpotifyDataLoader(directory=json_path)
@@ -78,7 +78,7 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
                     played_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
                     played_at_iso = played_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
                 except (ValueError, AttributeError):
-                    logger.warning("Skipping row with unparseable ts: %s", ts_str)
+                    logger.warning("Skipping row with unparseable ts: {}", ts_str)
                     skipped_parse_error += 1
                     continue
                 row_id = hashlib.sha1(f"{track_uri}:{played_at_iso}".encode()).hexdigest()
@@ -117,7 +117,7 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
     finally:
         conn.close()
 
-    logger.info("JSON import: %d inserted, %d skipped duplicated, %d skipped parse errors", inserted, skipped_duplicated, skipped_parse_error)
+    logger.info("JSON import: {} inserted, {} skipped duplicated, {} skipped parse errors", inserted, skipped_duplicated, skipped_parse_error)
 
     # Advance sync_state cursor to the latest json_import play so that
     # subsequent sync_api_to_db calls start from the right point.
@@ -141,7 +141,7 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
                                 "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_played_at_ms', ?)",
                                 (anchor_ms,),
                             )
-                            logger.info("JSON import: sync cursor advanced to %d ms", anchor_ms)
+                            logger.info("JSON import: sync cursor advanced to {} ms", anchor_ms)
                     except (ValueError, AttributeError):
                         pass
         finally:
@@ -170,7 +170,7 @@ def _insert_item_from_api_response(conn, item: dict, source: str = "api"):
         played_at_ms = int(played_dt.timestamp() * 1000)
     except (ValueError, AttributeError):
         # Unparseable date — skip this item but don't fail the whole batch
-        logger.warning("Skipping item with unparseable played_at: %s", played_at_str)
+        logger.warning("Skipping item with unparseable played_at: {}", played_at_str)
         return False, False, True, None
 
     row_id = hashlib.sha1(f"{track_uri}:{played_at_iso}".encode()).hexdigest()
@@ -225,7 +225,7 @@ def sync_api_to_db(
         ).fetchone()
         db_last_cursor: Optional[int] = row["value"] if row else None
     except Exception as e:
-        logger.error("Error occurred while fetching sync cursor from sync_state DB: %s", e)
+        logger.error("Error occurred while fetching sync cursor from sync_state DB: {}", e)
     finally:
         conn.close()
 
@@ -266,11 +266,11 @@ def sync_api_to_db(
                     (new_cursor_ms,),
                 )
     except Exception as e:
-        logger.error("Error occurred during API sync: %s", e)
+        logger.error("Error occurred during API sync: {}", e)
     finally:
         conn.close()
 
-    logger.info("API sync: %d inserted, %d skipped duplicated, %d skipped parse errors, cursor=%d", inserted, skipped_duplicated, skipped_parse_error, new_cursor_ms)
+    logger.info("API sync: {} inserted, {} skipped duplicated, {} skipped parse errors, cursor={}", inserted, skipped_duplicated, skipped_parse_error, new_cursor_ms)
     return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error, "cursor_ms": new_cursor_ms}
 
 
@@ -319,10 +319,10 @@ def sync_api_up_to_date(
             anchor_dt = datetime.fromisoformat(anchor_str.replace("Z", "+00:00"))
             stop_at_ms = int(anchor_dt.timestamp() * 1000)
         except (ValueError, AttributeError):
-            logger.warning("Could not parse json_import anchor '%s' - no stop cursor", anchor_str)
+            logger.warning("Could not parse json_import anchor {!r} - no stop cursor", anchor_str)
 
     logger.debug(
-        "sync_api_up_to_date: json_import anchor=%s stop_at_ms=%s max_calls=%d",
+        "sync_api_up_to_date: json_import anchor={} stop_at_ms={} max_calls={}",
         anchor_str, stop_at_ms, max_calls,
     )
 
@@ -332,17 +332,17 @@ def sync_api_up_to_date(
 
     with SpotifyClient(tokens_db_path, user_id, client_id, fernet_key) as client:
         for call_num in range(max_calls):
-            logger.debug("Call %d/%d: fetching before_ms=%s", call_num + 1, max_calls, before_ms)
+            logger.debug("Call {}/{}: fetching before_ms={}", call_num + 1, max_calls, before_ms)
             response = client.get_recently_played(limit=50, before=before_ms)
             items = response.get("items", [])
             cursors = response.get("cursors", {})
             logger.debug(
-                "Call %d/%d: got %d item(s), cursors=%s, next=%s",
+                "Call {}/{}: got {} item(s), cursors={}, next={}",
                 call_num + 1, max_calls, len(items), cursors, response.get("next"),
             )
             if not items:
                 logger.info(
-                    "Call %d/%d: Spotify returned 0 items (API cache exhausted or no plays before %s) - stopping",
+                    "Call {}/{}: Spotify returned 0 items (API cache exhausted or no plays before {}) - stopping",
                     call_num + 1, max_calls, before_ms,
                 )
                 break
@@ -370,7 +370,7 @@ def sync_api_up_to_date(
             finally:
                 conn.close()
             logger.info(
-                "Call %d/%d: %d item(s) [%s → %s], inserted=%d dupes=%d",
+                "Call {}/{}: {} item(s) [{} → {}], inserted={} dupes={}",
                 call_num + 1, max_calls, len(items), oldest_in_page, newest_in_page,
                 call_inserted, call_dupes,
             )
@@ -380,12 +380,12 @@ def sync_api_up_to_date(
             before_ms = int(before_ms) if before_ms else None
 
             if before_ms is None:
-                logger.info("No pagination cursor in API response after call %d - stopping", call_num + 1)
+                logger.info("No pagination cursor in API response after call {} - stopping", call_num + 1)
                 break
 
             if stop_at_ms is not None and before_ms <= stop_at_ms:
                 logger.info(
-                    "Call %d: before_ms=%d reached json_import anchor=%d - backfill complete",
+                    "Call {}: before_ms={} reached json_import anchor={} - backfill complete",
                     call_num + 1, before_ms, stop_at_ms,
                 )
                 break
@@ -402,7 +402,7 @@ def sync_api_up_to_date(
         finally:
             conn.close()
 
-    logger.info("Backfill: %d inserted, %d skipped duplicated, %d skipped parse errors, cursor=%d", inserted, skipped_duplicated, skipped_parse_error, new_cursor_ms)
+    logger.info("Backfill: {} inserted, {} skipped duplicated, {} skipped parse errors, cursor={}", inserted, skipped_duplicated, skipped_parse_error, new_cursor_ms)
     return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error, "cursor_ms": new_cursor_ms}
 
 

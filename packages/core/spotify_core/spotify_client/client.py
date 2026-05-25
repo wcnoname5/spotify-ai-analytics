@@ -76,7 +76,7 @@ class SpotifyClient:
             SpotifyAuthError: If no token is found for the user even after refresh.
         """
         if is_token_expired(self.db_path, self.user_id):
-            logger.info("Token expired for user %s - refreshing", self.user_id)
+            logger.info("Token expired for user {} - refreshing", self.user_id)
             self._refresh_token()
 
         token_data = load_tokens(self.db_path, self.user_id, self.fernet_key)
@@ -117,7 +117,7 @@ class SpotifyClient:
             new_token["refresh_token"] = refresh_token
 
         save_tokens(self.db_path, self.user_id, new_token, self.fernet_key)
-        logger.info("Token refreshed and saved for user %s", self.user_id)
+        logger.info("Token refreshed and saved for user {}", self.user_id)
 
     # ------------------------------------------------------------------
     # Core request helper
@@ -149,7 +149,7 @@ class SpotifyClient:
 
         # If 401, attempt a single refresh and retry.
         if response.status_code == 401:
-            logger.warning("Received 401 - refreshing token and retrying for user %s", self.user_id)
+            logger.warning("Received 401 - refreshing token and retrying for user {}", self.user_id)
             self._refresh_token()
             token_data = load_tokens(self.db_path, self.user_id, self.fernet_key)
             if token_data is None:
@@ -168,7 +168,7 @@ class SpotifyClient:
                 body = exc.response.text
             status = exc.response.status_code
             logger.error(
-                "_request error: %s %s status=%d body=%s",
+                "_request error: {} {} status={} body={}",
                 method, path, status, body,
             )
             reason = ""
@@ -205,14 +205,13 @@ class SpotifyClient:
         Returns:
             Spotify user profile object as a dict.
         """
-        logger.debug("get_current_user")
         try:
             response = self._request("GET", "/me")
             result = response.json()
-            logger.info("get_current_user success: user_id=%s", result.get("id"))
+            logger.debug("get_current_user success: user_id={}", result.get("id"))
             return result
         except Exception as exc:
-            logger.error("get_current_user failed: %s", exc)
+            logger.error("get_current_user failed: {}", exc)
             raise
 
     # ------------------------------------------------------------------
@@ -239,9 +238,7 @@ class SpotifyClient:
         Returns:
             Spotify paging object containing track items.
         """
-        logger.debug("get_recently_played: limit=%d after=%s before=%s", limit, after, before)
         try:
-            # TODO: the before/after logic for this api is quite weird it reuqires more tests.
             params: dict = {"limit": limit}
             if after and before:
                 raise ValueError("Only one of 'after' or 'before' can be set for get_recently_played")
@@ -253,10 +250,10 @@ class SpotifyClient:
 
             response = self._request("GET", "/me/player/recently-played", params=params)
             result = response.json()
-            logger.info("get_recently_played success: items=%d", len(result.get("items", [])))
+            logger.debug("get_recently_played success: items={}", len(result.get("items", [])))
             return result
         except Exception as exc:
-            logger.error("get_recently_played failed: %s", exc)
+            logger.error("get_recently_played failed: {}", exc)
             raise
 
     def get_top_items(
@@ -278,15 +275,14 @@ class SpotifyClient:
         Returns:
             Spotify paging object containing top items.
         """
-        logger.debug("get_top_items: type=%s time_range=%s limit=%d", type, time_range, limit)
         try:
             params = {"time_range": time_range, "limit": limit}
             response = self._request("GET", f"/me/top/{type}", params=params)
             result = response.json()
-            logger.info("get_top_items success: type=%s items=%d", type, len(result.get("items", [])))
+            logger.debug("get_top_items success: type={} items={}", type, len(result.get("items", [])))
             return result
         except Exception as exc:
-            logger.error("get_top_items failed: type=%s %s", type, exc)
+            logger.error("get_top_items failed: type={} {}", type, exc)
             raise
 
     # ------------------------------------------------------------------
@@ -301,17 +297,16 @@ class SpotifyClient:
         Returns:
             Currently playing object, or ``None`` if nothing is playing.
         """
-        logger.debug("get_currently_playing")
         try:
             response = self._request("GET", "/me/player/currently-playing")
             if response.status_code == 204:
-                logger.info("get_currently_playing: nothing playing")
+                logger.debug("get_currently_playing: nothing playing")
                 return None
             result = response.json()
-            logger.info("get_currently_playing success: is_playing=%s", result.get("is_playing"))
+            logger.debug("get_currently_playing success: is_playing={}", result.get("is_playing"))
             return result
         except Exception as exc:
-            logger.error("get_currently_playing failed: %s", exc)
+            logger.error("get_currently_playing failed: {}", exc)
             raise
 
     def get_devices(self) -> dict:
@@ -322,14 +317,13 @@ class SpotifyClient:
         Returns:
             Dict with a ``devices`` list.
         """
-        logger.debug("get_devices")
         try:
             response = self._request("GET", "/me/player/devices")
             result = response.json()
-            logger.info("get_devices success: count=%d", len(result.get("devices", [])))
+            logger.debug("get_devices success: count={}", len(result.get("devices", [])))
             return result
         except Exception as exc:
-            logger.error("get_devices failed: %s", exc)
+            logger.error("get_devices failed: {}", exc)
             raise
 
     # ------------------------------------------------------------------
@@ -351,7 +345,6 @@ class SpotifyClient:
             uris: Optional list of Spotify track URIs to play.
             context_uri: Optional context URI (album, artist, playlist) to play.
         """
-        logger.debug("play: device_id=%r uris=%s context_uri=%r", device_id, uris, context_uri)
         try:
             params = {}
             if device_id is not None:
@@ -364,9 +357,9 @@ class SpotifyClient:
                 body["context_uri"] = context_uri
 
             self._request("PUT", "/me/player/play", params=params, json=body)
-            logger.info("play success: device_id=%r", device_id)
+            logger.debug("play success: device_id={!r}", device_id)
         except Exception as exc:
-            logger.error("play failed: %s", exc)
+            logger.error("play failed: {}", exc)
             raise
 
     def pause(self, device_id: Optional[str] = None) -> None:
@@ -377,15 +370,14 @@ class SpotifyClient:
         Args:
             device_id: Optional device to target.
         """
-        logger.debug("pause: device_id=%r", device_id)
         try:
             params = {}
             if device_id is not None:
                 params["device_id"] = device_id
             self._request("PUT", "/me/player/pause", params=params)
-            logger.info("pause success")
+            logger.debug("pause success")
         except Exception as exc:
-            logger.error("pause failed: %s", exc)
+            logger.error("pause failed: {}", exc)
             raise
 
     def skip_to_next(self, device_id: Optional[str] = None) -> None:
@@ -396,15 +388,14 @@ class SpotifyClient:
         Args:
             device_id: Optional device to target.
         """
-        logger.debug("skip_to_next: device_id=%r", device_id)
         try:
             params = {}
             if device_id is not None:
                 params["device_id"] = device_id
             self._request("POST", "/me/player/next", params=params)
-            logger.info("skip_to_next success")
+            logger.debug("skip_to_next success")
         except Exception as exc:
-            logger.error("skip_to_next failed: %s", exc)
+            logger.error("skip_to_next failed: {}", exc)
             raise
 
     def set_volume(self, volume_percent: int, device_id: Optional[str] = None) -> None:
@@ -416,15 +407,14 @@ class SpotifyClient:
             volume_percent: Volume level 0–100.
             device_id: Optional device to target.
         """
-        logger.debug("set_volume: volume_percent=%d device_id=%r", volume_percent, device_id)
         try:
             params: dict = {"volume_percent": volume_percent}
             if device_id is not None:
                 params["device_id"] = device_id
             self._request("PUT", "/me/player/volume", params=params)
-            logger.info("set_volume success: volume_percent=%d", volume_percent)
+            logger.debug("set_volume success: volume_percent={}", volume_percent)
         except Exception as exc:
-            logger.error("set_volume failed: %s", exc)
+            logger.error("set_volume failed: {}", exc)
             raise
 
     def add_to_queue(self, uri: str, device_id: Optional[str] = None) -> None:
@@ -436,15 +426,14 @@ class SpotifyClient:
             uri: Spotify URI of the item to queue.
             device_id: Optional device to target.
         """
-        logger.debug("add_to_queue: uri=%r device_id=%r", uri, device_id)
         try:
             params: dict = {"uri": uri}
             if device_id is not None:
                 params["device_id"] = device_id
             self._request("POST", "/me/player/queue", params=params)
-            logger.info("add_to_queue success: uri=%r", uri)
+            logger.debug("add_to_queue success: uri={!r}", uri)
         except Exception as exc:
-            logger.error("add_to_queue failed: %s", exc)
+            logger.error("add_to_queue failed: {}", exc)
             raise
 
     # ------------------------------------------------------------------
@@ -472,15 +461,14 @@ class SpotifyClient:
         Returns:
             Spotify playlist object.
         """
-        logger.debug("create_playlist: name=%r public=%s", name, public)
         try:
             body = {"name": name, "public": public, "description": description}
             response = self._request("POST", "/me/playlists", json=body)
             result = response.json()
-            logger.info("create_playlist success: playlist_id=%s", result.get("id"))
+            logger.debug("create_playlist success: playlist_id={}", result.get("id"))
             return result
         except Exception as exc:
-            logger.error("create_playlist failed: %s", exc)
+            logger.error("create_playlist failed: {}", exc)
             raise
 
     def add_tracks_to_playlist(self, playlist_id: str, uris: Sequence[str]) -> dict:
@@ -496,15 +484,14 @@ class SpotifyClient:
             Snapshot ID response dict.
         Note: endpoint ``/playlists/{playlist_id}/tracks`` is deprecated.
         """
-        logger.debug("add_tracks_to_playlist: playlist_id=%s count=%d", playlist_id, len(list(uris)))
         try:
             body = {"uris": list(uris)}
             response = self._request("POST", f"/playlists/{playlist_id}/items", json=body)
             result = response.json()
-            logger.info("add_tracks_to_playlist success: playlist_id=%s", playlist_id)
+            logger.debug("add_tracks_to_playlist success: playlist_id={}", playlist_id)
             return result
         except Exception as exc:
-            logger.error("add_tracks_to_playlist failed: playlist_id=%s %s", playlist_id, exc)
+            logger.error("add_tracks_to_playlist failed: playlist_id={} {}", playlist_id, exc)
             raise
 
     # ------------------------------------------------------------------
@@ -530,7 +517,6 @@ class SpotifyClient:
         Returns:
             Spotify search results object.
         """
-        logger.debug("search: query=%r types=%s limit=%d", query, list(types), limit)
         try:
             params = {
                 "q": query,
@@ -539,8 +525,8 @@ class SpotifyClient:
             }
             response = self._request("GET", "/search", params=params)
             result = response.json()
-            logger.info("search success: query=%r", query)
+            logger.debug("search success: query={!r}", query)
             return result
         except Exception as exc:
-            logger.error("search failed: query=%r %s", query, exc)
+            logger.error("search failed: query={!r} {}", query, exc)
             raise

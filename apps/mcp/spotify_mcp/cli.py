@@ -165,7 +165,7 @@ def sync(
     try:
         from spotify_core.db.pipeline import sync_api_to_db
 
-        logger.info("Syncing recent plays for user '%s'", final_user_id)
+        logger.info("Syncing recent plays for user '{}'", final_user_id)
         result = sync_api_to_db(
             db_path=DB_PATH,
             tokens_db_path=TOKENS_DB,
@@ -174,12 +174,12 @@ def sync(
             fernet_key=fernet_key,
         )
         logger.info(
-            "Inserted %d rows, cursor updated to %d ms",
+            "Inserted {} rows, cursor updated to {} ms",
             result["inserted"], result["cursor_ms"]
         )
         console.print(f"[green]✓ Synced {result['inserted']} new plays (cursor: {result['cursor_ms']} ms)[/green]")
     except Exception as exc:
-        logger.error("Sync failed: %s", exc)
+        logger.error("Sync failed: {}", exc)
         console.print(f"[red]Error: {exc}[/red]")
         raise typer.Exit(code=1)
 

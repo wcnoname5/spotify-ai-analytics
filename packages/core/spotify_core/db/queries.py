@@ -34,7 +34,6 @@ def _ensure_history_db(db_path: str) -> None:
 
 def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> None:
     """Raise ValueError on malformed dates; warn on illogical range."""
-    logger.debug("[Helper] _validate_date_range: {} to {}", start_date or "the beginning", end_date or "the end")
     for label, value in (("start_date", start_date), ("end_date", end_date)):
         if value is not None:
             try:
@@ -85,7 +84,6 @@ def get_top_artists(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_top_artists: limit={} start={} end={}", limit, start_date, end_date)
     where_clauses = ["artist_name IS NOT NULL"]
     date_clauses, params = _date_window(start_date, end_date)
     where_clauses += date_clauses
@@ -107,7 +105,7 @@ def get_top_artists(
     try:
         rows = conn.execute(sql, params).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_top_artists: returned {} artists", len(result))
+        logger.debug("get_top_artists: returned {} artists", len(result))
         return result
     except Exception:
         logger.exception("get_top_artists failed: db_path={}", db_path)
@@ -138,7 +136,6 @@ def get_top_tracks(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_top_tracks: limit={} start={} end={}", limit, start_date, end_date)
     where_clauses = ["track_name IS NOT NULL"]
     date_clauses, params = _date_window(start_date, end_date)
     where_clauses += date_clauses
@@ -163,7 +160,7 @@ def get_top_tracks(
     try:
         rows = conn.execute(sql, params).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_top_tracks: returned {} tracks", len(result))
+        logger.debug("get_top_tracks: returned {} tracks", len(result))
         return result
     except Exception:
         logger.exception("get_top_tracks failed: db_path={}", db_path)
@@ -224,7 +221,6 @@ def _detect_tz_offset(conn) -> int:
     Looks across all records with a non-NULL conn_country. Returns 0 (UTC) when
     no country data is present or the country is not in the lookup table.
     """
-    logger.debug("[Helper] _detect_tz_offset: detecting timezone offset from conn_country")
     row = conn.execute(
         "SELECT conn_country, COUNT(*) AS cnt "
         "FROM listening_history WHERE conn_country IS NOT NULL "
@@ -265,7 +261,6 @@ def get_listening_summary(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_listening_summary: start={} end={}", start_date, end_date)
     where_clauses, date_params = _date_window(start_date, end_date)
     params: list = [_SKIP_THRESHOLD_MS] + date_params
 
@@ -288,7 +283,7 @@ def get_listening_summary(
     try:
         row = conn.execute(sql, params).fetchone()
         result = dict(row)
-        logger.info("get_listening_summary: total_plays={}", result.get("total_plays"))
+        logger.debug("get_listening_summary: total_plays={}", result.get("total_plays"))
         return result
     except Exception:
         logger.exception("get_listening_summary failed: db_path={}", db_path)
@@ -322,7 +317,7 @@ def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False)
     try:
         rows = conn.execute(sql, (limit,)).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_recent_plays: returned {} rows", len(result))
+        logger.debug("get_recent_plays: returned {} rows", len(result))
         return result
     except Exception:
         logger.exception("get_recent_plays failed: db_path={}", db_path)
@@ -427,7 +422,7 @@ def get_listening_patterns(
             "most_active_date_total_ms": most_active_date_total_ms,
             "avg_plays_per_day": avg_plays_per_day,
         }
-        logger.info("get_listening_patterns: peak_hour={} peak_day={}", peak_hour, peak_day_of_week)
+        logger.debug("get_listening_patterns: peak_hour={} peak_day={}", peak_hour, peak_day_of_week)
         return result
     except Exception:
         logger.exception("get_listening_patterns failed: db_path={}", db_path)
@@ -438,18 +433,16 @@ def get_listening_patterns(
 
 def is_history_empty(db_path: str) -> bool:
     """Return True if the DB file is missing, has no listening_history table, or has zero rows."""
-    logger.debug("is_history_empty: db_path={}", db_path)
     try:
         _ensure_history_db(db_path)
     except HistoryNotInitializedError as e:
-        logger.info("is_history_empty: {}", e)
+        logger.warning("is_history_empty: {}", e)
         return True
 
     conn = get_connection(db_path)
     try:
         row = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()
         empty = row[0] == 0
-        logger.info("is_history_empty: {} (row_count={})", empty, row[0])
         return empty
     finally:
         conn.close()
@@ -461,7 +454,7 @@ def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
     try:
         _ensure_history_db(db_path)
     except HistoryNotInitializedError as e:
-        logger.warning("get_data_range: {}", e)
+        logger.error("get_data_range: {}", e)
         return None
 
     conn = get_connection(db_path)
@@ -471,7 +464,7 @@ def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
         ).fetchone()
         earliest = row["earliest"] if row else None
         latest = row["latest"] if row else None
-        logger.info("get_data_range: earliest={}, latest={}", earliest, latest)
+        logger.debug("get_data_range: earliest={}, latest={}", earliest, latest)
         return (earliest, latest)
     finally:
         conn.close()
@@ -524,7 +517,6 @@ def _grouped_trend(
              "play_count": r["play_count"]}
             for r in rows
         ]
-        logger.info("_grouped_trend({}): {} buckets", label_key, len(result))
         return result
     except Exception:
         logger.exception("_grouped_trend failed: db_path={} key={}", db_path, label_key)
@@ -561,6 +553,7 @@ def get_weekly_trend(
         List of {"week_label": "YYYY-WNN", "total_ms": int, "play_count": int},
         ordered by week ascending.
     """
+    # TODO: week label should be formatted as "YYYY/MM/DD-" using the Monday (week start) date.
     return _grouped_trend(
         db_path, start_date, end_date, "strftime('%Y-W%W', {ts})", "week_label"
     )
@@ -639,7 +632,7 @@ def get_daily_activity_pattern(
                 "total_ms": r["total_ms"] or 0,
             })
         result.sort(key=lambda d: (d["weekday_idx"], _SEGMENT_ORDER[d["segment"]]))
-        logger.info("get_daily_activity_pattern: {} (weekday, segment) rows", len(result))
+        logger.debug("get_daily_activity_pattern: {} (weekday, segment) rows", len(result))
         return result
     except Exception:
         logger.exception("get_daily_activity_pattern failed: db_path={}", db_path)

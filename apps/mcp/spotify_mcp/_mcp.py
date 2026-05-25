@@ -33,7 +33,7 @@ async def lifespan(server: FastMCP):
         safe_actions = [_ascii_safe(action) for action in blocking]
         for action in blocking:
             print(_ascii_safe(f"  - {action}"), file=sys.stderr, flush=True)
-        logger.error("%s\n%s", safe_msg, "\n".join(f"  - {action}" for action in safe_actions))
+        logger.error("{}\n{}", safe_msg, "\n".join(f"  - {action}" for action in safe_actions))
         raise SystemExit(1)
 
     logger.info("MCP server ready: all checks passed.")
