@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     ltm_db_path: Path = Field(default_factory=paths.ltm_db, alias="LTM_DB_PATH")
     checkpoints_db_path: Path = Field(default_factory=paths.checkpoints_db, alias="CHECKPOINTS_DB_PATH")
 
+    # Spotify credentials
+    spotify_client_id: str = Field(default="", alias="SPOTIFY_CLIENT_ID")
+    token_encrypt_key: str = Field(default="", alias="TOKEN_ENCRYPT_KEY")
+
+    # Langfuse (all 3 required to enable tracing)
+    langfuse_public_key: Optional[str] = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: Optional[str] = Field(default=None, alias="LANGFUSE_SECRET_KEY")
+    langfuse_base_url: Optional[str] = Field(default=None, alias="LANGFUSE_BASE_URL")
+
     @field_validator(
         "spotify_data_path",
         "history_db_path",
@@ -59,6 +68,14 @@ class Settings(BaseSettings):
             logger.warning("Place your Streaming_History_Audio_*.json files there.")
         else:
             logger.info("Spotify history data path verified: {}", self.spotify_data_path)
+
+    @property
+    def langfuse_configured(self) -> bool:
+        return bool(self.langfuse_public_key and self.langfuse_secret_key and self.langfuse_base_url)
+
+    @property
+    def fernet_key_bytes(self) -> bytes:
+        return self.token_encrypt_key.encode() if self.token_encrypt_key else b""
 
 
 settings = Settings()
