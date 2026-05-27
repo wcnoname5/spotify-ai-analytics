@@ -1,37 +1,28 @@
-"""Shared dotenv helpers used by apps to ensure .env is loaded before Settings.
+"""Shared env helpers — thin wrappers over Settings for backward compatibility.
 
-This module centralizes the small per-app logic (loading platform .env and
-providing runtime helpers like `get_client_id`) so app `config.py` files can
-remain thin wrappers that only call these helpers.
+Historically these functions called `os.getenv()` directly. They now read from
+`spotify_core.config.settings`, which loads the platform-resolved `.env` via
+pydantic-settings. Callers that import `get_client_id` / `get_fernet_key`
+need not change.
 """
 from __future__ import annotations
 
-import os
-from dotenv import load_dotenv
-from loguru import logger
-
-from spotify_core import paths
 
 def ensure_dotenv_loaded() -> None:
-    """Load the platform config `.env` if present, then a cwd .env fallback.
+    """No-op retained for backward compatibility.
 
-    Idempotent — safe to call multiple times.
+    `Settings` loads `paths.env_file()` at import time via pydantic-settings.
     """
-    try:
-        if paths.env_file().exists():
-            load_dotenv(paths.env_file())
-        # fallback: load a .env from cwd if present (dev convenience)
-        load_dotenv(override=False)
-    except Exception:
-        logger.exception("Failed to load .env file")
+    return None
 
 
 def get_client_id() -> str:
-    """Return SPOTIFY_CLIENT_ID from the environment (ensures .env loaded)."""
-    return os.getenv("SPOTIFY_CLIENT_ID", "")
+    """Return SPOTIFY_CLIENT_ID from Settings."""
+    from spotify_core.config import settings
+    return settings.spotify_client_id
 
 
 def get_fernet_key() -> bytes:
-    """Return TOKEN_ENCRYPT_KEY as bytes (ensures .env loaded)."""
-    raw = os.getenv("TOKEN_ENCRYPT_KEY", "")
-    return raw.encode() if raw else b""
+    """Return TOKEN_ENCRYPT_KEY as bytes from Settings."""
+    from spotify_core.config import settings
+    return settings.fernet_key_bytes

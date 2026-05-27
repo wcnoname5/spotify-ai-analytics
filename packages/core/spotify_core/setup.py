@@ -1,7 +1,6 @@
 """Project setup workflow: init DBs, generate encryption key, run OAuth, import JSON history."""
 import os
 from loguru import logger
-import re
 from pathlib import Path
 
 from spotify_core.config import settings
@@ -66,21 +65,12 @@ def run_setup(
     if not fernet_key_str:
         logger.warning("TOKEN_ENCRYPT_KEY not set - auto-generating a Fernet key")
         from cryptography.fernet import Fernet
-        from spotify_core.logging import PROJECT_ROOT
+        from spotify_core import env_file as _env_file, paths
+
         new_key = Fernet.generate_key().decode()
-        env_path = PROJECT_ROOT / ".env"
-        if env_path.exists():
-            content = env_path.read_text()
-            if "TOKEN_ENCRYPT_KEY=" in content:
-                content = re.sub(r"TOKEN_ENCRYPT_KEY=\S*", f"TOKEN_ENCRYPT_KEY={new_key}", content)
-            else:
-                content += f"\nTOKEN_ENCRYPT_KEY={new_key}\n"
-            env_path.write_text(content)
-            logger.info("Auto-generated TOKEN_ENCRYPT_KEY saved to {}", env_path)
-        else:
-            logger.warning(
-                "No .env file found - add this line manually: TOKEN_ENCRYPT_KEY={}", new_key
-            )
+        _env_file.upsert(paths.env_file(), "TOKEN_ENCRYPT_KEY", new_key)
+        logger.info("Auto-generated TOKEN_ENCRYPT_KEY saved to {}", paths.env_file())
+
         fernet_key_str = new_key
         os.environ["TOKEN_ENCRYPT_KEY"] = new_key
 
