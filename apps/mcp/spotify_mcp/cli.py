@@ -141,9 +141,7 @@ def sync(
     paths.ensure_dirs()
 
     # Setup logging
-    level = logging.DEBUG if verbose else logging.getLevelNamesMapping().get(
-        os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
-    )
+    level = "DEBUG" if verbose else os.getenv("LOG_LEVEL", "INFO").upper()
     setup_logging(log_name="sync", level=level)
 
     # Determine user ID: CLI flag > wizard config > "default" (matches OAuth default)

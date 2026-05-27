@@ -56,7 +56,9 @@ def update_trace_metadata(metadata: dict) -> None:
     attaches our post-hoc fields (e.g. OpenAI cached prompt tokens, only known
     after `.invoke()` returns) to that node's span.
     """
-    if not metadata or not _langfuse_configured():
+    from spotify_core.config import settings
+
+    if not metadata or not settings.langfuse_configured:
         return
     try:
         from langfuse import get_client

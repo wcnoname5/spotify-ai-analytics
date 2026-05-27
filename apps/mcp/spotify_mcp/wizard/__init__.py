@@ -9,6 +9,8 @@ from . import (
     claude_desktop,
     credentials,
     history_import,
+    langfuse_keys,
+    llm_keys,
     oauth_step,
     spotify_app,
     state,
@@ -43,6 +45,9 @@ def run_wizard(
 
     if not state.history_has_data():
         history_import.run_step(console=console, import_path=None)
+
+    llm_keys.run_step(console=console)
+    langfuse_keys.run_step(console=console)
 
     claude_desktop.run_step(console=console, install=setup_claude_desktop)
     console.print("\n[bold green]Setup complete.[/bold green]")
