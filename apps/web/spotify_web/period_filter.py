@@ -4,12 +4,15 @@ import datetime
 import streamlit as st
 
 # Each option dict maps a Chinese radio label to the period_type tag the AI
-# report consumes ("weekly" | "monthly" | "custom"). Different views use
-# different labels: the dashboard shows the in-progress current week/month,
-# while the AI report covers the last completed week/month.
+# report consumes ("weekly" | "monthly" | "quarterly" | "yearly" | "custom").
+# Different views use different labels: the dashboard shows the in-progress
+# current week/month, while the AI report covers the last completed period
+# (plus quarter/year-to-date options that align with existing playbooks).
 REPORT_PERIOD_OPTION: dict[str, str] = {
     "上週": "weekly",
     "上月": "monthly",
+    "上季": "quarterly",
+    "今年": "yearly",
     "自訂時間": "custom",
 }
 
@@ -18,6 +21,27 @@ DASHBOARD_PERIOD_OPTION: dict[str, str] = {
     "本月": "monthly",
     "自訂時間": "custom",
 }
+
+
+def _last_completed_quarter(today: datetime.date) -> tuple[datetime.date, datetime.date]:
+    """Return (start, end) of the most recently completed calendar quarter."""
+    q = (today.month - 1) // 3  # 0..3 — current quarter index
+    if q == 0:
+        year = today.year - 1
+        start = datetime.date(year, 10, 1)
+        end = datetime.date(year, 12, 31)
+    else:
+        start_month = (q - 1) * 3 + 1
+        end_month = start_month + 2
+        # Last day of end_month: first of next month minus one day.
+        next_month_first = (
+            datetime.date(today.year + 1, 1, 1)
+            if end_month == 12
+            else datetime.date(today.year, end_month + 1, 1)
+        )
+        start = datetime.date(today.year, start_month, 1)
+        end = next_month_first - datetime.timedelta(days=1)
+    return start, end
 
 
 def resolve_period_dates(
@@ -47,6 +71,11 @@ def resolve_period_dates(
         first_of_this_month = current_date.replace(day=1)
         end = first_of_this_month - datetime.timedelta(days=1)  # last day of previous month
         start = end.replace(day=1)
+    elif choice == "上季":
+        start, end = _last_completed_quarter(current_date)
+    elif choice == "今年":
+        start = datetime.date(current_date.year, 1, 1)
+        end = current_date
     else:
         start = custom_start or current_date - datetime.timedelta(days=30)
         end = custom_end or current_date

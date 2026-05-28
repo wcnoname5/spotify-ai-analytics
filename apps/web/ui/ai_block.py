@@ -10,7 +10,7 @@ from spotify_core.report.models import build_chat_model
 
 from spotify_web.config import get_llm_config
 
-from spotify_web.period_filter import render_period_dates
+from spotify_web.period_filter import render_period_dates, REPORT_PERIOD_OPTION
 
 _DB_PATH = str(settings.history_db_path)
 
@@ -24,11 +24,9 @@ _STYLES = {
 def _render_report(result, model_label: str) -> None:
     """Render a finished ReportResult: the article plus a status caption."""
     st.markdown(result.text)
-    tools_used = ", ".join(sorted({r.name for r in result.tool_log})) or "（無）"
     status = "✅ 已通過審查" if result.approved else "⚠️ 已達修訂上限"
     st.caption(
         f"{status}｜模型：{model_label}｜修訂次數：{result.revision_count}｜"
-        f"使用工具：{tools_used}"
     )
     if result.trace_url:
         st.caption(f"[在 Langfuse 查看追蹤]({result.trace_url})")
@@ -67,12 +65,7 @@ def render_ai_block() -> None:
             key="ai_model",
         )
 
-    start, end, period_type = render_period_dates("ai_period")
-    st.session_state["ai_filter"] = {
-        "start": start,
-        "end": end,
-        "period_type": period_type,
-    }
+    start, end, period_type = render_period_dates("ai_period", REPORT_PERIOD_OPTION)
 
     if st.button("✨ 產生分析", key="ai_generate"):
         st.session_state.pop("ai_report", None)

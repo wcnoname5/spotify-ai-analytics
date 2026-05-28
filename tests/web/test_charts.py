@@ -10,10 +10,10 @@ def test_daily_activity_figure_empty():
 
 def test_daily_activity_figure_values():
     rows = [
-        {"weekday": "Monday", "weekday_idx": 0, "segment": "7-12", "total_mins": 10},
+        {"weekday": "Monday", "weekday_idx": 0, "segment": "07:00-12:59", "total_mins": 10},
     ]
     fig = daily_activity_figure(rows)
-    seg_trace = next(t for t in fig.data if t.name == "7-12")
+    seg_trace = next(t for t in fig.data if t.name == "07:00-12:59")
     assert seg_trace.y[0] == 10
     assert tuple(seg_trace.x) == (
         "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"

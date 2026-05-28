@@ -42,4 +42,4 @@ def get_llm_config() -> dict:
         models += [{"provider": "google", "model": m} for m in _GOOGLE_MODELS]
     if os.getenv("OPENAI_API_KEY"):
         models += [{"provider": "openai", "model": m} for m in _OPENAI_MODELS]
-    return {"models": models, "default": models[0] if models else None}
+    return {"models": models}

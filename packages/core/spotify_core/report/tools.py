@@ -20,27 +20,36 @@ def make_report_tools(db_path: str) -> list[BaseTool]:
         return queries.get_listening_summary(
             db_path, start_date=start_date, end_date=end_date
         )
-
     @tool
-    def get_top_artists(start_date: str, end_date: str) -> list[dict]:
-        """The 10 most-listened artists for the date range, by listening time.
-        Dates are ISO 'YYYY-MM-DD'."""
+    def get_top_artists(
+        start_date: str,
+        end_date: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        """The most-listened artists for the date range, ranked by listening
+        time. Dates are ISO 'YYYY-MM-DD'. `limit` controls how many artists
+        to return (default 10)."""
         return queries.get_top_artists(
-            db_path, limit=10, start_date=start_date, end_date=end_date
+            db_path, limit=limit, start_date=start_date, end_date=end_date
         )
 
     @tool
-    def get_top_tracks(start_date: str, end_date: str) -> list[dict]:
-        """The 10 most-played tracks for the date range, by play count.
-        Dates are ISO 'YYYY-MM-DD'."""
+    def get_top_tracks(
+        start_date: str,
+        end_date: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        """The most-played tracks for the date range, ranked by play count.
+        Dates are ISO 'YYYY-MM-DD'. `limit` controls how many tracks to
+        return (default 10)."""
         return queries.get_top_tracks(
-            db_path, limit=10, start_date=start_date, end_date=end_date
+            db_path, limit=limit, start_date=start_date, end_date=end_date
         )
 
     @tool
     def get_daily_activity_pattern(start_date: str, end_date: str) -> list[dict]:
-        """Listening volume per weekday and per time-of-day segment (0-6, 7-12,
-        13-18, 19-23) for the date range. Dates are ISO 'YYYY-MM-DD'."""
+        """Listening volume per weekday and per time-of-day segment (00:00-06:59,
+        07:00-12:59, 13:00-18:59, 19:00-23:59) for the date range. Dates are ISO 'YYYY-MM-DD'."""
         return queries.get_daily_activity_pattern(
             db_path, start_date=start_date, end_date=end_date
         )

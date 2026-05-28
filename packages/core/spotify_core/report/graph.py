@@ -5,7 +5,7 @@ from langchain_core.language_models import BaseChatModel
 from langgraph.graph import END, StateGraph
 
 from .nodes import make_report_nodes
-from .observability import get_langfuse_callbacks, get_trace_url
+from .observability import get_trace_url, langfuse_session
 from .state import ReportResult, ReportState
 from .tools import make_report_tools
 
@@ -50,11 +50,6 @@ def generate_report(
                 style, period_type, start_date, end_date)
     tools = make_report_tools(db_path)
     graph = build_report_graph(tools)
-    callbacks = get_langfuse_callbacks()
-    config = {
-        "configurable": {"model": model},
-        "callbacks": callbacks,
-    }
     initial: ReportState = {
         "style": style,
         "period_type": period_type,
@@ -67,7 +62,13 @@ def generate_report(
         "tool_log": [],
         "final_report": "",
     }
-    final = graph.invoke(initial, config=config)
+    with langfuse_session(style=style, period_type=period_type) as callbacks:
+        config = {
+            "configurable": {"model": model},
+            "callbacks": callbacks,
+            "run_name": f"report-{style}_{start_date}-{end_date}",
+        }
+        final = graph.invoke(initial, config=config)
     trace_url = get_trace_url(callbacks)
     result = ReportResult(
         text=final["final_report"] or final["draft"],

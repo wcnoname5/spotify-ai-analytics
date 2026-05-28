@@ -30,15 +30,15 @@ def test_daily_activity_pattern_buckets(tmp_path):
     db = str(tmp_path / "history.db")
     init_history_db(db)
     _seed(db, [
-        {"id": "1", "played_at": "2024-01-08T03:00:00Z", "ms_played": 60_000},   # Monday, 0-6
-        {"id": "2", "played_at": "2024-01-08T09:00:00Z", "ms_played": 120_000},  # Monday, 7-12
-        {"id": "3", "played_at": "2024-01-14T20:00:00Z", "ms_played": 180_000},  # Sunday, 19-23
+        {"id": "1", "played_at": "2024-01-08T03:00:00Z", "ms_played": 60_000},   # Monday, 00:00-06:59
+        {"id": "2", "played_at": "2024-01-08T09:00:00Z", "ms_played": 120_000},  # Monday, 07:00-12:59
+        {"id": "3", "played_at": "2024-01-14T20:00:00Z", "ms_played": 180_000},  # Sunday, 19:00-23:59
     ])
     rows = get_daily_activity_pattern(db)
     by_key = {(r["weekday"], r["segment"]): r["total_mins"] for r in rows}
-    assert by_key[("Monday", "0-6")] == 1
-    assert by_key[("Monday", "7-12")] == 2
-    assert by_key[("Sunday", "19-23")] == 3
+    assert by_key[("Monday", "00:00-06:59")] == 1
+    assert by_key[("Monday", "07:00-12:59")] == 2
+    assert by_key[("Sunday", "19:00-23:59")] == 3
     mon = next(r for r in rows if r["weekday"] == "Monday")
     sun = next(r for r in rows if r["weekday"] == "Sunday")
     assert mon["weekday_idx"] == 0

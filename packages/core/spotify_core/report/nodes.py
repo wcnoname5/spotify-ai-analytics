@@ -7,7 +7,8 @@ from loguru import logger
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 
-from .prompts import REVIEWER_RUBRIC, compose_drafter_system
+from .observability import extract_usage, update_trace_metadata
+from .prompts import compose_reviewer_system, compose_drafter_system, select_playbook
 from .state import ReportState, ReviewVerdict, extract_tool_log
 
 # Hard caps that guarantee the graph terminates.
@@ -27,21 +28,16 @@ def make_report_nodes(tools: list):
         model = config["configurable"]["model"]
         model_with_tools = model.bind_tools(tools)
 
-        system = compose_drafter_system(
-            period_type=state.get("period_type", "custom"),
-            style=state["style"],
+        playbook = select_playbook(
+            state.get("period_type", "custom"),
+            state["start_date"],
+            state["end_date"],
         )
-
-        period_label = {
-            "weekly": "上一個已結束的週次",
-            "monthly": "上一個已結束的月份",
-            "custom": "使用者自訂的時間區間",
-        }.get(state.get("period_type", "custom"), "使用者自訂的時間區間")
+        system = compose_drafter_system(playbook=playbook, style=state["style"])
 
         user = (
-            f"請分析使用者從 {state['start_date']} 到 {state['end_date']} "
-            f"（{period_label}）的聽歌資料，依系統提示中對應 period_type 的"
-            f"框架呼叫工具並寫出文章。"
+            f"請分析使用者從 {state['start_date']} 到 {state['end_date']} 的歌曲聆聽資料，"
+            f"依照系統提示的分析框架呼叫工具並寫出文章。"
         )
         
         messages = [SystemMessage(content=system), HumanMessage(content=user)]
@@ -52,9 +48,11 @@ def make_report_nodes(tools: list):
             )))
 
         draft = ""
+        usages: list[dict] = []
         for i in range(_MAX_TOOL_ITERATIONS):
             response = model_with_tools.invoke(messages, config=config)
             messages.append(response)
+            usages.append(extract_usage(response))
             tool_calls = getattr(response, "tool_calls", None)
             if not tool_calls:
                 draft = response.content
@@ -82,8 +80,11 @@ def make_report_nodes(tools: list):
             )
 
         tool_log = extract_tool_log(messages)
-        logger.info("drafter_node: draft {} chars, {} tool calls",
-                    len(draft), len(tool_log))
+        logger.info("drafter_node: draft {} chars, {} tool calls, {} model calls",
+                    len(draft), len(tool_log), len(usages))
+        update_trace_metadata({
+            "usage": usages,
+        })
         return {"draft": draft, "tool_log": tool_log}
 
     def reviewer_node(state: ReportState, config: RunnableConfig) -> dict:
@@ -91,23 +92,34 @@ def make_report_nodes(tools: list):
         logger.info("reviewer_node: reviewing revision {}",
                     state["revision_count"])
         model = config["configurable"]["model"]
-        reviewer = model.with_structured_output(ReviewVerdict)
+        reviewer = model.with_structured_output(ReviewVerdict, include_raw=True)
 
+        playbook = select_playbook(
+            state.get("period_type", "custom"),
+            state["start_date"],
+            state["end_date"],
+        )
         tool_summary = "\n".join(
-            f"- {r.name}({r.args}) -> {'OK' if r.success else 'ERROR'}: {r.result}"
+            f"- {r.name}({r.args}) -> {'OK' if r.success else 'ERROR'} ({len(str(r.result))} chars)"
             for r in state["tool_log"]
         ) or "（沒有工具呼叫紀錄）"
-        messages = [
-            SystemMessage(content=REVIEWER_RUBRIC),
-            HumanMessage(content=(
-                f"指定風格：{state['style']}\n"
-                f"指定 period_type：{state.get('period_type', 'custom')}\n"
-                f"分析區間：{state['start_date']} ~ {state['end_date']}\n\n"
-                f"草稿：\n{state['draft']}\n\n"
-                f"草稿作者實際取得的資料：\n{tool_summary}"
-            )),
-        ]
-        verdict: ReviewVerdict = reviewer.invoke(messages, config=config)
+
+        system = compose_reviewer_system(state["style"], playbook)
+        user = (
+            f"指定風格：{state['style']}\n"
+            f"分析區間：{state['start_date']} ~ {state['end_date']}\n\n"
+            f"草稿：\n{state['draft']}\n\n"
+            f"工具呼叫紀錄：\n{tool_summary}"
+        )
+        messages = [SystemMessage(content=system), HumanMessage(content=user)]
+
+        result = reviewer.invoke(messages, config=config)
+        verdict: ReviewVerdict = result["parsed"]
+        raw_response = result.get("raw")
+        if raw_response is not None:
+            update_trace_metadata({
+                "usage": extract_usage(raw_response),
+            })
         if verdict.approved:
             logger.info("reviewer_node: approved")
             return {

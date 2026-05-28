@@ -10,8 +10,6 @@ from loguru import logger
 from langchain_core.messages import BaseMessage, ToolMessage
 from pydantic import BaseModel, Field
 
-_RESULT_TRUNCATE = 500
-
 
 @dataclass
 class ToolCallRecord:
@@ -35,7 +33,7 @@ class ReviewVerdict(BaseModel):
 class ReportState(TypedDict):
     """Mutable state threaded through the report graph."""
     style: str
-    period_type: str  # "weekly" | "monthly" | "custom"
+    period_type: str  # "weekly" | "monthly" | "quarterly" | "yearly" | "custom"
     start_date: str
     end_date: str
     draft: str
@@ -79,7 +77,7 @@ def extract_tool_log(messages: list[BaseMessage]) -> list[ToolCallRecord]:
             records.append(ToolCallRecord(
                 name=name,
                 args=args,
-                result=content[:_RESULT_TRUNCATE],
+                result=content,
                 success=success,
                 error=None if success else content,
             ))

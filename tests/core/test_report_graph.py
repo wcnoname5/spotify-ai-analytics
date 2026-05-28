@@ -1,9 +1,19 @@
 """Tests for the report graph using a scripted fake chat model."""
+
+import pytest
 from langchain_core.messages import AIMessage
 
 from spotify_core.db.migrations import get_connection, init_history_db
 from spotify_core.report.graph import generate_report
 from spotify_core.report.state import ReviewVerdict
+
+
+@pytest.fixture(autouse=True)
+def _disable_langfuse_tracing(monkeypatch):
+    monkeypatch.setattr(
+        "spotify_core.report.observability._langfuse_configured",
+        lambda: False,
+    )
 
 
 def _seed(db_path, rows):
@@ -40,12 +50,21 @@ class _FakeBound:
 
 
 class _FakeStructured:
-    """A structured-output fake model — pops scripted ReviewVerdicts."""
-    def __init__(self, verdicts):
+    """A structured-output fake model — pops scripted ReviewVerdicts.
+
+    Matches the langchain `include_raw=True` shape so the reviewer node can
+    pull token usage off the raw AIMessage alongside the parsed verdict.
+    """
+    def __init__(self, verdicts, include_raw=False):
         self._verdicts = verdicts
+        self._include_raw = include_raw
 
     def invoke(self, messages, config=None):
-        return self._verdicts.pop(0)
+        verdict = self._verdicts.pop(0)
+        if self._include_raw:
+            return {"raw": AIMessage(content=""), "parsed": verdict,
+                    "parsing_error": None}
+        return verdict
 
 
 class FakeChatModel:
@@ -63,8 +82,8 @@ class FakeChatModel:
     def bind_tools(self, tools):
         return _FakeBound(self._draft_responses)
 
-    def with_structured_output(self, schema):
-        return _FakeStructured(self._review_verdicts)
+    def with_structured_output(self, schema, include_raw=False):
+        return _FakeStructured(self._review_verdicts, include_raw=include_raw)
 
 
 def test_drafter_records_tool_calls_and_reviewer_approves(tmp_path):

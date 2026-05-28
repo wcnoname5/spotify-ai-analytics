@@ -1,12 +1,12 @@
 """Plotly figure builders for the dashboard. Pure: data in, Figure out."""
 import plotly.graph_objects as go
 
-_SEGMENT_ORDER = ["0-6", "7-12", "13-18", "19-23"]
+_SEGMENT_ORDER = ["00:00-06:59", "07:00-12:59", "13:00-18:59", "19:00-23:59"]
 _SEGMENT_COLORS = {
-    "0-6":   "rgba(31, 96, 180, 0.9)",
-    "7-12":  "rgba(231, 185, 0, 0.9)",
-    "13-18": "rgba(255, 126, 14, 0.9)",
-    "19-23": "rgba(214, 39, 39, 0.85)",
+    "00:00-06:59": "rgba(31, 96, 180, 0.9)",
+    "07:00-12:59": "rgba(231, 185, 0, 0.9)",
+    "13:00-18:59": "rgba(255, 126, 14, 0.9)",
+    "19:00-23:59": "rgba(214, 39, 39, 0.85)",
 }
 _WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 _TREND_TITLES = {

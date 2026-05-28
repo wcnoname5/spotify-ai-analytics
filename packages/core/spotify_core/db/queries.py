@@ -178,7 +178,7 @@ _DOW_MAP = {
 }
 
 # Stacking order for the daily-activity time segments.
-_SEGMENT_ORDER = {"0-6": 0, "7-12": 1, "13-18": 2, "19-23": 3}
+_SEGMENT_ORDER = {"00:00-06:59": 0, "07:00-12:59": 1, "13:00-18:59": 2, "19:00-23:59": 3}
 
 # Country code → UTC offset in hours. Fractional-offset countries (e.g. IN +5:30) are
 # approximated to the nearest integer. Multi-timezone countries (US, CA, RU, AU) use
@@ -584,8 +584,8 @@ def get_daily_activity_pattern(
     """Per-weekday, per-time-segment listening volume from history.db.
 
     Timestamps are shifted to local time (offset inferred from conn_country)
-    before grouping. Time segments are local hour-of-day ranges 0-6, 7-12,
-    13-18, 19-23.
+    before grouping. Time segments are local hour-of-day ranges 00:00-06:59,
+    07:00-12:59, 13:00-18:59, 19:00-23:59.
 
     Args:
         db_path: Path to history.db.
@@ -612,10 +612,10 @@ def get_daily_activity_pattern(
             SELECT
                 strftime('%w', {local_ts}) AS dow,
                 CASE
-                    WHEN {hour_expr} BETWEEN 0 AND 6 THEN '0-6'
-                    WHEN {hour_expr} BETWEEN 7 AND 12 THEN '7-12'
-                    WHEN {hour_expr} BETWEEN 13 AND 18 THEN '13-18'
-                    ELSE '19-23'
+                    WHEN {hour_expr} BETWEEN 0 AND 6 THEN '00:00-06:59'
+                    WHEN {hour_expr} BETWEEN 7 AND 12 THEN '07:00-12:59'
+                    WHEN {hour_expr} BETWEEN 13 AND 18 THEN '13:00-18:59'
+                    ELSE '19:00-23:59'
                 END AS segment,
                 SUM(ms_played) / 60000 AS total_mins
             FROM listening_history
