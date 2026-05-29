@@ -57,7 +57,8 @@ def run_wizard(
         llm_keys.run_step(console=console)
         langfuse_keys.run_step(console=console)
     else:
-        console.print("[dim]Install the [dashboard] extra to enable AI reports.[/dim]")
+        # NB: escape the literal brackets so Rich does not treat [dashboard] as markup.
+        console.print("[dim]Install the \\[dashboard] extra to enable AI reports.[/dim]")
 
     claude_desktop.run_step(console=console, install=setup_claude_desktop)
     console.print("\n[bold green]Setup complete.[/bold green]")

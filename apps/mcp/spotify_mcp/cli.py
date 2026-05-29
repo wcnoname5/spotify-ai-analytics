@@ -202,15 +202,16 @@ def path() -> None:
 def dashboard(
     port: Annotated[int, typer.Option("--port", help="Port for the Streamlit server.")] = 8501,
 ) -> None:
-    """Launch the Streamlit dashboard (requires the [dashboard] extra)."""
+    """Launch the Streamlit dashboard (requires the dashboard extra)."""
     import subprocess
     import sys
     from importlib.resources import as_file, files
 
     if not _streamlit_available():
+        # NB: escape the literal brackets so Rich does not treat [dashboard] as markup.
         console.print(
             "[red]Dashboard dependencies are not installed.[/red]\n"
-            'Install with:  uvx --from "spotify-analytics-mcp[dashboard]" spotify-mcp dashboard'
+            'Install with:  uvx --from "spotify-analytics-mcp\\[dashboard]" spotify-mcp dashboard'
         )
         raise typer.Exit(code=1)
 

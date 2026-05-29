@@ -14,6 +14,8 @@ def test_dashboard_exits_when_streamlit_missing(monkeypatch):
     result = runner.invoke(app, ["dashboard"])
     assert result.exit_code == 1, result.output
     assert "dashboard" in result.output.lower()
+    # The install hint must show the literal extra name, not have it stripped as Rich markup.
+    assert "[dashboard]" in result.output
 
 
 def test_dashboard_launches_streamlit(monkeypatch):
