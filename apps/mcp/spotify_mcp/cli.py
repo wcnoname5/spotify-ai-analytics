@@ -142,8 +142,8 @@ def sync(
     from spotify_core import env_file as _env_file
     from spotify_core import paths
     from spotify_core.logging import setup_logging
-    # Importing spotify_mcp.config runs ensure_dotenv_loaded() at module import,
-    # so .env is already in os.environ by the time this line returns.
+    # spotify_mcp.config imports spotify_core.config.settings, which reads the
+    # platform .env via pydantic-settings; get_client_id/get_fernet_key delegate to it.
     from spotify_mcp.config import DB_PATH, TOKENS_DB, get_client_id, get_fernet_key
 
     paths.ensure_dirs()
@@ -229,12 +229,14 @@ def serve() -> None:
     """Start the MCP server over stdio (invoked by Claude Desktop)."""
     import os
 
+    from dotenv import load_dotenv
+
     from spotify_core import paths
-    from spotify_core.env import ensure_dotenv_loaded
     from spotify_core.logging import setup_mcp_logging
 
     paths.ensure_dirs()
-    ensure_dotenv_loaded()
+    # Load the platform .env into os.environ (config values + any env-based SDKs).
+    load_dotenv(paths.env_file())
 
     setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
 

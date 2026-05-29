@@ -1,19 +1,12 @@
-"""Shared env helpers — thin wrappers over Settings for backward compatibility.
+"""Shared env helpers — thin wrappers over Settings.
 
-Historically these functions called `os.getenv()` directly. They now read from
-`spotify_core.config.settings`, which loads the platform-resolved `.env` via
-pydantic-settings. Callers that import `get_client_id` / `get_fernet_key`
-need not change.
+These functions read from `spotify_core.config.settings`, which loads the
+platform-resolved `.env` via pydantic-settings. Entry points that need the
+`.env` values in `os.environ` for third-party SDKs (e.g. Langfuse) call
+`dotenv.load_dotenv(paths.env_file())` themselves (see `apps/mcp/server.py`
+and the dashboard entry `main_page.py`).
 """
 from __future__ import annotations
-
-
-def ensure_dotenv_loaded() -> None:
-    """No-op retained for backward compatibility.
-
-    `Settings` loads `paths.env_file()` at import time via pydantic-settings.
-    """
-    return None
 
 
 def get_client_id() -> str:
