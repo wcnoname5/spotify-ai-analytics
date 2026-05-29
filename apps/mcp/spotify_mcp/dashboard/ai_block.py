@@ -44,8 +44,7 @@ def render_ai_block() -> None:
     llm_config = get_llm_config()
     if not llm_config["models"]:
         st.info(
-            "尚未設定 LLM 金鑰。請在 .env 加入 `GEMINI_API_KEY` 後重新啟動，"
-            "即可使用 AI 分析。"
+            "Setup Wizard 尚未設定 LLM 金鑰。"
         )
         return
 
