@@ -11,6 +11,7 @@ Usage:
 """
 from __future__ import annotations
 
+import importlib.util
 import json
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
@@ -27,6 +28,12 @@ from spotify_mcp.wizard import state as _state
 from loguru import logger
 
 console = Console()
+
+
+def _streamlit_available() -> bool:
+    """True when the [dashboard] extra (streamlit) is importable."""
+    return importlib.util.find_spec("streamlit") is not None
+
 
 app = typer.Typer(
     name="spotify-mcp",
@@ -190,6 +197,28 @@ def path() -> None:
     config_dir = paths.config_dir()
     data_dir = paths.data_dir()
     console.print(f"[yellow]Config directory: {config_dir}; Data directory: {data_dir}[/yellow]")
+
+@app.command()
+def dashboard(
+    port: Annotated[int, typer.Option("--port", help="Port for the Streamlit server.")] = 8501,
+) -> None:
+    """Launch the Streamlit dashboard (requires the [dashboard] extra)."""
+    import subprocess
+    import sys
+    from importlib.resources import as_file, files
+
+    if not _streamlit_available():
+        console.print(
+            "[red]Dashboard dependencies are not installed.[/red]\n"
+            'Install with:  uvx --from "spotify-analytics-mcp[dashboard]" spotify-mcp dashboard'
+        )
+        raise typer.Exit(code=1)
+
+    with as_file(files("spotify_mcp.dashboard") / "main_page.py") as page:
+        subprocess.run(
+            [sys.executable, "-m", "streamlit", "run", str(page), "--server.port", str(port)]
+        )
+
 
 @app.command()
 def serve() -> None:
