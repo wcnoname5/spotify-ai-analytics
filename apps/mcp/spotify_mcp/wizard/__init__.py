@@ -1,6 +1,8 @@
 """Setup wizard orchestration — composes resumable steps."""
 from __future__ import annotations
 
+import importlib.util
+
 from rich.console import Console
 
 from spotify_core import paths
@@ -15,6 +17,11 @@ from . import (
     spotify_app,
     state,
 )
+
+
+def _dashboard_installed() -> bool:
+    """True when the [dashboard] extra (streamlit) is importable."""
+    return importlib.util.find_spec("streamlit") is not None
 
 
 def run_wizard(
@@ -46,8 +53,11 @@ def run_wizard(
     if not state.history_has_data():
         history_import.run_step(console=console, import_path=None)
 
-    llm_keys.run_step(console=console)
-    langfuse_keys.run_step(console=console)
+    if _dashboard_installed():
+        llm_keys.run_step(console=console)
+        langfuse_keys.run_step(console=console)
+    else:
+        console.print("[dim]Install the [dashboard] extra to enable AI reports.[/dim]")
 
     claude_desktop.run_step(console=console, install=setup_claude_desktop)
     console.print("\n[bold green]Setup complete.[/bold green]")

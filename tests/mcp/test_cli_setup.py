@@ -70,6 +70,9 @@ def test_setup_resumes_when_already_configured(tmp_path, monkeypatch):
     monkeypatch.setattr(lfk, "run_step", lambda **k: called.append("langfuse_keys"))
     monkeypatch.setattr(cdk, "run_step", lambda **k: called.append("claude_desktop"))
 
+    import spotify_mcp.wizard as wiz
+    monkeypatch.setattr(wiz, "_dashboard_installed", lambda: True)
+
     result = runner.invoke(app, ["setup"])
 
     assert result.exit_code == 0
