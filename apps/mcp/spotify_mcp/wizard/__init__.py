@@ -1,11 +1,10 @@
 """Setup wizard orchestration — composes resumable steps."""
 from __future__ import annotations
 
-import importlib.util
-
 from rich.console import Console
 
 from spotify_core import paths
+from spotify_mcp.dashboard.dependencies import dashboard_available
 
 from . import (
     claude_desktop,
@@ -20,8 +19,8 @@ from . import (
 
 
 def _dashboard_installed() -> bool:
-    """True when the [dashboard] extra (streamlit) is importable."""
-    return importlib.util.find_spec("streamlit") is not None
+    """True when the [dashboard] extra's startup dependencies are importable."""
+    return dashboard_available()
 
 
 def run_wizard(

@@ -25,6 +25,17 @@ def _record_steps(monkeypatch, called):
     monkeypatch.setattr(cdk, "run_step", lambda **k: called.append("claude_desktop"))
 
 
+def test_dashboard_installed_requires_all_startup_dependencies(monkeypatch):
+    import spotify_mcp.dashboard.dependencies as deps
+
+    def fake_find_spec(name):
+        return object() if name == "streamlit" else None
+
+    monkeypatch.setattr(deps.importlib.util, "find_spec", fake_find_spec)
+
+    assert wiz._dashboard_installed() is False
+
+
 def test_wizard_skips_llm_steps_without_dashboard(tmp_path, monkeypatch):
     monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
     monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))

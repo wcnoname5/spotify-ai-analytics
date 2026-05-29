@@ -11,7 +11,6 @@ Usage:
 """
 from __future__ import annotations
 
-import importlib.util
 import json
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
@@ -27,12 +26,14 @@ from spotify_mcp.wizard import state as _state
 
 from loguru import logger
 
+from spotify_mcp.dashboard.dependencies import dashboard_available
+
 console = Console()
 
 
-def _streamlit_available() -> bool:
-    """True when the [dashboard] extra (streamlit) is importable."""
-    return importlib.util.find_spec("streamlit") is not None
+def _dashboard_available() -> bool:
+    """True when the [dashboard] extra's startup dependencies are importable."""
+    return dashboard_available()
 
 
 app = typer.Typer(
@@ -207,7 +208,7 @@ def dashboard(
     import sys
     from importlib.resources import as_file, files
 
-    if not _streamlit_available():
+    if not _dashboard_available():
         # NB: escape the literal brackets so Rich does not treat [dashboard] as markup.
         console.print(
             "[red]Dashboard dependencies are not installed.[/red]\n"
@@ -216,9 +217,11 @@ def dashboard(
         raise typer.Exit(code=1)
 
     with as_file(files("spotify_mcp.dashboard") / "main_page.py") as page:
-        subprocess.run(
+        result = subprocess.run(
             [sys.executable, "-m", "streamlit", "run", str(page), "--server.port", str(port)]
         )
+    if result.returncode:
+        raise typer.Exit(code=result.returncode)
 
 
 @app.command()
