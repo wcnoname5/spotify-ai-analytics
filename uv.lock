@@ -13,7 +13,6 @@ members = [
     "spotify-analytics-core",
     "spotify-analytics-dataloader",
     "spotify-analytics-mcp",
-    "spotify-web",
 ]
 
 [[package]]
@@ -2601,7 +2600,6 @@ dependencies = [
     { name = "spotify-analytics-core" },
     { name = "spotify-analytics-dataloader" },
     { name = "spotify-analytics-mcp" },
-    { name = "spotify-web" },
     { name = "streamlit" },
 ]
 
@@ -2635,7 +2633,6 @@ requires-dist = [
     { name = "spotify-analytics-core", editable = "packages/core" },
     { name = "spotify-analytics-dataloader", editable = "packages/dataloader" },
     { name = "spotify-analytics-mcp", editable = "apps/mcp" },
-    { name = "spotify-web", editable = "apps/web" },
     { name = "streamlit", specifier = ">=1.52.2" },
 ]
 
@@ -2730,34 +2727,28 @@ dependencies = [
     { name = "typer" },
 ]
 
-[package.metadata]
-requires-dist = [
-    { name = "fastmcp", specifier = ">=2.0" },
-    { name = "platformdirs", specifier = ">=4.0" },
-    { name = "rich", specifier = ">=13.7" },
-    { name = "spotify-analytics-core", editable = "packages/core" },
-    { name = "spotify-analytics-dataloader", editable = "packages/dataloader" },
-    { name = "typer", specifier = ">=0.12" },
-]
-
-[[package]]
-name = "spotify-web"
-version = "0.1.0"
-source = { editable = "apps/web" }
-dependencies = [
+[package.optional-dependencies]
+dashboard = [
+    { name = "langchain-openai" },
     { name = "plotly" },
-    { name = "spotify-analytics-core" },
-    { name = "spotify-analytics-dataloader" },
+    { name = "spotify-analytics-core", extra = ["report"] },
     { name = "streamlit" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "plotly", specifier = ">=5.0" },
+    { name = "fastmcp", specifier = ">=2.0" },
+    { name = "langchain-openai", marker = "extra == 'dashboard'", specifier = ">=1.0" },
+    { name = "platformdirs", specifier = ">=4.0" },
+    { name = "plotly", marker = "extra == 'dashboard'", specifier = ">=6.5" },
+    { name = "rich", specifier = ">=13.7" },
     { name = "spotify-analytics-core", editable = "packages/core" },
+    { name = "spotify-analytics-core", extras = ["report"], marker = "extra == 'dashboard'", editable = "packages/core" },
     { name = "spotify-analytics-dataloader", editable = "packages/dataloader" },
-    { name = "streamlit", specifier = ">=1.35" },
+    { name = "streamlit", marker = "extra == 'dashboard'", specifier = ">=1.52" },
+    { name = "typer", specifier = ">=0.12" },
 ]
+provides-extras = ["dashboard"]
 
 [[package]]
 name = "sqlite-vec"

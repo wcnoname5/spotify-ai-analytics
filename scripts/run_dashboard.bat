@@ -5,4 +5,4 @@ if errorlevel 1 (
     echo Setup incomplete - launching setup wizard...
     uvx --from spotify-analytics-mcp spotify-mcp setup
 )
-uv run streamlit run ../apps/web/ui/main_page.py
+uv run streamlit run ../apps/mcp/spotify_mcp/dashboard/main_page.py

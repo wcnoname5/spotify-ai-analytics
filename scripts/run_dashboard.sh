@@ -10,4 +10,4 @@ if ! uvx --from spotify-analytics-mcp spotify-mcp doctor; then
   uvx --from spotify-analytics-mcp spotify-mcp setup
 fi
 
-exec uv run streamlit run ../apps/web/ui/main_page.py
+exec uv run streamlit run ../apps/mcp/spotify_mcp/dashboard/main_page.py
