@@ -28,7 +28,7 @@ def test_env_load_order(tmp_path, monkeypatch):
         "spotify_core.env",
         "spotify_core.config",
         "spotify_mcp.config",
-        "spotify_web.config",
+        "spotify_mcp.dashboard.runtime",
     ]:
         if mod in sys.modules:
             del sys.modules[mod]
@@ -38,5 +38,5 @@ def test_env_load_order(tmp_path, monkeypatch):
     assert mcp_cfg.get_client_id() == "from_env_file"
 
     # Import the web app config and assert it also reads the same value
-    web_cfg = importlib.import_module("spotify_web.config")
+    web_cfg = importlib.import_module("spotify_mcp.dashboard.runtime")
     assert web_cfg.get_client_id() == "from_env_file"

@@ -1,5 +1,5 @@
-"""Tests for spotify_web.formatting."""
-from spotify_web.formatting import spotify_uri_to_url, format_duration_mins
+"""Tests for spotify_mcp.dashboard.formatting."""
+from spotify_mcp.dashboard.formatting import spotify_uri_to_url, format_duration_mins
 
 
 def test_uri_to_url_valid():

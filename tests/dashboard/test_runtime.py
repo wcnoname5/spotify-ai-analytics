@@ -1,5 +1,5 @@
-"""Tests for spotify_web.config.get_llm_config."""
-from spotify_web import config as web_config
+"""Tests for spotify_mcp.dashboard.runtime.get_llm_config."""
+from spotify_mcp.dashboard import runtime as web_config
 
 
 def test_get_llm_config_empty_without_key(monkeypatch):
