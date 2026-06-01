@@ -79,3 +79,13 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_client_id() -> str:
+    """Return SPOTIFY_CLIENT_ID from Settings."""
+    return settings.spotify_client_id
+
+
+def get_fernet_key() -> bytes:
+    """Return TOKEN_ENCRYPT_KEY as bytes from Settings."""
+    return settings.fernet_key_bytes

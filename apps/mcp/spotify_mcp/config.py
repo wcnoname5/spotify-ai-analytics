@@ -1,7 +1,5 @@
 """Shared MCP server config: paths, env, helpers used by every tool module."""
-from loguru import logger
-from spotify_core.config import settings
-from spotify_core.env import get_client_id, get_fernet_key
+from spotify_core.config import get_client_id, get_fernet_key, settings
 
 
 DB_PATH: str = str(settings.history_db_path)

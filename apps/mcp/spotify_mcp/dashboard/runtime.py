@@ -2,8 +2,7 @@
 
 All config (credentials, LLM keys, DB paths, user ID) is read from settings.
 """
-from spotify_core.config import settings
-from spotify_core.env import get_client_id, get_fernet_key
+from spotify_core.config import get_client_id, get_fernet_key, settings
 
 # LLM models offered by the AI report block, per provider.
 _GOOGLE_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
