@@ -14,13 +14,11 @@ _KEYS = [
 ]
 
 
-def _already_configured() -> bool:
-    return all(env_file.read_key(paths.env_file(), k) for k, _ in _KEYS)
-
-
 def run_step(console: Console) -> None:
     """Prompt user for Langfuse keys. Entirely skippable."""
-    if _already_configured():
+    from spotify_core.config import settings
+
+    if settings.langfuse_configured:
         console.print("[dim]Langfuse already configured — skipping.[/dim]")
         return
 

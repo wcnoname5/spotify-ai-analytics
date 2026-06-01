@@ -14,10 +14,8 @@ _PROVIDERS = {
 
 
 def _has_any_llm_key() -> bool:
-    for env_var, _ in _PROVIDERS.values():
-        if env_file.read_key(paths.env_file(), env_var):
-            return True
-    return False
+    from spotify_core.config import settings
+    return bool(settings.gemini_api_key or settings.openai_api_key)
 
 
 def run_step(console: Console) -> None:

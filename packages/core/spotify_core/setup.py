@@ -3,7 +3,7 @@ import os
 from loguru import logger
 from pathlib import Path
 
-from spotify_core.config import settings
+from spotify_core.config import settings, get_client_id, get_fernet_key
 from spotify_core.db.migrations import init_ltm_db, init_tokens_db
 from spotify_core.db.pipeline import import_json_to_db, init_history_db
 
@@ -52,8 +52,8 @@ def run_setup(
     from spotify_core.spotify_client.auth import run_pkce_flow
     from spotify_core.spotify_client.token_store import save_tokens
 
-    client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-    fernet_key_str = os.environ.get("TOKEN_ENCRYPT_KEY")
+    client_id = get_client_id()
+    fernet_key = get_fernet_key()
 
     if not client_id:
         raise ValueError(
@@ -62,7 +62,7 @@ def run_setup(
             "  → Copy the Client ID into your .env file as SPOTIFY_CLIENT_ID=..."
         )
 
-    if not fernet_key_str:
+    if not fernet_key:
         logger.warning("TOKEN_ENCRYPT_KEY not set - auto-generating a Fernet key")
         from cryptography.fernet import Fernet
         from spotify_core import env_file as _env_file, paths
@@ -71,12 +71,12 @@ def run_setup(
         _env_file.upsert(paths.env_file(), "TOKEN_ENCRYPT_KEY", new_key)
         logger.info("Auto-generated TOKEN_ENCRYPT_KEY saved to {}", paths.env_file())
 
-        fernet_key_str = new_key
+        fernet_key = new_key.encode()
         os.environ["TOKEN_ENCRYPT_KEY"] = new_key
 
     logger.info("Starting OAuth PKCE flow - your browser will open")
     token_data = run_pkce_flow(client_id=client_id)
-    save_tokens(tokens_db, user_id, token_data, fernet_key_str.encode())
+    save_tokens(tokens_db, user_id, token_data, fernet_key)
     logger.info("Tokens saved for user {!r} in {}", user_id, tokens_db)
 
     # Step 3: Import JSON (skipped silently if no files found)

@@ -44,7 +44,7 @@ def render_ai_block() -> None:
     llm_config = get_llm_config()
     if not llm_config["models"]:
         st.info(
-            "Setup Wizard 尚未設定 LLM 金鑰。"
+            "尚未設定 LLM 金鑰。執行 `spotify-mcp setup` 以設定。"
         )
         return
 

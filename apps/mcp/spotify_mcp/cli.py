@@ -235,8 +235,10 @@ def serve() -> None:
     from spotify_core.logging import setup_mcp_logging
 
     paths.ensure_dirs()
-    # Load the platform .env into os.environ (config values + any env-based SDKs).
+    # Load the platform .env into os.environ so env-based SDKs (e.g. Langfuse) see
+    # their credentials. The cwd .env is a dev-checkout fallback (no override).
     load_dotenv(paths.env_file())
+    load_dotenv(override=False)
 
     setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
 

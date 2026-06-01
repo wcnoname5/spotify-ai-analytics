@@ -24,7 +24,6 @@ def test_env_load_order(tmp_path, monkeypatch):
     # Remove cached modules so imports happen fresh and Settings re-reads the .env
     # from the temp config dir (env_file is resolved at Settings construction time).
     for mod in [
-        "spotify_core.env",
         "spotify_core.config",
         "spotify_mcp.config",
         "spotify_mcp.dashboard.runtime",
