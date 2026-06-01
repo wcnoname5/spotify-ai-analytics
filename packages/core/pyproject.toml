@@ -37,6 +37,9 @@ agent = [
 report = [
     "langgraph>=1.0",
     "langchain-core>=1.0",
+    # langfuse.langchain.CallbackHandler does a bare `import langchain`, so the
+    # meta-package is required at runtime — langchain-core alone is not enough.
+    "langchain>=1.0",
     "langchain-google-genai>=4.0",
     "langfuse>=3.0",
     "loguru>=0.7",
