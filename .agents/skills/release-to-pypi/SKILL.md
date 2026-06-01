@@ -51,12 +51,6 @@ rm -rf dist
 Expect to see `spotify_mcp/dashboard/...` including `spotify_mcp/dashboard/main_page.py`. If absent,
 stop — the `[dashboard]` extra will be broken on install.
 
-Optional but recommended local gate (no registry involved):
-
-```bash
-bash scripts/test_wizard_install.sh --fresh --clean
-```
-
 ## Stage 1 — Bump and cut the release candidate (→ TestPyPI)
 
 `scripts/bump.py` is the single source of truth for the version: it rewrites the `[project]` version
@@ -68,6 +62,28 @@ uv run python scripts/bump.py X.Y.Zrc1
 git diff                                  # confirm all three pyproject.toml changed
 git commit -am "chore: bump version to X.Y.Zrc1"
 git tag vX.Y.Zrc1
+```
+
+**Before pushing, clean-room check the runtime deps.** The `--version` / dashboard-launch checks in
+Stage 2 don't exercise the report path, so a missing *report* dependency (e.g. langfuse's
+`langfuse.langchain` does a bare `import langchain`) only surfaces when a report is actually generated
+— and by then the rc number is already burned. Build local wheels at the rc version and import the
+report path in a throwaway venv (our three packages come from the local dist, transitive deps resolve
+from real PyPI):
+
+```bash
+uv build --all-packages --out-dir dist/
+uv venv .relcheck --python 3.12
+uv pip install --python .relcheck --find-links dist/ --prerelease=allow \
+  "spotify-analytics-mcp[dashboard]==X.Y.Zrc1" "spotify-analytics-core==X.Y.Zrc1" "spotify-analytics-dataloader==X.Y.Zrc1"
+# venv python: .relcheck/Scripts/python on Windows, .relcheck/bin/python on macOS/Linux
+.relcheck/Scripts/python -c "from langfuse.langchain import CallbackHandler; from spotify_core.report.observability import langfuse_session; import spotify_mcp; print('report path OK')"
+rm -rf dist .relcheck
+```
+
+Only once that prints `report path OK`, push (this triggers the publish):
+
+```bash
 # CONFIRM WITH USER, then:
 git push && git push --tags
 ```
@@ -90,6 +106,17 @@ uvx --refresh --index https://test.pypi.org/simple/ --index-strategy unsafe-best
 
 # Dashboard (needs the extra — confirms the bundled spotify_mcp/dashboard survives a real install)
 uvx --refresh --index https://test.pypi.org/simple/ --index-strategy unsafe-best-match --from "spotify-analytics-mcp[dashboard]==X.Y.Zrc1" --with "spotify-analytics-core==X.Y.Zrc1" --with "spotify-analytics-dataloader==X.Y.Zrc1" spotify-mcp dashboard
+```
+
+Launching the dashboard only hits the report path when you generate a report, so also do a
+non-interactive import check against what's actually on TestPyPI (the published analogue of the
+Stage 1 pre-push check):
+
+```bash
+uv venv .rccheck --python 3.12
+uv pip install --python .rccheck --refresh --index https://test.pypi.org/simple/ --index-strategy unsafe-best-match "spotify-analytics-mcp[dashboard]==X.Y.Zrc1" "spotify-analytics-core==X.Y.Zrc1" "spotify-analytics-dataloader==X.Y.Zrc1"
+.rccheck/Scripts/python -c "from langfuse.langchain import CallbackHandler; from spotify_core.report.observability import langfuse_session; print('report path OK')"
+rm -rf .rccheck
 ```
 
 If something is broken: fix, bump to `X.Y.Zrc2`, re-tag, re-verify. Do not reuse `rc1`.

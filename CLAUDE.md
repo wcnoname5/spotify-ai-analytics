@@ -45,6 +45,7 @@ tests/                # Pytest suite (tests/core, tests/mcp, tests/web, tests/in
 
 ### Always
 - Use `uv` for all dependency management (`uv add`, `uv sync`, `uv run`)
+- Use python version>=3.12
 - Run `uv run pytest` before declaring any task done
 - Keep query/transform logic in `spotify_core/db/queries.py` and `spotify_dataloader/` as pure functions — no side effects, no I/O
 - All Spotify API calls go through `packages/core/spotify_core/spotify_client/` only — never call `httpx`/`requests` to Spotify directly from other modules
