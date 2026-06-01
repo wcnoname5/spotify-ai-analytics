@@ -1,85 +1,142 @@
 # Spotify AI Analytics
 
-A local MCP server that connects Claude Desktop / Claude Code to your Spotify listening history — query your stats, control playback, and build AI-generated playlists, all through natural language.
+A local-first Spotify analytics toolkit — MCP server for Claude Desktop/Code, a Streamlit dashboard with AI-generated listening reports, and a SQLite-backed data pipeline. All set up with a single CLI command.
 
-> **Legacy docs** (original Streamlit web app): see the [`deploy` branch](../../tree/deploy).
+> **Legacy docs & App** (original Streamlit web app): see the [`deploy` branch](../../tree/deploy).
 
 ---
 
 ## What it does
 
-- **Analytics** — ask Claude things like "What were my top artists last year?" or "How has my taste changed since 2022?"
-- **Playback control** — play, pause, skip, set volume, add to queue (Spotify Premium required)
-- **AI playlists** — generate and save playlists based on your listening history
-- **Memory** — Claude remembers your preferences across conversations (not released yet)
+- **MCP**
+  - **Analytics** — ask Claude things like "What were my top artists last month?" or "How has my listening changed since 2023?"
+  - **Playback control** — play, pause, skip, set volume, add to queue (Spotify Premium required)
+- **Dashboard and Report Generation**
+  - **Dashboard** — Plotly charts for listening trends, top artists/tracks, and activity patterns
+  - **AI reports** — LangGraph-powered drafter/reviewer pipeline generates weekly or monthly listening reviews
 
 ---
 
-## Install
+## Prerequisites
 
-**Prerequisites:** Python 3.13+, [uv](https://docs.astral.sh/uv/)
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/) (package manager)
+- A [Spotify Developer](https://developer.spotify.com/dashboard) app (the wizard walks you through creating one)
+
+---
+
+## MCP Server Setup (Claude Desktop)
+
+### 1. Run the setup wizard
 
 ```bash
 uvx --from spotify-analytics-mcp spotify-mcp setup
 ```
-The wizard will guide you through:
 
-- Creating a Spotify developer app
-- OAuth login
-- Importing your listening history
-- Registering with Claude Desktop
+The wizard walks you through each step (already-completed steps are skipped automatically):
 
-### Launch the dashboard
+1. Create a Spotify developer app and paste the Client ID
+2. OAuth login (opens your browser)
+3. Import listening history (from Spotify's JSON export, or sync recent plays)
+4. Register the MCP server with Claude Desktop
 
-Run `uvx --from "spotify-analytics-mcp[dashboard]" spotify-mcp dashboard` (or, from a dev checkout, `uv run spotify-mcp dashboard`).
+### 2. Connect Claude Desktop
 
-1. run `spotify-mcp doctor`
-2. if setup is incomplete, open `spotify-mcp setup`
-3. start the dashboard with `uv run spotify-mcp dashboard`
+After the wizard finishes, it prints a JSON snippet like this:
 
-### MCP connection in Claude Desktop (Recommended for GUI users)
-
-1. In Claude Desktop, click the settings (≡ mark in the top-left), go to `Help > Troubleshooting > Enable Developer Mode`. After you enable Developer Mode, go to `Developer > Open App Config File...` to open `claude_desktop_config.json` and add this block:
-
-  ```json
-  {
-    "mcpServers": {
-      "spotify-analytics": {
-        "command": "spotify-mcp",
-        "args": ["serve"]
-      }
+```json
+{
+  "mcpServers": {
+    "spotify-mcp": {
+      "command": "uvx",
+      "args": ["--from", "spotify-analytics-mcp", "spotify-mcp", "serve"]
     }
   }
-  ```
+}
+```
 
-2. Click `Developer > Reload MCP Configuration` in Claude Desktop (or simply restart) after saving.
+To add it to Claude Desktop:
 
-3. Click `+ > Connectors` in the chat box; you should see `spotify-analytics` in the list.
+1. Open Claude Desktop, click the menu (☰) in the top-left
+2. (If you not enable developmer mode yet) Go to **Help > Troubleshooting > Enable Developer Mode**
+3. Go to **Developer > Open App Config File...** to open `claude_desktop_config.json`
+4. Paste the snippet above (merge into the existing `mcpServers` object if you have other servers)
+5. Click **Developer > Reload MCP Configuration** (or restart Claude Desktop)
+6. In a new chat, click **+ > Connectors** — you should see **spotify-mcp** in the list
 
+### 3. Try it out
 
-## Examaple Use
-
-Click `+ > Connectors > Listening Report Generator` prompt to generate your personal listening history report!
+Click **+ > Connectors > Listening Report Generator** to generate your personal listening report, or just ask Claude about your listening history.
 
 ---
-## Tech stack
+
+## Dashboard & AI Reports
+
+The dashboard is an optional extra — the MCP server works without it.
+
+### Install
+
+```bash
+uvx --from "spotify-analytics-mcp[dashboard]" spotify-mcp setup
+```
+
+Using the `[dashboard]` extra triggers two additional (optional) wizard steps:
+
+- **LLM provider key** — choose Gemini (recommended, free tier) or OpenAI. Required for AI reports; the dashboard charts work without it.
+- **Langfuse keys** — optional observability for the AI report pipeline. Skip if you don't use Langfuse.
+
+You can always add or change these keys later in your `.env` file (run `spotify-mcp path` to find it).
+
+### Launch
+
+```bash
+uvx --from "spotify-analytics-mcp[dashboard]" spotify-mcp dashboard
+```
+
+### Keeping history up to date
+
+Sync the latest plays from Spotify's API:
+
+```bash
+uvx --from spotify-analytics-mcp spotify-mcp sync
+```
+
+or click the Sync botton on the top-right in dashboard view. 
+
+## CLI Reference
+
+| Command | Description |
+|---|---|
+| `spotify-mcp setup` | Interactive setup wizard (skips completed steps) |
+| `spotify-mcp serve` | Start the MCP server over stdio (used by Claude Desktop) |
+| `spotify-mcp dashboard` | Launch the Streamlit dashboard (requires `[dashboard]` extra) |
+| `spotify-mcp sync` | Sync recent plays from Spotify API |
+| `spotify-mcp doctor` | Check environment readiness (JSON report) |
+| `spotify-mcp import-history` | Import from Spotify's JSON data export |
+| `spotify-mcp reauth` | Re-run OAuth flow |
+| `spotify-mcp path` | Show config and data directory locations |
+
+---
+
+## Tech Stack
 
 | Layer | Choice |
 |---|---|
-| MCP framework | `mcp` Python SDK |
-| Agent framework | LangGraph (On progress) |
-| Local storage | SQLite |
-| Data processing | Polars |
-| OAuth | PKCE |
+| MCP framework | FastMCP (Python MCP SDK) |
+| AI reports | LangGraph (drafter → reviewer pipeline) |
+| Observability | Langfuse (optional) |
+| Local storage | SQLite (encrypted token store) |
+| Data processing | Polars + Pydantic |
+| Dashboard | Streamlit + Plotly |
+| OAuth | Authorization Code with PKCE |
 
 ---
 
-## Project layout
+## Project Layout
 
 ```
-packages/core/        # Shared packages: analytics, agent, memory, db, spotify_client
+packages/core/        # Shared library: analytics, db, report pipeline, spotify_client
 packages/dataloader/  # Data ingestion (Polars + Pydantic)
-apps/mcp/             # MCP server entry point + Streamlit dashboard
-data/                 # Local SQLite DBs and JSON exports
-scripts/              # Setup, sync, and inspection scripts
+apps/mcp/             # MCP server + CLI + Streamlit dashboard
+data/                 # Local SQLite DBs and JSON exports (not committed)
 ```

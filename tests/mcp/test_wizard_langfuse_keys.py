@@ -15,6 +15,9 @@ def test_skip_when_user_declines(monkeypatch, tmp_path):
 
 
 def test_all_three_keys_persisted(monkeypatch, tmp_path):
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
     console = MagicMock()
     console.input.side_effect = ["y", "pk-lf-xxx", "sk-lf-xxx", "https://cloud.langfuse.com"]
     env_path = tmp_path / ".env"

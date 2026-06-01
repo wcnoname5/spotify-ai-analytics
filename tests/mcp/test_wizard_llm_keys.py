@@ -18,6 +18,8 @@ def test_skip_when_user_declines(monkeypatch, tmp_path):
 
 def test_gemini_key_persisted(monkeypatch, tmp_path):
     """User opts in, chooses Gemini, provides a key — key lands in .env."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     console = MagicMock()
     console.input.side_effect = ["y", "1", "fake-gemini-key"]
     env_path = tmp_path / ".env"
@@ -28,6 +30,8 @@ def test_gemini_key_persisted(monkeypatch, tmp_path):
 
 def test_openai_key_persisted(monkeypatch, tmp_path):
     """User opts in, chooses OpenAI, provides a key — key lands in .env."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     console = MagicMock()
     console.input.side_effect = ["y", "2", "fake-openai-key"]
     env_path = tmp_path / ".env"
