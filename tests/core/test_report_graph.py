@@ -10,10 +10,10 @@ from spotify_core.report.state import ReviewVerdict
 
 @pytest.fixture(autouse=True)
 def _disable_langfuse_tracing(monkeypatch):
-    monkeypatch.setattr(
-        "spotify_core.report.observability._langfuse_configured",
-        lambda: False,
-    )
+    # langfuse_configured is a property, so we patch the underlying keys
+    monkeypatch.setattr("spotify_core.config.settings.langfuse_public_key", None)
+    monkeypatch.setattr("spotify_core.config.settings.langfuse_secret_key", None)
+    monkeypatch.setattr("spotify_core.config.settings.langfuse_base_url", None)
 
 
 def _seed(db_path, rows):

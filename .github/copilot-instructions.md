@@ -22,8 +22,7 @@ Spotify AI Analytics Agent. Combines:
 ```
 packages/core/        # Shared Python packages (analytics, agent, memory, db, spotify_client)
 packages/dataloader/  # Data ingestion (Polars + Pydantic)
-apps/mcp/             # MCP server entry point
-apps/web/             # Web app (Phase 2, skeleton only)
+apps/mcp/             # MCP server entry point + Streamlit dashboard
 data/                 # Local SQLite DBs and JSON exports — never commit data/*.db
 tests/                # Pytest suite
 ```
@@ -42,14 +41,13 @@ tests/                # Pytest suite
 ### Never
 - Commit `data/*.db` files or `.env` files
 - Add `print()` debugging — use `logging` module
-- Break existing Streamlit app functionality (it lives in `apps/web/ui/` and must stay runnable)
+- Break the Streamlit dashboard (it lives in `apps/mcp/spotify_mcp/dashboard/` and must stay runnable via `spotify-mcp dashboard`)
 - Use `LangMem` for synchronous memory retrieval (59s p95 latency — use `SqliteStore` directly)
 - Use `localhost` in OAuth redirect URIs — Spotify banned this Nov 2025, use `127.0.0.1` explicitly
 
 ### Imports
 - `packages/core` modules import from each other via package names (uv workspace)
 - `apps/mcp/` imports from `packages/core` only — no direct Spotify API calls
-- `apps/web/` imports from `packages/core` only
 
 ---
 
@@ -133,8 +131,7 @@ Copy `.env.example` → `.env`. Never commit `.env`.
 ```bash
 uv sync                                    # install all dependencies
 uv run python apps/mcp/server.py           # run MCP server directly
-uv run streamlit run apps/web/ui/main_page.py  # run web UI (Phase 2)
-uv run uvicorn apps.web.api.main:app --reload  # run FastAPI (Phase 2)
+uv run spotify-mcp dashboard  # run the Streamlit dashboard
 uv run pytest                              # run tests
 uv add <package> --package core            # add dep to core package
 uv add <package> --package mcp-app         # add dep to mcp app

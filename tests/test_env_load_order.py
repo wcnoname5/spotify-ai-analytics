@@ -21,14 +21,12 @@ def test_env_load_order(tmp_path, monkeypatch):
     # Ensure process env does NOT already have the key
     monkeypatch.delenv("SPOTIFY_CLIENT_ID", raising=False)
 
-    # Remove cached modules so imports happen fresh.
-    # spotify_core.env must also be evicted because ensure_dotenv_loaded() is
-    # now called from spotify_core.config at import time, not from app configs.
+    # Remove cached modules so imports happen fresh and Settings re-reads the .env
+    # from the temp config dir (env_file is resolved at Settings construction time).
     for mod in [
-        "spotify_core.env",
         "spotify_core.config",
         "spotify_mcp.config",
-        "spotify_web.config",
+        "spotify_mcp.dashboard.runtime",
     ]:
         if mod in sys.modules:
             del sys.modules[mod]
@@ -38,5 +36,5 @@ def test_env_load_order(tmp_path, monkeypatch):
     assert mcp_cfg.get_client_id() == "from_env_file"
 
     # Import the web app config and assert it also reads the same value
-    web_cfg = importlib.import_module("spotify_web.config")
+    web_cfg = importlib.import_module("spotify_mcp.dashboard.runtime")
     assert web_cfg.get_client_id() == "from_env_file"

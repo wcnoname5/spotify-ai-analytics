@@ -8,9 +8,9 @@ from spotify_core.db.queries import is_history_empty
 from spotify_core.report.graph import generate_report
 from spotify_core.report.models import build_chat_model
 
-from spotify_web.config import get_llm_config
+from spotify_mcp.dashboard.runtime import get_llm_config
 
-from spotify_web.period_filter import render_period_dates, REPORT_PERIOD_OPTION
+from spotify_mcp.dashboard.period_filter import render_period_dates, REPORT_PERIOD_OPTION
 
 _DB_PATH = str(settings.history_db_path)
 
@@ -44,8 +44,7 @@ def render_ai_block() -> None:
     llm_config = get_llm_config()
     if not llm_config["models"]:
         st.info(
-            "尚未設定 LLM 金鑰。請在 .env 加入 `GEMINI_API_KEY` 後重新啟動，"
-            "即可使用 AI 分析。"
+            "尚未設定 LLM 金鑰。執行 `spotify-mcp setup` 以設定。"
         )
         return
 

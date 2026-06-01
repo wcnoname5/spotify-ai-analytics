@@ -55,6 +55,8 @@ def test_setup_resumes_when_already_configured(tmp_path, monkeypatch):
     import spotify_mcp.wizard.claude_desktop as cdk
     import spotify_mcp.wizard.credentials as cr
     import spotify_mcp.wizard.history_import as hi
+    import spotify_mcp.wizard.langfuse_keys as lfk
+    import spotify_mcp.wizard.llm_keys as lk
     import spotify_mcp.wizard.oauth_step as os_
     import spotify_mcp.wizard.spotify_app as sa
 
@@ -64,9 +66,14 @@ def test_setup_resumes_when_already_configured(tmp_path, monkeypatch):
     monkeypatch.setattr(cr, "ensure_fernet_key", lambda console: called.append("fernet") or "x")
     monkeypatch.setattr(os_, "run_oauth", lambda **k: called.append("oauth"))
     monkeypatch.setattr(hi, "run_step", lambda **k: called.append("history"))
+    monkeypatch.setattr(lk, "run_step", lambda **k: called.append("llm_keys"))
+    monkeypatch.setattr(lfk, "run_step", lambda **k: called.append("langfuse_keys"))
     monkeypatch.setattr(cdk, "run_step", lambda **k: called.append("claude_desktop"))
+
+    import spotify_mcp.wizard as wiz
+    monkeypatch.setattr(wiz, "_dashboard_installed", lambda: True)
 
     result = runner.invoke(app, ["setup"])
 
     assert result.exit_code == 0
-    assert called == ["claude_desktop"]
+    assert called == ["llm_keys", "langfuse_keys", "claude_desktop"]

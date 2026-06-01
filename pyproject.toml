@@ -28,7 +28,6 @@ dependencies = [
     "spotify-analytics-core",
     "spotify-analytics-dataloader",
     "spotify-analytics-mcp",
-    "spotify-web",
 ]
 
 [build-system]
@@ -50,11 +49,9 @@ members = [
     "packages/core",
     "packages/dataloader",
     "apps/mcp",
-    "apps/web",
 ]
 
 [tool.uv.sources]
 spotify-analytics-core = { workspace = true }
 spotify-analytics-dataloader = { workspace = true }
 spotify-analytics-mcp = { workspace = true }
-spotify-web = { workspace = true }

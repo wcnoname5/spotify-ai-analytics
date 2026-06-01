@@ -1,14 +1,8 @@
 """Config helpers for the dashboard: sync credentials and LLM provider choices.
 
-SPOTIFY_CLIENT_ID and TOKEN_ENCRYPT_KEY are read from the environment (after
-loading the platformdirs .env); DB paths and user id come from settings.
+All config (credentials, LLM keys, DB paths, user ID) is read from settings.
 """
-import os
-
-from spotify_core.env import ensure_dotenv_loaded, get_client_id, get_fernet_key
-
-ensure_dotenv_loaded()
-from spotify_core.config import settings
+from spotify_core.config import get_client_id, get_fernet_key, settings
 
 # LLM models offered by the AI report block, per provider.
 _GOOGLE_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
@@ -29,7 +23,7 @@ def get_sync_args() -> dict:
 def get_llm_config() -> dict:
     """Return the LLM choices available to the AI report block.
 
-    Inspects the environment for provider API keys. In v1 only GEMINI_API_KEY
+    Inspects settings for provider API keys. In v1 only gemini_api_key
     yields usable models.
 
     Returns:
@@ -37,9 +31,8 @@ def get_llm_config() -> dict:
          "default": {"provider": str, "model": str} | None}
     """
     models: list[dict] = []
-    # TODO: the os.getenv call in the future we may not load key from .env directly.
-    if os.getenv("GEMINI_API_KEY"):
+    if settings.gemini_api_key:
         models += [{"provider": "google", "model": m} for m in _GOOGLE_MODELS]
-    if os.getenv("OPENAI_API_KEY"):
+    if settings.openai_api_key:
         models += [{"provider": "openai", "model": m} for m in _OPENAI_MODELS]
     return {"models": models}

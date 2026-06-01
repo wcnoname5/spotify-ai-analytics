@@ -1,7 +1,7 @@
 """Tests for shared Streamlit period filter helpers."""
 import datetime
 
-from spotify_web.period_filter import resolve_period_dates
+from spotify_mcp.dashboard.period_filter import resolve_period_dates
 
 
 def test_resolve_period_dates_last_completed_week():

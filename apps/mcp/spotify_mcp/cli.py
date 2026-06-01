@@ -26,7 +26,15 @@ from spotify_mcp.wizard import state as _state
 
 from loguru import logger
 
+from spotify_mcp.dashboard.dependencies import dashboard_available
+
 console = Console()
+
+
+def _dashboard_available() -> bool:
+    """True when the [dashboard] extra's startup dependencies are importable."""
+    return dashboard_available()
+
 
 app = typer.Typer(
     name="spotify-mcp",
@@ -134,16 +142,14 @@ def sync(
     from spotify_core import env_file as _env_file
     from spotify_core import paths
     from spotify_core.logging import setup_logging
-    # Importing spotify_mcp.config runs ensure_dotenv_loaded() at module import,
-    # so .env is already in os.environ by the time this line returns.
+    # spotify_mcp.config imports spotify_core.config.settings, which reads the
+    # platform .env via pydantic-settings; get_client_id/get_fernet_key delegate to it.
     from spotify_mcp.config import DB_PATH, TOKENS_DB, get_client_id, get_fernet_key
 
     paths.ensure_dirs()
 
     # Setup logging
-    level = logging.DEBUG if verbose else logging.getLevelNamesMapping().get(
-        os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
-    )
+    level = "DEBUG" if verbose else os.getenv("LOG_LEVEL", "INFO").upper()
     setup_logging(log_name="sync", level=level)
 
     # Determine user ID: CLI flag > wizard config > "default" (matches OAuth default)
@@ -194,16 +200,45 @@ def path() -> None:
     console.print(f"[yellow]Config directory: {config_dir}; Data directory: {data_dir}[/yellow]")
 
 @app.command()
+def dashboard(
+    port: Annotated[int, typer.Option("--port", help="Port for the Streamlit server.")] = 8501,
+) -> None:
+    """Launch the Streamlit dashboard (requires the dashboard extra)."""
+    import subprocess
+    import sys
+    from importlib.resources import as_file, files
+
+    if not _dashboard_available():
+        # NB: escape the literal brackets so Rich does not treat [dashboard] as markup.
+        console.print(
+            "[red]Dashboard dependencies are not installed.[/red]\n"
+            'Install with:  uvx --from "spotify-analytics-mcp\\[dashboard]" spotify-mcp dashboard'
+        )
+        raise typer.Exit(code=1)
+
+    with as_file(files("spotify_mcp.dashboard") / "main_page.py") as page:
+        result = subprocess.run(
+            [sys.executable, "-m", "streamlit", "run", str(page), "--server.port", str(port)]
+        )
+    if result.returncode:
+        raise typer.Exit(code=result.returncode)
+
+
+@app.command()
 def serve() -> None:
     """Start the MCP server over stdio (invoked by Claude Desktop)."""
     import os
 
+    from dotenv import load_dotenv
+
     from spotify_core import paths
-    from spotify_core.env import ensure_dotenv_loaded
     from spotify_core.logging import setup_mcp_logging
 
     paths.ensure_dirs()
-    ensure_dotenv_loaded()
+    # Load the platform .env into os.environ so env-based SDKs (e.g. Langfuse) see
+    # their credentials. The cwd .env is a dev-checkout fallback (no override).
+    load_dotenv(paths.env_file())
+    load_dotenv(override=False)
 
     setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
 

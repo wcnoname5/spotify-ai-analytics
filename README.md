@@ -31,12 +31,11 @@ The wizard will guide you through:
 
 ### Launch the dashboard
 
-On Windows, double-click `scripts/run_dashboard.bat`.
-In Git Bash, macOS, or Linux, run `bash scripts/run_dashboard.sh` from the repo root.
+Run `uvx --from "spotify-analytics-mcp[dashboard]" spotify-mcp dashboard` (or, from a dev checkout, `uv run spotify-mcp dashboard`).
 
 1. run `spotify-mcp doctor`
 2. if setup is incomplete, open `spotify-mcp setup`
-3. start Streamlit with `uv run streamlit run apps/web/ui/main_page.py`
+3. start the dashboard with `uv run spotify-mcp dashboard`
 
 ### MCP connection in Claude Desktop (Recommended for GUI users)
 
@@ -80,8 +79,7 @@ Click `+ > Connectors > Listening Report Generator` prompt to generate your pers
 ```
 packages/core/        # Shared packages: analytics, agent, memory, db, spotify_client
 packages/dataloader/  # Data ingestion (Polars + Pydantic)
-apps/mcp/             # MCP server entry point
-apps/web/             # Web app (skeleton only)
+apps/mcp/             # MCP server entry point + Streamlit dashboard
 data/                 # Local SQLite DBs and JSON exports
 scripts/              # Setup, sync, and inspection scripts
 ```

@@ -1,10 +1,9 @@
 """Project setup workflow: init DBs, generate encryption key, run OAuth, import JSON history."""
 import os
 from loguru import logger
-import re
 from pathlib import Path
 
-from spotify_core.config import settings
+from spotify_core.config import settings, get_client_id, get_fernet_key
 from spotify_core.db.migrations import init_ltm_db, init_tokens_db
 from spotify_core.db.pipeline import import_json_to_db, init_history_db
 
@@ -53,8 +52,8 @@ def run_setup(
     from spotify_core.spotify_client.auth import run_pkce_flow
     from spotify_core.spotify_client.token_store import save_tokens
 
-    client_id = os.environ.get("SPOTIFY_CLIENT_ID")
-    fernet_key_str = os.environ.get("TOKEN_ENCRYPT_KEY")
+    client_id = get_client_id()
+    fernet_key = get_fernet_key()
 
     if not client_id:
         raise ValueError(
@@ -63,30 +62,21 @@ def run_setup(
             "  → Copy the Client ID into your .env file as SPOTIFY_CLIENT_ID=..."
         )
 
-    if not fernet_key_str:
+    if not fernet_key:
         logger.warning("TOKEN_ENCRYPT_KEY not set - auto-generating a Fernet key")
         from cryptography.fernet import Fernet
-        from spotify_core.logging import PROJECT_ROOT
+        from spotify_core import env_file as _env_file, paths
+
         new_key = Fernet.generate_key().decode()
-        env_path = PROJECT_ROOT / ".env"
-        if env_path.exists():
-            content = env_path.read_text()
-            if "TOKEN_ENCRYPT_KEY=" in content:
-                content = re.sub(r"TOKEN_ENCRYPT_KEY=\S*", f"TOKEN_ENCRYPT_KEY={new_key}", content)
-            else:
-                content += f"\nTOKEN_ENCRYPT_KEY={new_key}\n"
-            env_path.write_text(content)
-            logger.info("Auto-generated TOKEN_ENCRYPT_KEY saved to {}", env_path)
-        else:
-            logger.warning(
-                "No .env file found - add this line manually: TOKEN_ENCRYPT_KEY={}", new_key
-            )
-        fernet_key_str = new_key
+        _env_file.upsert(paths.env_file(), "TOKEN_ENCRYPT_KEY", new_key)
+        logger.info("Auto-generated TOKEN_ENCRYPT_KEY saved to {}", paths.env_file())
+
+        fernet_key = new_key.encode()
         os.environ["TOKEN_ENCRYPT_KEY"] = new_key
 
     logger.info("Starting OAuth PKCE flow - your browser will open")
     token_data = run_pkce_flow(client_id=client_id)
-    save_tokens(tokens_db, user_id, token_data, fernet_key_str.encode())
+    save_tokens(tokens_db, user_id, token_data, fernet_key)
     logger.info("Tokens saved for user {!r} in {}", user_id, tokens_db)
 
     # Step 3: Import JSON (skipped silently if no files found)

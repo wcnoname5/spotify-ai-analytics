@@ -5,18 +5,11 @@
 `update_trace_metadata` and `extract_usage` record per-call token usage on the active span. 
 All degrade silently when Langfuse is not configured — the graph always runs.
 """
-import os
 import uuid
 from contextlib import contextmanager
 from typing import Optional
 
 from loguru import logger
-
-_LANGFUSE_KEYS = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL")
-
-
-def _langfuse_configured() -> bool:
-    return all(os.getenv(k) for k in _LANGFUSE_KEYS)
 
 
 @contextmanager
@@ -28,7 +21,9 @@ def langfuse_session(style: str = "", period_type: str = ""):
     (drafter, reviewer, tool calls) shares the same session in the UI.
     Falls back to an empty list when Langfuse is not configured.
     """
-    if not _langfuse_configured():
+    from spotify_core.config import settings
+
+    if not settings.langfuse_configured:
         logger.debug("langfuse_session: Langfuse not configured — skipping")
         yield []
         return
@@ -61,7 +56,9 @@ def update_trace_metadata(metadata: dict) -> None:
     attaches our post-hoc fields (e.g. OpenAI cached prompt tokens, only known
     after `.invoke()` returns) to that node's span.
     """
-    if not metadata or not _langfuse_configured():
+    from spotify_core.config import settings
+
+    if not metadata or not settings.langfuse_configured:
         return
     try:
         from langfuse import get_client

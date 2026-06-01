@@ -17,12 +17,12 @@ from spotify_core.db.queries import (
     get_weekly_trend,
     is_history_empty,
 )
-from spotify_web.charts import daily_activity_figure, trend_figure
-from spotify_web.config import get_sync_args
-from spotify_web.formatting import format_duration_mins, spotify_uri_to_url
+from spotify_mcp.dashboard.charts import daily_activity_figure, trend_figure
+from spotify_mcp.dashboard.runtime import get_sync_args
+from spotify_mcp.dashboard.formatting import format_duration_mins, spotify_uri_to_url
 
-from ai_block import render_ai_block
-from spotify_web.period_filter import DASHBOARD_PERIOD_OPTION, render_period_dates
+from spotify_mcp.dashboard.ai_block import render_ai_block
+from spotify_mcp.dashboard.period_filter import DASHBOARD_PERIOD_OPTION, render_period_dates
 
 _DB_PATH = str(settings.history_db_path)
 _CACHE_TTL = 30

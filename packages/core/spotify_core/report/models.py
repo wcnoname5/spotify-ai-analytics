@@ -5,20 +5,8 @@ BaseChatModel. Google is the only implemented provider in v1; OpenAI and
 Anthropic are skeletons with a final signature so enabling them later is a
 localized change.
 """
-import os
-
 from loguru import logger
 from langchain_core.language_models import BaseChatModel
-
-from ..env import ensure_dotenv_loaded
-
-# Resolve the provider key once, at import — after the platform .env is loaded.
-# Kept at module scope (not inside build_chat_model) so a future config source
-# other than .env can be swapped in here without touching the factory.
-ensure_dotenv_loaded()
-# comment: GEMINI_API_KEY has already existed so let's keep this name instead of GOOGLE_API_KEY.
-_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-_OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 def build_chat_model(provider: str, model: str) -> BaseChatModel:
@@ -32,26 +20,27 @@ def build_chat_model(provider: str, model: str) -> BaseChatModel:
         ValueError: Unknown provider, or the provider's API key is missing.
         NotImplementedError: provider is "openai" or "anthropic" (v1 skeletons).
     """
+    from spotify_core.config import settings
+
     logger.debug("build_chat_model: provider={} model={}", provider, model)
     if provider == "google":
-        if not _GEMINI_API_KEY:
+        if not settings.gemini_api_key:
             raise ValueError(
-                "GEMINI_API_KEY is not set. Add it to your .env to use the "
-                "AI report block."
+                "GEMINI_API_KEY is not set. Run `spotify-mcp setup` to configure LLM keys."
             )
         from langchain_google_genai import ChatGoogleGenerativeAI
         logger.info("build_chat_model: ChatGoogleGenerativeAI model={}", model)
         return ChatGoogleGenerativeAI(
-            model=model, temperature=0.7, google_api_key=_GEMINI_API_KEY
+            model=model, temperature=settings.temperature, google_api_key=settings.gemini_api_key
         )
     if provider == "openai":
-        if not _OPENAI_API_KEY:
+        if not settings.openai_api_key:
             raise ValueError(
-                "OPENAI_API_KEY is not set. Add it to your .env to use OpenAI models."
+                "OPENAI_API_KEY is not set. Run `spotify-mcp setup` to configure LLM keys."
             )
         from langchain_openai import ChatOpenAI
         logger.info("build_chat_model: ChatOpenAI model={}", model)
-        return ChatOpenAI(model=model, temperature=0.7, api_key=_OPENAI_API_KEY)
+        return ChatOpenAI(model=model, temperature=settings.temperature, api_key=settings.openai_api_key)
     if provider == "anthropic":
         # TODO: implement the Anthropic provider branch (ChatAnthropic).
         raise NotImplementedError("Anthropic provider is not implemented yet.")

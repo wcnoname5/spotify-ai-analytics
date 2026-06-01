@@ -1,5 +1,5 @@
-"""Tests for spotify_web.charts figure builders."""
-from spotify_web.charts import daily_activity_figure, trend_figure
+"""Tests for spotify_mcp.dashboard.charts figure builders."""
+from spotify_mcp.dashboard.charts import daily_activity_figure, trend_figure
 
 
 def test_daily_activity_figure_empty():
