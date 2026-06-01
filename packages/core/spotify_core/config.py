@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     use_gemini: bool = Field(default=True, alias="USE_GEMINI")
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
     openai_model: str = Field(default="gpt-4", alias="OPENAI_MODEL")
+    temperature: float = Field(default=0.7, alias="TEMPERATURE")
 
     # Data paths — defaults flow through paths.py so platformdirs / env override
     # both work without touching this class.

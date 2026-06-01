@@ -26,21 +26,21 @@ def build_chat_model(provider: str, model: str) -> BaseChatModel:
     if provider == "google":
         if not settings.gemini_api_key:
             raise ValueError(
-                "GEMINI_API_KEY is not set. Add it to your .env or run `spotify-mcp setup` to configure LLM keys."
+                "GEMINI_API_KEY is not set. Run `spotify-mcp setup` to configure LLM keys."
             )
         from langchain_google_genai import ChatGoogleGenerativeAI
         logger.info("build_chat_model: ChatGoogleGenerativeAI model={}", model)
         return ChatGoogleGenerativeAI(
-            model=model, temperature=0.7, google_api_key=settings.gemini_api_key
+            model=model, temperature=settings.temperature, google_api_key=settings.gemini_api_key
         )
     if provider == "openai":
         if not settings.openai_api_key:
             raise ValueError(
-                "OPENAI_API_KEY is not set. Add it to your .env or run `spotify-mcp setup` to configure LLM keys."
+                "OPENAI_API_KEY is not set. Run `spotify-mcp setup` to configure LLM keys."
             )
         from langchain_openai import ChatOpenAI
         logger.info("build_chat_model: ChatOpenAI model={}", model)
-        return ChatOpenAI(model=model, temperature=0.7, api_key=settings.openai_api_key)
+        return ChatOpenAI(model=model, temperature=settings.temperature, api_key=settings.openai_api_key)
     if provider == "anthropic":
         # TODO: implement the Anthropic provider branch (ChatAnthropic).
         raise NotImplementedError("Anthropic provider is not implemented yet.")
