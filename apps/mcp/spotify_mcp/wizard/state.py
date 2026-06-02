@@ -48,16 +48,7 @@ def dbs_initialized() -> bool:
                 conn.execute(f"SELECT 1 FROM {table} LIMIT 0")
         except sqlite3.Error:
             return False
-    if not paths.ltm_db().exists():
-        return False
-    try:
-        with sqlite3.connect(paths.ltm_db()) as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
-            ).fetchone()
-            return bool(row and row[0] > 0)
-    except sqlite3.Error:
-        return False
+    return True
 
 
 def tokens_valid() -> bool:

@@ -32,9 +32,6 @@ class Settings(BaseSettings):
 
     history_db_path: Path = Field(default_factory=paths.history_db, alias="HISTORY_DB_PATH")
     tokens_db_path: Path = Field(default_factory=paths.tokens_db, alias="TOKENS_DB_PATH")
-    ltm_db_path: Path = Field(default_factory=paths.ltm_db, alias="LTM_DB_PATH")
-    checkpoints_db_path: Path = Field(default_factory=paths.checkpoints_db, alias="CHECKPOINTS_DB_PATH")
-
     # Spotify credentials
     spotify_client_id: str = Field(default="", alias="SPOTIFY_CLIENT_ID")
     token_encrypt_key: str = Field(default="", alias="TOKEN_ENCRYPT_KEY")
@@ -48,8 +45,6 @@ class Settings(BaseSettings):
         "spotify_data_path",
         "history_db_path",
         "tokens_db_path",
-        "ltm_db_path",
-        "checkpoints_db_path",
         mode="before",
     )
     @classmethod

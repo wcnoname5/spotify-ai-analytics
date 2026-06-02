@@ -4,7 +4,6 @@ from spotify_core.config import get_client_id, get_fernet_key, settings
 
 DB_PATH: str = str(settings.history_db_path)
 TOKENS_DB: str = str(settings.tokens_db_path)
-LTM_DB: str = str(settings.ltm_db_path)
 DEFAULT_USER_ID: str = settings.spotify_user_id
 
 EMPTY_DB_RESPONSE: dict = {

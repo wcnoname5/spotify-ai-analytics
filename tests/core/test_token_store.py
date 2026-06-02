@@ -1,7 +1,5 @@
 """Unit tests for spotify_core.spotify_client.token_store."""
-import sqlite3
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 from cryptography.fernet import Fernet

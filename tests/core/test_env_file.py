@@ -1,7 +1,5 @@
 """Tests for spotify_core.env_file — .env read/upsert helper."""
-import os
 import sys
-from pathlib import Path
 
 import pytest
 

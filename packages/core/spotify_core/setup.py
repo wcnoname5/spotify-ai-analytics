@@ -4,14 +4,13 @@ from loguru import logger
 from pathlib import Path
 
 from spotify_core.config import settings, get_client_id, get_fernet_key
-from spotify_core.db.migrations import init_ltm_db, init_tokens_db
+from spotify_core.db.migrations import init_tokens_db
 from spotify_core.db.pipeline import import_json_to_db, init_history_db
 
 def run_setup(
     user_id: str | None = None,
     db: str | None = None,
     tokens_db: str | None = None,
-    ltm_db: str | None = None,
     json_dir: str | None = None,
 ) -> dict[str, bool | dict]:
     """Initialize DBs, run OAuth PKCE flow, and optionally import JSON history.
@@ -30,7 +29,6 @@ def run_setup(
     user_id = user_id or settings.spotify_user_id
     db = db or str(settings.history_db_path)
     tokens_db = tokens_db or str(settings.tokens_db_path)
-    ltm_db = ltm_db or str(settings.ltm_db_path)
     json_dir = json_dir or str(settings.spotify_data_path)
 
     if not user_id:
@@ -44,9 +42,6 @@ def run_setup(
 
     logger.info("Initializing tokens DB at {}", tokens_db)
     init_tokens_db(tokens_db)
-
-    logger.info("Initializing long-term memory DB at {}", ltm_db)
-    init_ltm_db(ltm_db)
 
     # Step 2: OAuth
     from spotify_core.spotify_client.auth import run_pkce_flow

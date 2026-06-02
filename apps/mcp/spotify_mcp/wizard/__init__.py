@@ -39,11 +39,10 @@ def run_wizard(
         credentials.ensure_fernet_key(console=console)
 
     if not state.dbs_initialized():
-        from spotify_core.db.migrations import init_history_db, init_ltm_db, init_tokens_db
+        from spotify_core.db.migrations import init_history_db, init_tokens_db
 
         init_history_db(paths.history_db())
         init_tokens_db(paths.tokens_db())
-        init_ltm_db(paths.ltm_db())
         console.print("[green]Databases initialized.[/green]")
 
     if not state.tokens_valid():

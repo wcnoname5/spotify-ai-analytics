@@ -47,12 +47,11 @@ def test_dbs_initialized_false_when_missing(temp_install):
 
 
 def test_dbs_initialized_true_after_init(temp_install):
-    from spotify_core.db.migrations import init_history_db, init_ltm_db, init_tokens_db
+    from spotify_core.db.migrations import init_history_db, init_tokens_db
     from spotify_core import paths
 
     init_history_db(paths.history_db())
     init_tokens_db(paths.tokens_db())
-    init_ltm_db(paths.ltm_db())
     assert st.dbs_initialized() is True
 
 
