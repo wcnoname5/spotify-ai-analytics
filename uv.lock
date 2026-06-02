@@ -2622,7 +2622,7 @@ dev = [
 
 [[package]]
 name = "spotify-analytics-core"
-version = "0.2.0rc2"
+version = "0.2.0rc3"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "cryptography" },
@@ -2664,7 +2664,7 @@ provides-extras = ["report"]
 
 [[package]]
 name = "spotify-analytics-dataloader"
-version = "0.2.0rc2"
+version = "0.2.0rc3"
 source = { editable = "packages/dataloader" }
 dependencies = [
     { name = "loguru" },
@@ -2683,7 +2683,7 @@ requires-dist = [
 
 [[package]]
 name = "spotify-analytics-mcp"
-version = "0.2.0rc2"
+version = "0.2.0rc3"
 source = { editable = "apps/mcp" }
 dependencies = [
     { name = "fastmcp" },
