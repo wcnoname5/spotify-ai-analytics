@@ -1,6 +1,6 @@
 [project]
 name = "spotify-analytics-mcp"
-version = "0.2.0rc4"
+version = "0.2.0"
 description = "MCP server and CLI installer for the Spotify AI Analytics project."
 readme = "README.md"
 license = { text = "MIT" }

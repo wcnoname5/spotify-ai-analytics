@@ -1,6 +1,6 @@
 [project]
 name = "spotify-analytics-dataloader"
-version = "0.2.0rc4"
+version = "0.2.0"
 description = "Data loading and transformation utilities for Spotify listening history exports."
 readme = "README.md"
 license = { text = "MIT" }
