@@ -1,6 +1,6 @@
 [project]
 name = "spotify-analytics-core"
-version = "0.1.2"
+version = "0.2.0"
 description = "Core analytics, agent, and Spotify client library for the Spotify AI Analytics project."
 readme = "README.md"
 license = { text = "MIT" }
@@ -22,16 +22,20 @@ dependencies = [
     "cryptography>=42.0",
     "httpx>=0.27",
     "python-dotenv>=1.0",
-    "langgraph-checkpoint-sqlite>=3.0.3",
     "platformdirs>=4.0",
+    "loguru>=0.7",
 ]
 
 [project.optional-dependencies]
-agent = [
+report = [
     "langgraph>=1.0",
     "langchain-core>=1.0",
-    "langchain-openai>=1.0",
+    # langfuse.langchain.CallbackHandler does a bare `import langchain`, so the
+    # meta-package is required at runtime — langchain-core alone is not enough.
+    "langchain>=1.0",
     "langchain-google-genai>=4.0",
+    "langfuse>=3.0",
+    "loguru>=0.7",
 ]
 
 [project.urls]

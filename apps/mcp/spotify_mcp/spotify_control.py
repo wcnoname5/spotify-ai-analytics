@@ -1,6 +1,6 @@
 """MCP tools that talk to the live Spotify Web API (playback + playlists)."""
-import logging
 from typing import Annotated, List, Optional
+from loguru import logger
 
 from pydantic import Field
 from fastmcp import FastMCP
@@ -14,9 +14,6 @@ from spotify_mcp.config import (
     get_fernet_key,
     make_client,
 )
-
-logger = logging.getLogger(__name__)
-
 
 def _make_tools(client, user_id: str):
     '''
@@ -52,14 +49,13 @@ def register(mcp: FastMCP) -> None:
 
         Requires Spotify OAuth tokens. Returns nothing_playing if no track is active.
         """
-        logger.debug("[Tool] get_now_playing: user_id=%s", user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).get_now_playing()
-            logger.info("[Tool] get_now_playing success: user_id=%s", user_id)
+            logger.debug("[Tool] get_now_playing success: user_id={}", user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] get_now_playing failed: %s", exc)
+            logger.error("[Tool] get_now_playing failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
@@ -81,14 +77,13 @@ def register(mcp: FastMCP) -> None:
         volume_percent. Use a device_id from this list with play_track or
         play_playlist_or_album to target a specific device.
         """
-        logger.debug("[Tool] get_devices: user_id=%s", user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).get_devices()
-            logger.info("[Tool] get_devices success: user_id=%s", user_id)
+            logger.debug("[Tool] get_devices success: user_id={}", user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] get_devices failed: %s", exc)
+            logger.error("[Tool] get_devices failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
@@ -111,14 +106,13 @@ def register(mcp: FastMCP) -> None:
         If no device is active, returns an error with available_devices so you
         can retry with a device_id, or prompt the user to open Spotify first.
         """
-        logger.debug("[Tool] play_track: uri=%r device_id=%r user_id=%s", uri, device_id, user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).play_track(uri, device_id=device_id)
-            logger.info("[Tool] play_track success: uri=%r user_id=%s", uri, user_id)
+            logger.debug("[Tool] play_track success: uri={!r} user_id={}", uri, user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] play_track failed: %s", exc)
+            logger.error("[Tool] play_track failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
@@ -141,14 +135,13 @@ def register(mcp: FastMCP) -> None:
         If no device is active, returns an error with available_devices so you
         can retry with a device_id, or prompt the user to open Spotify first.
         """
-        logger.debug("[Tool] play_playlist_or_album: context_uri=%r device_id=%r user_id=%s", context_uri, device_id, user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).play_playlist_or_album(context_uri, device_id=device_id)
-            logger.info("[Tool] play_playlist_or_album success: context_uri=%r user_id=%s", context_uri, user_id)
+            logger.debug("[Tool] play_playlist_or_album success: context_uri={!r} user_id={}", context_uri, user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] play_playlist_or_album failed: %s", exc)
+            logger.error("[Tool] play_playlist_or_album failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
@@ -175,14 +168,13 @@ def register(mcp: FastMCP) -> None:
         Returns a dict keyed by type (e.g. 'tracks', 'albums'), each containing
         a list of simplified items with name, uri, and relevant metadata.
         """
-        logger.debug("[Tool] search: query=%r types=%s limit=%d user_id=%s", query, types, limit, user_id)
         try:
             with make_client(user_id) as client:
                 result =_make_tools(client, user_id).search_item(query, types=types, limit=limit)
-            logger.info("[Tool] search success: query=%r user_id=%s", query, user_id)
+            logger.debug("[Tool] search success: query={!r} user_id={}", query, user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] search failed: %s", exc)
+            logger.error("[Tool] search failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
 
@@ -200,14 +192,13 @@ def register(mcp: FastMCP) -> None:
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
         """Pause the current Spotify playback. Requires Spotify Premium. Safe to call when already paused."""
-        logger.debug("[Tool] pause_playback: user_id=%s", user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).pause()
-            logger.info("[Tool] pause_playback success: user_id=%s", user_id)
+            logger.debug("[Tool] pause_playback success: user_id={}", user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] pause_playback failed: %s", exc)
+            logger.error("[Tool] pause_playback failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
@@ -224,14 +215,13 @@ def register(mcp: FastMCP) -> None:
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
         """Skip to the next track in the Spotify queue. Requires Spotify Premium."""
-        logger.debug("[Tool] skip_track: user_id=%s", user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).skip()
-            logger.info("[Tool] skip_track success: user_id=%s", user_id)
+            logger.debug("[Tool] skip_track success: user_id={}", user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] skip_track failed: %s", exc)
+            logger.error("[Tool] skip_track failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
@@ -249,14 +239,13 @@ def register(mcp: FastMCP) -> None:
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
         """Set the Spotify playback volume. Requires Spotify Premium."""
-        logger.debug("[Tool] set_volume: volume_percent=%d user_id=%s", volume_percent, user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).set_volume(volume_percent)
-            logger.info("[Tool] set_volume success: volume_percent=%d user_id=%s", volume_percent, user_id)
+            logger.debug("[Tool] set_volume success: volume_percent={} user_id={}", volume_percent, user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] set_volume failed: %s", exc)
+            logger.error("[Tool] set_volume failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
@@ -274,14 +263,13 @@ def register(mcp: FastMCP) -> None:
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
         """Add a Spotify track to the end of the current playback queue. Requires Spotify Premium."""
-        logger.debug("[Tool] add_to_queue: uri=%r user_id=%s", uri, user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).add_to_queue(uri)
-            logger.info("[Tool] add_to_queue success: uri=%r user_id=%s", uri, user_id)
+            logger.debug("[Tool] add_to_queue success: uri={!r} user_id={}", uri, user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] add_to_queue failed: %s", exc)
+            logger.error("[Tool] add_to_queue failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))
 
     @mcp.tool(
@@ -301,12 +289,11 @@ def register(mcp: FastMCP) -> None:
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
         """Create a new Spotify playlist and populate it with the given tracks. Requires OAuth tokens."""
-        logger.debug("[Tool] create_playlist: name=%r user_id=%s", name, user_id)
         try:
             with make_client(user_id) as client:
                 result = _make_tools(client, user_id).create_playlist(name, track_uris, description)
-            logger.info("[Tool] create_playlist success: name=%r user_id=%s", name, user_id)
+            logger.debug("[Tool] create_playlist success: name={!r} user_id={}", name, user_id)
             return result
         except Exception as exc:
-            logger.error("[Tool] create_playlist failed: %s", exc)
+            logger.error("[Tool] create_playlist failed: {}", exc)
             return to_error_response(exc, user_id, list_devices=lambda: _list_devices(user_id))

@@ -41,14 +41,6 @@ def tokens_db() -> Path:
     return (data_dir() / "tokens.db").resolve()
 
 
-def ltm_db() -> Path:
-    return (data_dir() / "ltm.db").resolve()
-
-
-def checkpoints_db() -> Path:
-    return (data_dir() / "checkpoints.db").resolve()
-
-
 def spotify_history_dir() -> Path:
     return (data_dir() / "spotify_history").resolve()
 

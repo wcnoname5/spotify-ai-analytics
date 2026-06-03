@@ -3,16 +3,14 @@
 Redirect URI: always http://127.0.0.1:{port}/callback
               (Spotify banned localhost as of Nov 2025)
 """
-import logging
 import webbrowser
+from loguru import logger
 import urllib.parse
 import http.server
 from typing import Optional
 import httpx
 
 from .pkce import generate_code_verifier, generate_code_challenge
-
-logger = logging.getLogger(__name__)
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"

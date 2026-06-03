@@ -1,0 +1,33 @@
+# Run the test suite across the supported Python range.
+#
+# The project declares requires-python = ">=3.12", so we test the floor (3.12)
+# and the current dev version (3.13). Keep this matrix in sync with the
+# requires-python lower bound in the pyproject.toml files.
+
+name: Tests
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+
+jobs:
+  pytest:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the workspace (locked)
+        run: uv sync --locked
+
+      - name: Run tests
+        run: uv run pytest

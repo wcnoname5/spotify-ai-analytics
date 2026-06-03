@@ -52,12 +52,12 @@ def seeded_db(tmp_path):
 
 
 class TestGetTopArtists:
-    def test_returns_sorted_by_ms(self, seeded_db):
+    def test_returns_sorted_by_time(self, seeded_db):
         results = get_top_artists(seeded_db, limit=10)
-        # Artist X: 200k + 150k + 200k = 550k ms
-        # Artist Y: 300k ms
+        # Artist X: 200k + 150k + 200k = 550k ms = 9 mins
+        # Artist Y: 300k ms = 5 mins
         assert results[0]["artist_name"] == "Artist X"
-        assert results[0]["total_ms"] == 550_000
+        assert results[0]["total_mins"] == 9
         assert results[1]["artist_name"] == "Artist Y"
 
     def test_limit_respected(self, seeded_db):
@@ -65,19 +65,19 @@ class TestGetTopArtists:
         assert len(results) == 1
 
     def test_date_filter_start(self, seeded_db):
-        # Only plays from Feb onwards: Artist X (200k) vs Artist Y (300k)
+        # Only plays from Feb onwards: Artist X (200k = 3 min) vs Artist Y (300k = 5 min)
         results = get_top_artists(seeded_db, start_date="2024-02-01")
-        artists = {r["artist_name"]: r["total_ms"] for r in results}
+        artists = {r["artist_name"]: r["total_mins"] for r in results}
         assert "Artist X" in artists
-        assert artists["Artist X"] == 200_000
-        assert artists["Artist Y"] == 300_000
+        assert artists["Artist X"] == 3
+        assert artists["Artist Y"] == 5
 
     def test_date_filter_end(self, seeded_db):
-        # Only plays up to Jan 31: Artist X (200k + 150k = 350k), no Artist Y
+        # Only plays up to Jan 31: Artist X (200k + 150k = 350k = 5 min), no Artist Y
         results = get_top_artists(seeded_db, end_date="2024-01-31")
-        artists = {r["artist_name"]: r["total_ms"] for r in results}
+        artists = {r["artist_name"]: r["total_mins"] for r in results}
         assert "Artist Y" not in artists
-        assert artists["Artist X"] == 350_000
+        assert artists["Artist X"] == 5
 
     def test_empty_db(self, tmp_path):
         db = str(tmp_path / "empty.db")
@@ -134,14 +134,15 @@ class TestGetListeningSummary:
         summary = get_listening_summary(seeded_db, end_date="2024-01-31")
         assert summary["total_plays"] == 2
 
-    def test_total_ms_played(self, seeded_db):
+    def test_total_mins_played(self, seeded_db):
         summary = get_listening_summary(seeded_db)
-        # 200k + 150k + 300k + 200k = 850k
-        assert summary["total_ms_played"] == 850_000
+        # 200k + 150k + 300k + 200k = 850k ms = 14 min
+        assert summary["total_mins_played"] == 14
 
-    def test_avg_ms_per_play(self, seeded_db):
+    def test_avg_mins_per_play(self, seeded_db):
         summary = get_listening_summary(seeded_db)
-        assert summary["avg_ms_per_play"] == pytest.approx(212_500.0)
+        # 850k / 4 = 212500 ms = 3 min (truncated)
+        assert summary["avg_mins_per_play"] == 3
 
     def test_skip_rate_no_skips(self, seeded_db):
         summary = get_listening_summary(seeded_db)
@@ -161,10 +162,10 @@ class TestGetListeningSummary:
         assert summary["skip_rate"] == pytest.approx(0.5)
 
     def test_volume_stats_scoped_by_date_filter(self, seeded_db):
-        # Only Jan plays: 200k + 150k = 350k, 2 plays
+        # Only Jan plays: 200k + 150k = 350k ms = 5 min, 2 plays, avg 175k ms = 2 min
         summary = get_listening_summary(seeded_db, end_date="2024-01-31")
-        assert summary["total_ms_played"] == 350_000
-        assert summary["avg_ms_per_play"] == pytest.approx(175_000.0)
+        assert summary["total_mins_played"] == 5
+        assert summary["avg_mins_per_play"] == 2
 
 
 class TestGetListeningPatterns:
@@ -255,17 +256,17 @@ class TestGetListeningPatternsMostActiveDateDetail:
         # Both plays land on 2024-01-11 local TW — play_count = 2
         assert patterns["most_active_date_play_count"] == 2
 
-    def test_most_active_date_total_ms(self, seeded_db_tw):
+    def test_most_active_date_total_mins(self, seeded_db_tw):
         patterns = get_listening_patterns(seeded_db_tw)
-        # 200_000 + 150_000
-        assert patterns["most_active_date_total_ms"] == 350_000
+        # 200_000 + 150_000 = 350_000 ms = 5 min
+        assert patterns["most_active_date_total_mins"] == 5
 
     def test_detail_none_when_db_empty(self, tmp_path):
         db = str(tmp_path / "empty.db")
         init_history_db(db)
         patterns = get_listening_patterns(db)
         assert patterns["most_active_date_play_count"] is None
-        assert patterns["most_active_date_total_ms"] is None
+        assert patterns["most_active_date_total_mins"] is None
 
     def test_detail_respects_date_filter(self, seeded_db):
         # seeded_db: Jan 10, 11 and Feb 1, 10 — all with 1 play each.

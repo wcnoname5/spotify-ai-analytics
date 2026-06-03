@@ -1,0 +1,83 @@
+"""The report LangGraph (drafter -> reviewer -> revise|end) and the
+generate_report orchestration entry point the UI calls."""
+from loguru import logger
+from langchain_core.language_models import BaseChatModel
+from langgraph.graph import END, StateGraph
+
+from .nodes import make_report_nodes
+from .observability import get_trace_url, langfuse_session
+from .state import ReportResult, ReportState
+from .tools import make_report_tools
+
+
+def build_report_graph(tools: list):
+    """Construct and compile the 2-node report StateGraph."""
+    drafter_node, reviewer_node, route_after_review = make_report_nodes(tools)
+    graph = StateGraph(ReportState)
+    graph.add_node("drafter", drafter_node)
+    graph.add_node("reviewer", reviewer_node)
+    graph.set_entry_point("drafter")
+    graph.add_edge("drafter", "reviewer")
+    graph.add_conditional_edges(
+        "reviewer", route_after_review, {"drafter": "drafter", "end": END}
+    )
+    logger.debug("build_report_graph: compiled report graph")
+    return graph.compile()
+
+
+def generate_report(
+    *,
+    style: str,
+    start_date: str,
+    end_date: str,
+    db_path: str,
+    model: BaseChatModel,
+    period_type: str = "custom",
+) -> ReportResult:
+    """Run the report graph end-to-end and return a UI-friendly result.
+
+    Args:
+        style: One of "listening_review", "roast".
+        start_date: ISO "YYYY-MM-DD" range start.
+        end_date: ISO "YYYY-MM-DD" range end.
+        db_path: Path to history.db.
+        model: The chat model used by both the drafter and the reviewer.
+        period_type: "weekly" (last completed week), "monthly" (last completed
+            month), or "custom" (arbitrary range — the drafter adapts depth to
+            the range length).
+    """
+    logger.info("generate_report: style={} period_type={} range={}..{}",
+                style, period_type, start_date, end_date)
+    tools = make_report_tools(db_path)
+    graph = build_report_graph(tools)
+    initial: ReportState = {
+        "style": style,
+        "period_type": period_type,
+        "start_date": start_date,
+        "end_date": end_date,
+        "draft": "",
+        "review_feedback": "",
+        "revision_count": 0,
+        "approved": False,
+        "tool_log": [],
+        "final_report": "",
+    }
+    with langfuse_session(style=style, period_type=period_type) as callbacks:
+        config = {
+            "configurable": {"model": model},
+            "callbacks": callbacks,
+            "run_name": f"report-{style}_{start_date}-{end_date}",
+        }
+        final = graph.invoke(initial, config=config)
+    trace_url = get_trace_url(callbacks)
+    result = ReportResult(
+        text=final["final_report"] or final["draft"],
+        style=style,
+        revision_count=final["revision_count"],
+        approved=final["approved"],
+        tool_log=final["tool_log"],
+        trace_url=trace_url,
+    )
+    logger.info("generate_report: done — approved={} revisions={}",
+                result.approved, result.revision_count)
+    return result

@@ -2,7 +2,6 @@
 import sqlite3
 import json
 import pytest
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 from spotify_core.db.pipeline import init_history_db, import_json_to_db, sync_api_to_db, open_inspect_shell
 

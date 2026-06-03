@@ -3,11 +3,9 @@
 Each check reads the *current* state from disk/env and returns a bool. Used by
 the wizard to skip already-completed steps and by `spotify-mcp doctor`.
 """
-import logging
 import os
+from loguru import logger
 from pathlib import Path
-
-logger = logging.getLogger(__name__)
 
 from spotify_core import env_file, paths
 
@@ -50,16 +48,7 @@ def dbs_initialized() -> bool:
                 conn.execute(f"SELECT 1 FROM {table} LIMIT 0")
         except sqlite3.Error:
             return False
-    if not paths.ltm_db().exists():
-        return False
-    try:
-        with sqlite3.connect(paths.ltm_db()) as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
-            ).fetchone()
-            return bool(row and row[0] > 0)
-    except sqlite3.Error:
-        return False
+    return True
 
 
 def tokens_valid() -> bool:
@@ -88,7 +77,7 @@ def tokens_valid() -> bool:
         )
         return bool(tokens and tokens.get("refresh_token"))
     except Exception as e:
-        logger.debug("tokens_valid check failed: %s", e)
+        logger.debug("tokens_valid check failed: {}", e)
         return False
 
 

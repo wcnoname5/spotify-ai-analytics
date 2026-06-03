@@ -4,8 +4,8 @@ This module owns the FastMCP app object so it can be imported by both the
 development entry point (apps/mcp/server.py) and the `spotify-mcp serve`
 CLI command without duplicating server logic.
 """
-import logging
 import sys
+from loguru import logger
 from contextlib import asynccontextmanager
 
 from fastmcp import FastMCP
@@ -13,9 +13,6 @@ from fastmcp import FastMCP
 from spotify_mcp import db_crud, spotify_control
 from spotify_mcp.config import get_client_id, get_fernet_key
 from spotify_mcp.prompts import register_prompts
-
-logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):
@@ -31,10 +28,12 @@ async def lifespan(server: FastMCP):
             # (cp1252) don't produce un-decodable bytes in the stderr stream.
             return s.replace("—", "-").replace("–", "-")
 
-        print(_ascii_safe(msg), file=sys.stderr, flush=True)
+        safe_msg = _ascii_safe(msg)
+        print(safe_msg, file=sys.stderr, flush=True)
+        safe_actions = [_ascii_safe(action) for action in blocking]
         for action in blocking:
             print(_ascii_safe(f"  - {action}"), file=sys.stderr, flush=True)
-        logger.error("%s\n%s", msg, "\n".join(f"  - {action}" for action in blocking))
+        logger.error("{}\n{}", safe_msg, "\n".join(f"  - {action}" for action in safe_actions))
         raise SystemExit(1)
 
     logger.info("MCP server ready: all checks passed.")

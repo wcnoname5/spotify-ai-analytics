@@ -3,14 +3,12 @@
 All functions take a db_path and return plain Python structures —
 no Polars or in-memory data loading required.
 """
-import logging
 import os
+from loguru import logger
 from datetime import datetime
 from typing import Optional
 from .errors import HistoryNotInitializedError
 from .migrations import get_connection
-
-logger = logging.getLogger(__name__)
 
 _DATE_FMT = "%Y-%m-%d"
 
@@ -36,7 +34,6 @@ def _ensure_history_db(db_path: str) -> None:
 
 def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> None:
     """Raise ValueError on malformed dates; warn on illogical range."""
-    logger.debug("[Helper] _validate_date_range: %s to %s", start_date or "the beginning", end_date or "the end")
     for label, value in (("start_date", start_date), ("end_date", end_date)):
         if value is not None:
             try:
@@ -46,7 +43,26 @@ def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> 
                     f"arg {label}={value!r} must be ISO format 'YYYY-MM-DD'"
                 )
     if start_date and end_date and start_date > end_date:
-        logger.warning("start_date %s is after end_date %s - query will return no rows", start_date, end_date)
+        logger.warning("start_date {} is after end_date {} - query will return no rows", start_date, end_date)
+
+
+def _date_window(
+    start_date: Optional[str], end_date: Optional[str]
+) -> tuple[list[str], list]:
+    """Return (where_clauses, params) for an inclusive played_at date range.
+
+    end_date is widened to end-of-day so the boundary day is fully included.
+    Either bound may be None; the matching clause is then omitted.
+    """
+    clauses: list[str] = []
+    params: list = []
+    if start_date is not None:
+        clauses.append("played_at >= ?")
+        params.append(start_date)
+    if end_date is not None:
+        clauses.append("played_at <= ?")
+        params.append(end_date + "T23:59:59Z")
+    return clauses, params
 
 
 def get_top_artists(
@@ -64,29 +80,23 @@ def get_top_artists(
         end_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
 
     Returns:
-        List of {"artist_name": str, "total_ms": int, "play_count": int}.
+        List of {"artist_name": str, "total_mins": int, "play_count": int}.
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_top_artists: limit=%d start=%s end=%s", limit, start_date, end_date)
     where_clauses = ["artist_name IS NOT NULL"]
-    params: list = []
-    if start_date:
-        where_clauses.append("played_at >= ?")
-        params.append(start_date)
-    if end_date:
-        where_clauses.append("played_at <= ?")
-        params.append(end_date + "T23:59:59Z")
+    date_clauses, params = _date_window(start_date, end_date)
+    where_clauses += date_clauses
 
     where_sql = " AND ".join(where_clauses)
     sql = f"""
         SELECT artist_name,
-               SUM(ms_played) AS total_ms,
+               SUM(ms_played) / 60000 AS total_mins,
                COUNT(*) AS play_count
         FROM listening_history
         WHERE {where_sql}
         GROUP BY artist_name
-        ORDER BY total_ms DESC
+        ORDER BY total_mins DESC
         LIMIT ?
     """
     params.append(limit)
@@ -95,10 +105,10 @@ def get_top_artists(
     try:
         rows = conn.execute(sql, params).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_top_artists: returned %d artists", len(result))
+        logger.debug("get_top_artists: returned {} artists", len(result))
         return result
     except Exception:
-        logger.exception("get_top_artists failed: db_path=%s", db_path)
+        logger.exception("get_top_artists failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -121,20 +131,14 @@ def get_top_tracks(
         show_track_id: If True, include track_id (Spotify URI) in each result row.
 
     Returns:
-        List of {"track_name": str, "artist_name": str, "play_count": int, "total_ms": int}
+        List of {"track_name": str, "artist_name": str, "play_count": int, "total_mins": int}
         plus "track_id": str when show_track_id is True.
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_top_tracks: limit=%d start=%s end=%s", limit, start_date, end_date)
     where_clauses = ["track_name IS NOT NULL"]
-    params: list = []
-    if start_date:
-        where_clauses.append("played_at >= ?")
-        params.append(start_date)
-    if end_date:
-        where_clauses.append("played_at <= ?")
-        params.append(end_date + "T23:59:59Z")
+    date_clauses, params = _date_window(start_date, end_date)
+    where_clauses += date_clauses
 
     where_sql = " AND ".join(where_clauses)
     id_col = ", track_id" if show_track_id else ""
@@ -142,12 +146,12 @@ def get_top_tracks(
         SELECT track_name,
                artist_name,
                COUNT(*) AS play_count,
-               SUM(ms_played) AS total_ms
+               SUM(ms_played) / 60000 AS total_mins
                {id_col}
         FROM listening_history
         WHERE {where_sql}
         GROUP BY track_id
-        ORDER BY play_count DESC
+        ORDER BY play_count DESC, total_mins DESC
         LIMIT ?
     """
     params.append(limit)
@@ -156,10 +160,10 @@ def get_top_tracks(
     try:
         rows = conn.execute(sql, params).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_top_tracks: returned %d tracks", len(result))
+        logger.debug("get_top_tracks: returned {} tracks", len(result))
         return result
     except Exception:
-        logger.exception("get_top_tracks failed: db_path=%s", db_path)
+        logger.exception("get_top_tracks failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -167,10 +171,14 @@ def get_top_tracks(
 
 _SKIP_THRESHOLD_MS = 30_000
 
+# Day of Week Map
 _DOW_MAP = {
     "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday",
     "4": "Thursday", "5": "Friday", "6": "Saturday",
 }
+
+# Stacking order for the daily-activity time segments.
+_SEGMENT_ORDER = {"00:00-06:59": 0, "07:00-12:59": 1, "13:00-18:59": 2, "19:00-23:59": 3}
 
 # Country code → UTC offset in hours. Fractional-offset countries (e.g. IN +5:30) are
 # approximated to the nearest integer. Multi-timezone countries (US, CA, RU, AU) use
@@ -214,7 +222,6 @@ def _detect_tz_offset(conn) -> int:
     Looks across all records with a non-NULL conn_country. Returns 0 (UTC) when
     no country data is present or the country is not in the lookup table.
     """
-    logger.debug("[Helper] _detect_tz_offset: detecting timezone offset from conn_country")
     row = conn.execute(
         "SELECT conn_country, COUNT(*) AS cnt "
         "FROM listening_history WHERE conn_country IS NOT NULL "
@@ -225,7 +232,6 @@ def _detect_tz_offset(conn) -> int:
         logger.debug("No conn_country data found; defaulting to UTC with offset 0")
         return 0 
     offset = _COUNTRY_UTC_OFFSET.get(row["conn_country"], 0)
-    logger.debug("Inferred timezone offset from conn_country %s: %s", row["conn_country"], offset)
     return offset
 
 
@@ -248,22 +254,15 @@ def get_listening_summary(
             "unique_artists": int,
             "earliest_played_at": str | None,
             "latest_played_at": str | None,
-            "total_ms_played": int | None,
-            "avg_ms_per_play": float | None,
+            "total_mins_played": int | None,
+            "avg_mins_per_play": int | None,
             "skip_rate": float | None,  -- fraction of plays < 30 s
         }
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_listening_summary: start=%s end=%s", start_date, end_date)
-    where_clauses = []
-    params: list = [_SKIP_THRESHOLD_MS]
-    if start_date:
-        where_clauses.append("played_at >= ?")
-        params.append(start_date)
-    if end_date:
-        where_clauses.append("played_at <= ?")
-        params.append(end_date + "T23:59:59Z")
+    where_clauses, date_params = _date_window(start_date, end_date)
+    params: list = [_SKIP_THRESHOLD_MS] + date_params
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
     sql = f"""
@@ -273,8 +272,8 @@ def get_listening_summary(
             COUNT(DISTINCT artist_name) AS unique_artists,
             MIN(played_at) AS earliest_played_at,
             MAX(played_at) AS latest_played_at,
-            SUM(ms_played) AS total_ms_played,
-            AVG(ms_played) AS avg_ms_per_play,
+            SUM(ms_played) / 60000 AS total_mins_played,
+            CAST(AVG(ms_played) / 60000 AS INTEGER) AS avg_mins_per_play,
             SUM(CASE WHEN ms_played < ? THEN 1 ELSE 0 END) * 1.0
                 / NULLIF(COUNT(*), 0) AS skip_rate
         FROM listening_history
@@ -284,10 +283,10 @@ def get_listening_summary(
     try:
         row = conn.execute(sql, params).fetchone()
         result = dict(row)
-        logger.info("get_listening_summary: total_plays=%s", result.get("total_plays"))
+        logger.debug("get_listening_summary: total_plays={}", result.get("total_plays"))
         return result
     except Exception:
-        logger.exception("get_listening_summary failed: db_path=%s", db_path)
+        logger.exception("get_listening_summary failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -306,7 +305,7 @@ def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False)
         plus "track_id": str when show_track_id is True.
     """
     _ensure_history_db(db_path)
-    logger.debug("get_recent_plays: limit=%d", limit)
+
     id_col = ", track_id" if show_track_id else ""
     sql = f"""
         SELECT track_name, artist_name, album_name, played_at, ms_played{id_col}
@@ -318,10 +317,10 @@ def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False)
     try:
         rows = conn.execute(sql, (limit,)).fetchall()
         result = [dict(r) for r in rows]
-        logger.info("get_recent_plays: returned %d rows", len(result))
+        logger.debug("get_recent_plays: returned {} rows", len(result))
         return result
     except Exception:
-        logger.exception("get_recent_plays failed: db_path=%s", db_path)
+        logger.exception("get_recent_plays failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -348,23 +347,16 @@ def get_listening_patterns(
         {
             "peak_hour": int | None,                  -- local hour-of-day 0-23 with most plays
             "peak_day_of_week": str | None,           -- e.g. "Thursday" (local time)
-            "most_active_date": str | None,           -- YYYY-MM-DD (local date) with most plays
-            "most_active_date_play_count": int | None,-- play count on most_active_date
-            "most_active_date_total_ms": int | None,  -- total ms played on most_active_date
-            "avg_plays_per_day": float | None,        -- plays / distinct local calendar days
+            "most_active_date": str | None,              -- YYYY-MM-DD (local date) with most plays
+            "most_active_date_play_count": int | None,   -- play count on most_active_date
+            "most_active_date_total_mins": int | None,   -- total minutes played on most_active_date
+            "avg_plays_per_day": float | None,           -- plays / distinct local calendar days
         }
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    logger.debug("get_listening_patterns: start=%s end=%s", start_date, end_date)
-    where_clauses = []
-    params: list = []
-    if start_date:
-        where_clauses.append("played_at >= ?")
-        params.append(start_date)
-    if end_date:
-        where_clauses.append("played_at <= ?")
-        params.append(end_date + "T23:59:59Z")
+    logger.debug("get_listening_patterns: start={} end={}", start_date, end_date)
+    where_clauses, params = _date_window(start_date, end_date)
 
     where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
 
@@ -399,7 +391,7 @@ def get_listening_patterns(
         most_active_date = row["d"] if row else None
 
         most_active_date_play_count = None
-        most_active_date_total_ms = None
+        most_active_date_total_mins = None
         if most_active_date:
             # Combine the date-equality condition with the existing date-range filter so
             # the detail stats are scoped to the same window used to pick the date.
@@ -407,13 +399,13 @@ def get_listening_patterns(
             detail_where = "WHERE " + " AND ".join(detail_clauses)
             detail_params = [most_active_date] + params
             row = conn.execute(
-                f"SELECT COUNT(*) AS play_count, SUM(ms_played) AS total_ms "
+                f"SELECT COUNT(*) AS play_count, SUM(ms_played) / 60000 AS total_mins "
                 f"FROM listening_history {detail_where}",
                 detail_params,
             ).fetchone()
             if row:
                 most_active_date_play_count = row["play_count"]
-                most_active_date_total_ms = row["total_ms"]
+                most_active_date_total_mins = row["total_mins"]
 
         row = conn.execute(
             f"SELECT COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT date({local_ts})), 0) AS avg "
@@ -427,13 +419,13 @@ def get_listening_patterns(
             "peak_day_of_week": peak_day_of_week,
             "most_active_date": most_active_date,
             "most_active_date_play_count": most_active_date_play_count,
-            "most_active_date_total_ms": most_active_date_total_ms,
+            "most_active_date_total_mins": most_active_date_total_mins,
             "avg_plays_per_day": avg_plays_per_day,
         }
-        logger.info("get_listening_patterns: peak_hour=%s peak_day=%s", peak_hour, peak_day_of_week)
+        logger.debug("get_listening_patterns: peak_hour={} peak_day={}", peak_hour, peak_day_of_week)
         return result
     except Exception:
-        logger.exception("get_listening_patterns failed: db_path=%s", db_path)
+        logger.exception("get_listening_patterns failed: db_path={}", db_path)
         raise
     finally:
         conn.close()
@@ -441,18 +433,16 @@ def get_listening_patterns(
 
 def is_history_empty(db_path: str) -> bool:
     """Return True if the DB file is missing, has no listening_history table, or has zero rows."""
-    logger.debug("is_history_empty: db_path=%s", db_path)
     try:
         _ensure_history_db(db_path)
     except HistoryNotInitializedError as e:
-        logger.info("is_history_empty: %s", e)
+        logger.warning("is_history_empty: {}", e)
         return True
 
     conn = get_connection(db_path)
     try:
         row = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()
         empty = row[0] == 0
-        logger.info("is_history_empty: %s (row_count=%d)", empty, row[0])
         return empty
     finally:
         conn.close()
@@ -460,11 +450,11 @@ def is_history_empty(db_path: str) -> bool:
 
 def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
     """Return the earliest and latest played_at timestamps, or None if the DB is uninitialized."""
-    logger.debug("get_data_range: db_path=%s", db_path)
+    logger.debug("get_data_range: db_path={}", db_path)
     try:
         _ensure_history_db(db_path)
     except HistoryNotInitializedError as e:
-        logger.warning("get_data_range: %s", e)
+        logger.error("get_data_range: {}", e)
         return None
 
     conn = get_connection(db_path)
@@ -474,7 +464,179 @@ def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
         ).fetchone()
         earliest = row["earliest"] if row else None
         latest = row["latest"] if row else None
-        logger.info("get_data_range: earliest=%s, latest=%s", earliest, latest)
+        logger.debug("get_data_range: earliest={}, latest={}", earliest, latest)
         return (earliest, latest)
+    finally:
+        conn.close()
+
+
+def _grouped_trend(
+    db_path: str,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    group_expr: str,
+    label_key: str,
+) -> list[dict]:
+    """Sum ms_played and count plays grouped by a strftime bucket on local time.
+
+    Args:
+        db_path: Path to history.db.
+        start_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
+        end_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
+        group_expr: A SQL expression template with a "{ts}" placeholder for the
+            local-timestamp expression, e.g. "date({ts})".
+        label_key: Dict key under which the bucket label is returned.
+
+    Returns:
+        List of {label_key: str, "total_mins": int, "play_count": int}, ordered
+        by bucket ascending.
+    """
+    _validate_date_range(start_date, end_date)
+    _ensure_history_db(db_path)
+    date_clauses, params = _date_window(start_date, end_date)
+    where_sql = ("WHERE " + " AND ".join(date_clauses)) if date_clauses else ""
+
+    conn = get_connection(db_path)
+    try:
+        offset = _detect_tz_offset(conn)
+        tz_mod = f"+{offset} hours" if offset >= 0 else f"{offset} hours"
+        local_ts = f"datetime(played_at, '{tz_mod}')"
+        bucket_expr = group_expr.format(ts=local_ts)
+        sql = f"""
+            SELECT {bucket_expr} AS bucket,
+                   SUM(ms_played) / 60000 AS total_mins,
+                   COUNT(*) AS play_count
+            FROM listening_history
+            {where_sql}
+            GROUP BY bucket
+            ORDER BY bucket
+        """
+        rows = conn.execute(sql, params).fetchall()
+        result = [
+            {label_key: r["bucket"], "total_mins": r["total_mins"] or 0,
+             "play_count": r["play_count"]}
+            for r in rows
+        ]
+        return result
+    except Exception:
+        logger.exception("_grouped_trend failed: db_path={} key={}", db_path, label_key)
+        raise
+    finally:
+        conn.close()
+
+
+def get_daily_trend(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> list[dict]:
+    """Per-calendar-day listening totals (local date) from history.db.
+
+    Returns:
+        List of {"date": "YYYY-MM-DD", "total_mins": int, "play_count": int},
+        ordered by date ascending.
+    """
+    return _grouped_trend(db_path, start_date, end_date, "date({ts})", "date")
+
+
+def get_weekly_trend(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> list[dict]:
+    """Per-week listening totals from history.db.
+
+    Weeks are Monday-based. Labels are the ISO date of the week's Monday.
+
+    Returns:
+        List of {"week_label": "YYYY-MM-DD", "total_mins": int, "play_count": int},
+        ordered by week ascending.
+    """
+
+    return _grouped_trend(
+        db_path, start_date, end_date,
+        "date({ts}, '-' || ((strftime('%w', {ts}) + 6) % 7) || ' days')",
+        "week_label",
+    )
+
+
+def get_monthly_trend(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> list[dict]:
+    """Per-month listening totals from history.db.
+
+    Returns:
+        List of {"month_label": "YYYY-MM", "total_mins": int, "play_count": int},
+        ordered by month ascending.
+    """
+    return _grouped_trend(
+        db_path, start_date, end_date, "strftime('%Y-%m', {ts})", "month_label"
+    )
+
+
+def get_daily_activity_pattern(
+    db_path: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> list[dict]:
+    """Per-weekday, per-time-segment listening volume from history.db.
+
+    Timestamps are shifted to local time (offset inferred from conn_country)
+    before grouping. Time segments are local hour-of-day ranges 00:00-06:59,
+    07:00-12:59, 13:00-18:59, 19:00-23:59.
+
+    Args:
+        db_path: Path to history.db.
+        start_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
+        end_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
+
+    Returns:
+        List of {"weekday": str, "weekday_idx": int, "segment": str,
+        "total_mins": int}, ordered by weekday (Monday..Sunday) then segment.
+    """
+    _validate_date_range(start_date, end_date)
+    _ensure_history_db(db_path)
+    logger.debug("get_daily_activity_pattern: start={} end={}", start_date, end_date)
+    date_clauses, params = _date_window(start_date, end_date)
+    where_sql = ("WHERE " + " AND ".join(date_clauses)) if date_clauses else ""
+
+    conn = get_connection(db_path)
+    try:
+        offset = _detect_tz_offset(conn)
+        tz_mod = f"+{offset} hours" if offset >= 0 else f"{offset} hours"
+        local_ts = f"datetime(played_at, '{tz_mod}')"
+        hour_expr = f"CAST(strftime('%H', {local_ts}) AS INTEGER)"
+        sql = f"""
+            SELECT
+                strftime('%w', {local_ts}) AS dow,
+                CASE
+                    WHEN {hour_expr} BETWEEN 0 AND 6 THEN '00:00-06:59'
+                    WHEN {hour_expr} BETWEEN 7 AND 12 THEN '07:00-12:59'
+                    WHEN {hour_expr} BETWEEN 13 AND 18 THEN '13:00-18:59'
+                    ELSE '19:00-23:59'
+                END AS segment,
+                SUM(ms_played) / 60000 AS total_mins
+            FROM listening_history
+            {where_sql}
+            GROUP BY dow, segment
+        """
+        rows = conn.execute(sql, params).fetchall()
+        result = []
+        for r in rows:
+            dow = r["dow"]  # '0'..'6', 0 = Sunday
+            result.append({
+                "weekday": _DOW_MAP[dow],
+                "weekday_idx": (int(dow) + 6) % 7,  # 0 = Mon .. 6 = Sun
+                "segment": r["segment"],
+                "total_mins": r["total_mins"] or 0,
+            })
+        result.sort(key=lambda d: (d["weekday_idx"], _SEGMENT_ORDER[d["segment"]]))
+        logger.debug("get_daily_activity_pattern: {} (weekday, segment) rows", len(result))
+        return result
+    except Exception:
+        logger.exception("get_daily_activity_pattern failed: db_path={}", db_path)
+        raise
     finally:
         conn.close()

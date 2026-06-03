@@ -7,10 +7,13 @@ requires-python = ">=3.12"
 dependencies = [
     "dotenv>=0.9.9",
     "google-generativeai>=0.8.6",
+    "langchain>=0.3",
     "langchain-core==1.2.5",
     "langchain-google-genai>=4.1.2",
     "langchain-openai==1.1.6",
     "langgraph==1.0.5",
+    "langfuse>=3.0",
+    "loguru>=0.7",
     "numpy>=2.4.0",
     "openai>=2.14.0",
     "pandas>=2.3.3",
@@ -25,7 +28,6 @@ dependencies = [
     "spotify-analytics-core",
     "spotify-analytics-dataloader",
     "spotify-analytics-mcp",
-    "spotify-web",
 ]
 
 [build-system]
@@ -47,11 +49,9 @@ members = [
     "packages/core",
     "packages/dataloader",
     "apps/mcp",
-    "apps/web",
 ]
 
 [tool.uv.sources]
 spotify-analytics-core = { workspace = true }
 spotify-analytics-dataloader = { workspace = true }
 spotify-analytics-mcp = { workspace = true }
-spotify-web = { workspace = true }

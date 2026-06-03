@@ -1,12 +1,9 @@
 """Database initialization and migration utilities."""
 import sqlite3
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import Union
 from .schema import ALL_DDL, HISTORY_DDL, SPOTIFY_TOKENS_DDL
-
-logger = logging.getLogger(__name__)
-
 
 def init_db(db_path: Union[str, Path]) -> None:
     """Create all tables and indexes if they don't exist.
@@ -28,7 +25,7 @@ def init_db(db_path: Union[str, Path]) -> None:
             conn.execute(ddl)
         conn.commit()
 
-    logger.info(f"Database initialized at {db_path}")
+    logger.info("Database initialized at {}", db_path)
 
 # These are fields only in streaming history exports, but not in the API data.
 _HISTORY_COLUMNS = {
@@ -47,7 +44,7 @@ def _migrate_history_db(conn: sqlite3.Connection) -> None:
     for col, col_type in _HISTORY_COLUMNS.items():
         if col not in existing:
             conn.execute(f"ALTER TABLE listening_history ADD COLUMN {col} {col_type}")
-            logger.info("Migration: added column %s %s to listening_history", col, col_type)
+            logger.info("Migration: added column {} {} to listening_history", col, col_type)
 
 
 def init_history_db(db_path: Union[str, Path]) -> None:
@@ -72,7 +69,7 @@ def init_history_db(db_path: Union[str, Path]) -> None:
         _migrate_history_db(conn)
         conn.commit()
 
-    logger.info("History database initialized at %s", db_path)
+    logger.info("History database initialized at {}", db_path)
 
 
 def init_tokens_db(db_path: Union[str, Path]) -> None:
@@ -93,37 +90,7 @@ def init_tokens_db(db_path: Union[str, Path]) -> None:
         conn.execute(SPOTIFY_TOKENS_DDL)
         conn.commit()
 
-    logger.info("Tokens database initialized at %s", db_path)
-
-def init_ltm_db(db_path: Union[str, Path]) -> None:
-    """Create ltm.db with the LangGraph SqliteStore schema.
-
-    LangGraph's SqliteStore manages its own schema. This helper opens the store
-    once so its tables are materialised on disk, making the file usable by the
-    MCP memory tools without waiting for the first put/get to lazily create them.
-    Safe to call multiple times (idempotent).
-
-    Args:
-        db_path: Path to the SQLite database file. Parent directory will be
-                 created automatically if it does not exist.
-    """
-    from langgraph.store.sqlite import SqliteStore
-
-    db_path = Path(db_path)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Entering the context manager runs SqliteStore.setup() which creates its tables.
-    with SqliteStore.from_conn_string(str(db_path)) as store:
-        # Some langgraph versions defer table creation until setup() is called explicitly.
-        if hasattr(store, "setup"):
-            try:
-                store.setup()
-            except Exception:
-                # setup() may not be exposed or may already have run during __enter__.
-                pass
-
-    logger.info("LTM database initialized at %s", db_path)
-
+    logger.info("Tokens database initialized at {}", db_path)
 
 def get_connection(db_path: Union[str, Path]) -> sqlite3.Connection:
     """Open a connection with sensible defaults (WAL mode, foreign keys on).

@@ -12,7 +12,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import logging
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import Annotated, Optional
@@ -25,9 +24,17 @@ from spotify_mcp.wizard import history_import as _history_import
 from spotify_mcp.wizard import oauth_step as _oauth_step
 from spotify_mcp.wizard import state as _state
 
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+from spotify_mcp.dashboard.dependencies import dashboard_available
 
 console = Console()
+
+
+def _dashboard_available() -> bool:
+    """True when the [dashboard] extra's startup dependencies are importable."""
+    return dashboard_available()
+
 
 app = typer.Typer(
     name="spotify-mcp",
@@ -132,21 +139,17 @@ def sync(
     """
     import os
 
-    from dotenv import load_dotenv
-
     from spotify_core import env_file as _env_file
     from spotify_core import paths
     from spotify_core.logging import setup_logging
+    # spotify_mcp.config imports spotify_core.config.settings, which reads the
+    # platform .env via pydantic-settings; get_client_id/get_fernet_key delegate to it.
     from spotify_mcp.config import DB_PATH, TOKENS_DB, get_client_id, get_fernet_key
 
     paths.ensure_dirs()
-    if paths.env_file().exists():
-        load_dotenv(paths.env_file())
 
     # Setup logging
-    level = logging.DEBUG if verbose else logging.getLevelNamesMapping().get(
-        os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO
-    )
+    level = "DEBUG" if verbose else os.getenv("LOG_LEVEL", "INFO").upper()
     setup_logging(log_name="sync", level=level)
 
     # Determine user ID: CLI flag > wizard config > "default" (matches OAuth default)
@@ -168,7 +171,7 @@ def sync(
     try:
         from spotify_core.db.pipeline import sync_api_to_db
 
-        logger.info("Syncing recent plays for user '%s'", final_user_id)
+        logger.info("Syncing recent plays for user '{}'", final_user_id)
         result = sync_api_to_db(
             db_path=DB_PATH,
             tokens_db_path=TOKENS_DB,
@@ -177,12 +180,12 @@ def sync(
             fernet_key=fernet_key,
         )
         logger.info(
-            "Inserted %d rows, cursor updated to %d ms",
+            "Inserted {} rows, cursor updated to {} ms",
             result["inserted"], result["cursor_ms"]
         )
         console.print(f"[green]✓ Synced {result['inserted']} new plays (cursor: {result['cursor_ms']} ms)[/green]")
     except Exception as exc:
-        logger.error("Sync failed: %s", exc)
+        logger.error("Sync failed: {}", exc)
         console.print(f"[red]Error: {exc}[/red]")
         raise typer.Exit(code=1)
 
@@ -190,20 +193,40 @@ def sync(
 @app.command()
 def path() -> None:
     """Print the default path to save the local SQLite database and Configuration files"""
-    from dotenv import load_dotenv
-
     from spotify_core import paths
 
-    if paths.env_file().exists():
-        load_dotenv(paths.env_file())
     config_dir = paths.config_dir()
     data_dir = paths.data_dir()
     console.print(f"[yellow]Config directory: {config_dir}; Data directory: {data_dir}[/yellow]")
 
 @app.command()
+def dashboard(
+    port: Annotated[int, typer.Option("--port", help="Port for the Streamlit server.")] = 8501,
+) -> None:
+    """Launch the Streamlit dashboard (requires the dashboard extra)."""
+    import subprocess
+    import sys
+    from importlib.resources import as_file, files
+
+    if not _dashboard_available():
+        # NB: escape the literal brackets so Rich does not treat [dashboard] as markup.
+        console.print(
+            "[red]Dashboard dependencies are not installed.[/red]\n"
+            'Install with:  uvx --from "spotify-analytics-mcp\\[dashboard]" spotify-mcp dashboard'
+        )
+        raise typer.Exit(code=1)
+
+    with as_file(files("spotify_mcp.dashboard") / "main_page.py") as page:
+        result = subprocess.run(
+            [sys.executable, "-m", "streamlit", "run", str(page), "--server.port", str(port)]
+        )
+    if result.returncode:
+        raise typer.Exit(code=result.returncode)
+
+
+@app.command()
 def serve() -> None:
     """Start the MCP server over stdio (invoked by Claude Desktop)."""
-    import logging
     import os
 
     from dotenv import load_dotenv
@@ -212,12 +235,12 @@ def serve() -> None:
     from spotify_core.logging import setup_mcp_logging
 
     paths.ensure_dirs()
-    if paths.env_file().exists():
-        load_dotenv(paths.env_file())
+    # Load the platform .env into os.environ so env-based SDKs (e.g. Langfuse) see
+    # their credentials. The cwd .env is a dev-checkout fallback (no override).
+    load_dotenv(paths.env_file())
     load_dotenv(override=False)
 
-    _raw_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
-    setup_mcp_logging(level=logging.getLevelNamesMapping().get(_raw_level, logging.DEBUG))
+    setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
 
     from spotify_mcp._mcp import main
     main()

@@ -1,4 +1,4 @@
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     use_gemini: bool = Field(default=True, alias="USE_GEMINI")
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
     openai_model: str = Field(default="gpt-4", alias="OPENAI_MODEL")
+    temperature: float = Field(default=0.7, alias="TEMPERATURE")
 
     # Data paths — defaults flow through paths.py so platformdirs / env override
     # both work without touching this class.
@@ -31,15 +32,19 @@ class Settings(BaseSettings):
 
     history_db_path: Path = Field(default_factory=paths.history_db, alias="HISTORY_DB_PATH")
     tokens_db_path: Path = Field(default_factory=paths.tokens_db, alias="TOKENS_DB_PATH")
-    ltm_db_path: Path = Field(default_factory=paths.ltm_db, alias="LTM_DB_PATH")
-    checkpoints_db_path: Path = Field(default_factory=paths.checkpoints_db, alias="CHECKPOINTS_DB_PATH")
+    # Spotify credentials
+    spotify_client_id: str = Field(default="", alias="SPOTIFY_CLIENT_ID")
+    token_encrypt_key: str = Field(default="", alias="TOKEN_ENCRYPT_KEY")
+
+    # Langfuse (all 3 required to enable tracing)
+    langfuse_public_key: Optional[str] = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: Optional[str] = Field(default=None, alias="LANGFUSE_SECRET_KEY")
+    langfuse_base_url: Optional[str] = Field(default=None, alias="LANGFUSE_BASE_URL")
 
     @field_validator(
         "spotify_data_path",
         "history_db_path",
         "tokens_db_path",
-        "ltm_db_path",
-        "checkpoints_db_path",
         mode="before",
     )
     @classmethod
@@ -54,12 +59,29 @@ class Settings(BaseSettings):
         return v
 
     def validate_paths(self):
-        logger = logging.getLogger(__name__)
         if not self.spotify_data_path.exists():
-            logger.warning("SPOTIFY_DATA_PATH not found: %s", self.spotify_data_path)
+            logger.warning("SPOTIFY_DATA_PATH not found: {}", self.spotify_data_path)
             logger.warning("Place your Streaming_History_Audio_*.json files there.")
         else:
-            logger.info("Spotify history data path verified: %s", self.spotify_data_path)
+            logger.info("Spotify history data path verified: {}", self.spotify_data_path)
+
+    @property
+    def langfuse_configured(self) -> bool:
+        return bool(self.langfuse_public_key and self.langfuse_secret_key and self.langfuse_base_url)
+
+    @property
+    def fernet_key_bytes(self) -> bytes:
+        return self.token_encrypt_key.encode() if self.token_encrypt_key else b""
 
 
 settings = Settings()
+
+
+def get_client_id() -> str:
+    """Return SPOTIFY_CLIENT_ID from Settings."""
+    return settings.spotify_client_id
+
+
+def get_fernet_key() -> bytes:
+    """Return TOKEN_ENCRYPT_KEY as bytes from Settings."""
+    return settings.fernet_key_bytes

@@ -1,6 +1,6 @@
 [project]
 name = "spotify-analytics-mcp"
-version = "0.1.2"
+version = "0.2.0"
 description = "MCP server and CLI installer for the Spotify AI Analytics project."
 readme = "README.md"
 license = { text = "MIT" }
@@ -30,6 +30,14 @@ spotify-mcp = "spotify_mcp.cli:app"
 
 [project.entry-points."pipx.run"]
 spotify-analytics-mcp = "spotify_mcp.cli:app"
+
+[project.optional-dependencies]
+dashboard = [
+    "streamlit>=1.52",
+    "plotly>=6.5",
+    "spotify-analytics-core[report]",
+    "langchain-openai>=1.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/wcnoname5/spotify-ai-analytics"

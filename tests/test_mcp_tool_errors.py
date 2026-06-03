@@ -38,15 +38,12 @@ def mcp_with_temp_paths(tmp_path, monkeypatch):
     monkeypatch.setattr("spotify_mcp.config.DB_PATH", history_db)
     monkeypatch.setattr("spotify_mcp.config.TOKENS_DB", tokens_db)
     monkeypatch.setattr("spotify_mcp.config.DEFAULT_USER_ID", "test_user")
-    monkeypatch.setattr("spotify_mcp.config.get_client_id", lambda: "fake_client_id")
-    monkeypatch.setattr("spotify_mcp.config.get_fernet_key", lambda: fernet_key)
+
     # db_crud already imported these names at module load time — patch the
     # module-level bindings too so the tool body sees the temp paths.
     monkeypatch.setattr(db_crud, "DB_PATH", history_db)
     monkeypatch.setattr(db_crud, "TOKENS_DB", tokens_db)
     monkeypatch.setattr(db_crud, "DEFAULT_USER_ID", "test_user")
-    monkeypatch.setattr(db_crud, "get_client_id", lambda: "fake_client_id")
-    monkeypatch.setattr(db_crud, "get_fernet_key", lambda: fernet_key)
 
     mcp = FastMCP("test_mcp")
     db_crud.register(mcp)
@@ -61,8 +58,7 @@ class TestSyncHistoryAuthError:
 
         assert isinstance(result, dict)
         assert result.get("requires_auth") is True
-        assert "auth_command" in result
-        assert "test_user" in result["auth_command"]
+        assert result["auth_command"] == "spotify-mcp reauth"
 
     def test_initialized_but_no_token_row_returns_requires_auth(
         self, mcp_with_temp_paths
