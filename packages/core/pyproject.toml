@@ -1,6 +1,6 @@
 [project]
 name = "spotify-analytics-core"
-version = "0.2.0rc3"
+version = "0.2.0rc4"
 description = "Core analytics, agent, and Spotify client library for the Spotify AI Analytics project."
 readme = "README.md"
 license = { text = "MIT" }
