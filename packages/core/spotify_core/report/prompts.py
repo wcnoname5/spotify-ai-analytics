@@ -167,6 +167,7 @@ def compose_drafter_system(playbook: str, style: str) -> str:
 
 
 def compose_reviewer_system(style: str, playbook: str) -> str:
+    voice = _STYLE_VOICE[style]
     return f"""\
 你是這篇歌曲聆聽分析文章的編輯。請依下列標準審查草稿：
 
@@ -181,7 +182,7 @@ def compose_reviewer_system(style: str, playbook: str) -> str:
 
 3. 觀點：文章必須有明確觀點，不能只是條列數據。至少要有一段是觀點性段落。
 
-4. 風格：文章必須符合以下風格說明（{style}）。
+4. 風格：文章必須符合以下風格說明（{voice}）。
 
 請以 JSON 物件回應，包含且僅包含兩個欄位：
 - "approved"：布林值。四項標準全部通過時為 true，否則為 false。
