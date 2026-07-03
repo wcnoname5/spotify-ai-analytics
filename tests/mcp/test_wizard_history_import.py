@@ -40,7 +40,7 @@ def test_pick_dir_via_gui_returns_path_when_selected(monkeypatch, tmp_path):
 def test_run_step_skip_choice_does_nothing(monkeypatch):
     monkeypatch.setattr(hi, "_prompt_choice", lambda console: "skip")
     called = {"import": False, "sync": False}
-    monkeypatch.setattr(hi, "_do_import", lambda console, files: called.__setitem__("import", True))
+    monkeypatch.setattr(hi, "_do_import", lambda console, files, db_target=None: called.__setitem__("import", True))
     monkeypatch.setattr(hi, "_do_sync_recent", lambda console: called.__setitem__("sync", True))
     hi.run_step(console=Console(record=True))
     assert called == {"import": False, "sync": False}
@@ -51,7 +51,7 @@ def test_run_step_import_uses_gui_when_available(tmp_path, monkeypatch):
     monkeypatch.setattr(hi, "_prompt_choice", lambda console: "import")
     monkeypatch.setattr(hi, "pick_dir_via_gui", lambda: tmp_path)
     captured = {}
-    monkeypatch.setattr(hi, "_do_import", lambda console, files: captured.update(files=files))
+    monkeypatch.setattr(hi, "_do_import", lambda console, files, db_target=None: captured.update(files=files))
     hi.run_step(console=Console(record=True))
     assert len(captured["files"]) == 1
 
@@ -61,9 +61,9 @@ def test_run_step_falls_back_to_cwd_scan_when_gui_unavailable(tmp_path, monkeypa
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(hi, "_prompt_choice", lambda console: "import")
     monkeypatch.setattr(hi, "pick_dir_via_gui", lambda: None)  # GUI unavailable / cancelled
-    monkeypatch.setattr(hi, "_confirm_use_cwd", lambda console, files: True)
+    monkeypatch.setattr(hi, "_confirm_use_cwd", lambda console, files, db_target=None: True)
     captured = {}
-    monkeypatch.setattr(hi, "_do_import", lambda console, files: captured.update(files=files))
+    monkeypatch.setattr(hi, "_do_import", lambda console, files, db_target=None: captured.update(files=files))
     hi.run_step(console=Console(record=True))
     assert len(captured["files"]) == 1
 
@@ -73,6 +73,6 @@ def test_run_step_skips_when_gui_cancelled_and_cwd_empty(tmp_path, monkeypatch):
     monkeypatch.setattr(hi, "_prompt_choice", lambda console: "import")
     monkeypatch.setattr(hi, "pick_dir_via_gui", lambda: None)
     called = {"import": False}
-    monkeypatch.setattr(hi, "_do_import", lambda console, files: called.__setitem__("import", True))
+    monkeypatch.setattr(hi, "_do_import", lambda console, files, db_target=None: called.__setitem__("import", True))
     hi.run_step(console=Console(record=True))
     assert called["import"] is False

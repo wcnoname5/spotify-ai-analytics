@@ -116,6 +116,8 @@ LANGFUSE_SECRET_KEY=
 LANGFUSE_BASE_URL=
 
 # Optional
+DATABASE_URL=         # postgresql:// DSN (e.g. Supabase). When set, history/sync/tokens
+                      # all live in that one Postgres DB instead of local SQLite files.
 SPOTIFY_USER_ID=      # placeholder for future multi-user; unused in single-user mode
 LOG_LEVEL=INFO        # DEBUG for verbose output
 ```
@@ -128,8 +130,10 @@ defaults (`USE_GEMINI`, `GEMINI_MODEL`, `OPENAI_MODEL`, `*_DB_PATH`,
 **Where `.env` lives:** the CLI wizard writes to the platformdirs config dir
 (`paths.config_dir()/.env`), *not* the repo root. At runtime that file is loaded
 first, then a cwd `.env` as a dev-only fallback (no override). For checkout-mode
-dev, point both at the repo by exporting `SPOTIFY_MCP_CONFIG_DIR=$PWD` and
-`SPOTIFY_MCP_DATA_DIR=$PWD/data`. Repo `.env` is for development only — never commit it.
+dev, set `DEV=true` in the repo `.env` (or shell) — config and `data/` then
+resolve to the repo checkout. Explicit `SPOTIFY_MCP_CONFIG_DIR` /
+`SPOTIFY_MCP_DATA_DIR` still override everything. Repo `.env` is for
+development only — never commit it.
 
 ---
 
