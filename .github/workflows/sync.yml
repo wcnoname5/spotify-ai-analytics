@@ -1,0 +1,66 @@
+name: sync
+
+# Hourly Spotify sync + static dashboard deploy. State (history.db, tokens.db)
+# lives in a private R2 bucket — nothing personal ever enters this repo or its
+# public logs (sync.py prints row counts only; secret values are auto-masked).
+# Fork setup: see docs/DEPLOY.md.
+
+on:
+  schedule:
+    - cron: "23 * * * *" # hourly, off the top-of-hour congestion window
+  workflow_dispatch:
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      DEV: "true" # DB paths resolve to ./data in the checkout (see paths.py)
+      SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+      TOKEN_ENCRYPT_KEY: ${{ secrets.TOKEN_ENCRYPT_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      # aws-cli >=2.23 sends checksum headers R2 rejects; only send when required
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+      R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Download DBs from R2
+        run: |
+          mkdir -p data
+          aws s3 cp "s3://$R2_BUCKET/history.db" data/history.db --endpoint-url "$R2_ENDPOINT" --no-progress
+          aws s3 cp "s3://$R2_BUCKET/tokens.db" data/tokens.db --endpoint-url "$R2_ENDPOINT" --no-progress
+
+      - name: Sync from Spotify API
+        run: uv run scripts/sync.py
+
+      - name: Build static dashboard
+        run: uv run scripts/build_dashboard.py
+
+      # tokens.db goes back too — Spotify may rotate the refresh token
+      - name: Upload DBs back to R2
+        run: |
+          aws s3 cp data/history.db "s3://$R2_BUCKET/history.db" --endpoint-url "$R2_ENDPOINT" --no-progress
+          aws s3 cp data/tokens.db "s3://$R2_BUCKET/tokens.db" --endpoint-url "$R2_ENDPOINT" --no-progress
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site --project-name=${{ secrets.CF_PAGES_PROJECT }}

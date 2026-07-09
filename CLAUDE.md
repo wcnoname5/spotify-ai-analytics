@@ -1,9 +1,5 @@
 # CLAUDE.md — Guide for Claude Code
 
-This file tells Claude Code how to work in this repository.
-
----
-
 ## Project Overview
 
 Spotify AI Analytics MCP, Dashboard. Combines:
@@ -53,8 +49,6 @@ tests/                # Pytest suite (tests/core, tests/mcp, tests/web, tests/in
 
 ### Never
 - Commit `data/*.db` files or `.env` files
-- Add `print()` debugging — use `loguru` (the project's logging library; see `spotify_core/logging.py`)
-- Break the Streamlit dashboard (it lives in `apps/mcp/spotify_mcp/dashboard/` and must stay runnable via `spotify-mcp dashboard`)
 - Use `localhost` in OAuth redirect URIs — Spotify banned this Nov 2025, use `127.0.0.1` explicitly
 
 ### Imports
@@ -84,6 +78,12 @@ tests/                # Pytest suite (tests/core, tests/mcp, tests/web, tests/in
 - The `spotify-mcp` console script (`spotify_mcp.cli:app`, Typer) is the user-facing installer
 - Interactive setup steps live in `apps/mcp/spotify_mcp/wizard/` (spotify_app, credentials, oauth_step, claude_desktop, history_import, state)
 - Wizard tests live in `tests/mcp/`
+
+## Cloud Deployment (optional)
+
+- `.github/workflows/sync.yml`: hourly cron — pulls `history.db`/`tokens.db` from a private Cloudflare R2 bucket, runs `scripts/sync.py` (wraps `sync_api_to_db`), regenerates the static dashboard via `scripts/build_dashboard.py`, uploads DBs back, deploys `site/` to Cloudflare Pages (gated by Cloudflare Access). Setup: `docs/DEPLOY.md`.
+- The repo is public and Actions logs are public: CI scripts must never print track names, tokens, or DB contents — row counts only.
+- The cloud DB copy is independent of any local install; local flows (wizard/MCP/Streamlit) are unaffected.
 
 ---
 
@@ -116,10 +116,9 @@ LANGFUSE_SECRET_KEY=
 LANGFUSE_BASE_URL=
 
 # Optional
-DATABASE_URL=         # postgresql:// DSN (e.g. Supabase). When set, history/sync/tokens
-                      # all live in that one Postgres DB instead of local SQLite files.
 SPOTIFY_USER_ID=      # placeholder for future multi-user; unused in single-user mode
 LOG_LEVEL=INFO        # DEBUG for verbose output
+DEV=true # Development setting for 
 ```
 
 Only `SPOTIFY_CLIENT_ID` and `TOKEN_ENCRYPT_KEY` are written by the wizard; LLM
@@ -132,8 +131,7 @@ defaults (`USE_GEMINI`, `GEMINI_MODEL`, `OPENAI_MODEL`, `*_DB_PATH`,
 first, then a cwd `.env` as a dev-only fallback (no override). For checkout-mode
 dev, set `DEV=true` in the repo `.env` (or shell) — config and `data/` then
 resolve to the repo checkout. Explicit `SPOTIFY_MCP_CONFIG_DIR` /
-`SPOTIFY_MCP_DATA_DIR` still override everything. Repo `.env` is for
-development only — never commit it.
+`SPOTIFY_MCP_DATA_DIR` still override everything. If DEV in repo `.env` exist, it will read repo `.env` instead or wizard setting. (see `da888fcc51ac9f61dd6c52adeec3aed540444039`)
 
 ---
 
