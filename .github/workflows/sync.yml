@@ -25,16 +25,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DEV: "true" # DB paths resolve to ./data in the checkout (see paths.py)
+      SPOTIFY_MCP_DATA_DIR: ./data
       SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
       TOKEN_ENCRYPT_KEY: ${{ secrets.TOKEN_ENCRYPT_KEY }}
-      # must match the user_id rows inside the uploaded tokens.db/history.db
       SPOTIFY_USER_ID: ${{ secrets.SPOTIFY_USER_ID || 'default' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: astral-sh/setup-uv@v5
         with:

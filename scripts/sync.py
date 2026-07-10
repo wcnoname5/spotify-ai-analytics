@@ -1,7 +1,8 @@
 """CI entry point: sync recent plays from the Spotify API into history.db.
 
-Run by .github/workflows/sync.yml with DEV=true, so DB paths resolve to the
-repo checkout's data/ directory (populated from R2 before this script runs).
+Run by .github/workflows/sync.yml with SPOTIFY_MCP_DATA_DIR=./data, so DB
+paths resolve to the checkout's data/ directory (populated from R2 before
+this script runs).
 Prints only row counts — Actions logs on a public repo are world-readable.
 """
 import sys

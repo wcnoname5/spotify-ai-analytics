@@ -65,3 +65,43 @@ def ensure_dirs() -> None:
     """Idempotently create config_dir() and data_dir()."""
     config_dir().mkdir(parents=True, exist_ok=True)
     data_dir().mkdir(parents=True, exist_ok=True)
+
+
+def platform_env_file() -> Path:
+    """The platformdirs .env location, regardless of the active resolution mode."""
+    return (Path(platformdirs.user_config_dir(_APP_NAME)) / ".env").resolve()
+
+
+def cwd_env_file() -> Path:
+    """The checkout/cwd .env location, regardless of the active resolution mode."""
+    return (Path.cwd() / ".env").resolve()
+
+
+def resolution_source(env_var: str) -> str:
+    """Which rule decided a directory: 'env' (explicit override), 'dev', or 'platformdirs'."""
+    if os.environ.get(env_var):
+        return "env"
+    if is_dev():
+        return "dev"
+    return "platformdirs"
+
+
+def describe() -> dict:
+    """Snapshot of the resolved paths and how each was chosen.
+
+    Consumed by `spotify-mcp doctor` / `spotify-mcp path` so users can see
+    which .env and which DBs a given invocation is actually using.
+    """
+    return {
+        "dev": is_dev(),
+        "config_dir": str(config_dir()),
+        "config_dir_source": resolution_source("SPOTIFY_MCP_CONFIG_DIR"),
+        "data_dir": str(data_dir()),
+        "data_dir_source": resolution_source("SPOTIFY_MCP_DATA_DIR"),
+        "env_file": str(env_file()),
+        "env_file_exists": env_file().exists(),
+        "history_db": str(history_db()),
+        "history_db_exists": history_db().exists(),
+        "tokens_db": str(tokens_db()),
+        "tokens_db_exists": tokens_db().exists(),
+    }

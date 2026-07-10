@@ -19,32 +19,9 @@ Cloudflare Access  = restricts the dashboard to your email
 The local flow (wizard, MCP server, Streamlit dashboard) is untouched and
 independent; the cloud copy of the DB lives its own life after the initial upload.
 
-## How the pieces fit (read once)
-
-- **Workflows** (`.github/workflows/`):
-  - `sync.yml`: production cron shedule run sync hourly,  only fire on **default branch (main)**. activate when you merge to `main`.
-  - `sync-test.yml` — same steps, manual-only (`workflow_dispatch`). It defaults to a throwaway `spotify-test` bucket and deploys a Pages
-    *preview*, so it can never touch production. Use it to prove the pipeline before merging.
-- **Secrets**: repo secrets (GitHub → repo → Settings → Secrets and variables → Actions) are the only inputs a workflow can't read from the repo itself.
-  `gh secret set NAME` writes to that exact same store from the terminal.  Workflows read them as `${{ secrets.NAME }}`; values are write-only (nobody can read them back, only overwrite) an auto-masked in logs.
-- **Cloudflare pieces**: one R2 bucket (the two SQLite files), one Pages
-  project (the static dashboard), one Access application (the login wall), and one API token that both CI and the setup script use for all of it.
-
-## Privacy on a public repo
-
-- Actions **logs are public**: `scripts/sync.py` prints row counts only, and
-  GitHub masks all secret values in logs. Keep it that way — DO NOT add steps
-  that print track names or dump the DB.
-- The DBs live only in the private R2 bucket, never in the repo or artifacts.
-- The dashboard URL is public but Cloudflare Access blocks everyone except
-  the emails you allow.
-- Forks do not inherit your secrets, and scheduled workflows are disabled on
-  forks until the owner enables them.
-
 ## One-time setup
 
-Steps 0–2 are prep, step 3 is one script that does everything else,
-steps 4–5 are verification. Total: ~15 minutes.
+Steps 0–2 are preparation, step 3 is one script that does everything else, steps 4–5 are verification.
 
 ### 0. Prerequisites (once per machine)
 
@@ -59,9 +36,9 @@ steps 4–5 are verification. Total: ~15 minutes.
 uv run spotify-mcp        # OAuth → tokens.db, history import → history.db
 ```
 
-With `DEV=true` in the repo `.env` the DBs (and `.env`) live in the repo
-checkout (`./data/`, `./.env`); otherwise in the platformdirs dirs —
-`spotify-mcp` prints the location, pass it as the script's 3rd argument.
+The repo `.env` and the DBs (and `.env`) are in the platformdirs dirs (`spotify-mcp` prints the location), pass it as the script's 3rd argument.
+
+> Warning: if `DEV=true` is set in `.env` under this repo root, the config and DB will be under root instead of platformdirs dirs (run `spotify-mcp path` to double check current path)
 
 ### 2. Cloudflare API token (the only dashboard step)
 
@@ -90,14 +67,7 @@ The first run opens a browser once for `wrangler login`. The script then does
 1. creates the private R2 bucket
 2. uploads `history.db` + `tokens.db` into it
 3. creates the Pages project
-4. sets up the Access login wall. Note: Cloudflare's public API refuses
-   Access apps on `*.pages.dev` ("domain does not belong to zone" — it's
-   Cloudflare's domain, not yours), so the script publishes a placeholder
-   deployment (the built-in button is hidden on empty projects) and prints
-   the exact **2 dashboard clicks** that finish it: Pages project →
-   Settings → "Enable access policy", clicked **twice** (first covers
-   preview URLs, second covers production). Login = one-time PIN to your
-   email.
+4. sets up the Access login wall. 
 5. writes **all 6 GitHub secrets** via `gh`: `R2_BUCKET`, `CF_PAGES_PROJECT`,
    `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, plus `SPOTIFY_CLIENT_ID`
    and `TOKEN_ENCRYPT_KEY` read from the wizard's `.env` (values are never
@@ -118,48 +88,20 @@ Two possible fails:
 gh workflow run sync-test && gh run watch
 ```
 
-or GitHub → **Actions** → **sync-test** → **Run workflow** (keep the default
-`spotify-test` bucket). Green = the whole pipeline works: R2 round-trip, Spotify token refresh, dashboard build, Pages deploy.
+or GitHub → **Actions** → **sync-test** → **Run workflow**. Green = the whole pipeline works: R2 round-trip, Spotify token refresh, dashboard build, Pages deploy.
+
 It publishes to the *preview* URL `https://test.<project>.pages.dev`. You can test it by open in an incognito window: you must hit the Access login first, then see the dashboard.
 
-(If sync-test doesn't show up in the Actions tab: GitHub only lists workflows
-that exist on the default branch : merge the branch first; sync-test is
-manual-only, so being on main never makes it run by itself.)
+> If sync-test doesn't show up in the Actions tab: GitHub only lists workflows that exist on the default branch : merge the branch first.
 
 ### 5. Go live
 
 1. Testing used the throwaway `spotify-test` bucket. For the real one, rerun
-   step 3 with the production bucket name (e.g. `spotify-analytics`) — it
-   re-seeds the DBs there and updates the `R2_BUCKET` secret. (Keeping
-   `spotify-test` as the production bucket also works; it's just a name.)
+   step 3 with the production bucket name (e.g. `spotify-analytics`). Or keep `spotify-test` is also fine.
 2. Merge to main. The hourly cron in `sync.yml` activates automatically —
    first run within the hour (at :23).
 3. Check the first green run in the Actions tab, then open
    `https://<project>.pages.dev`: Access login → dashboard. Done.
-
-<details><summary>Dashboard-click alternative (no CLI at all)</summary>
-
-Everything the script does can be clicked in https://dash.cloudflare.com:
-
-1. **R2 bucket**: R2 → Create bucket (keep it private, the default). Open the
-   bucket and drag & drop `history.db` and `tokens.db` (keep exactly these
-   names, at the bucket root).
-2. **Pages project**: Workers & Pages → Create → Pages → "Upload assets" →
-   pick a project name (any placeholder file works; the workflow overwrites
-   it on every run).
-3. **Access**: Zero Trust dashboard (https://one.dash.cloudflare.com) →
-   Access → Applications → Add an application → **Self-hosted** → hostnames
-   `<project>.pages.dev` **and** `*.<project>.pages.dev` → policy: Allow,
-   Include → Emails → your email. (The old Pages "Enable access policy"
-   shortcut button moved/disappeared in the 2025/26 dashboard revamp — go
-   through Zero Trust directly.)
-4. **Secrets**: repo → Settings → Secrets and variables → Actions → New
-   repository secret, 6 of them: `R2_BUCKET`, `CF_PAGES_PROJECT`,
-   `CLOUDFLARE_ACCOUNT_ID` (dashboard home, right sidebar),
-   `CLOUDFLARE_API_TOKEN` (step 2), `SPOTIFY_CLIENT_ID` and
-   `TOKEN_ENCRYPT_KEY` (from the wizard's `.env`).
-
-</details>
 
 ## Ongoing
 
