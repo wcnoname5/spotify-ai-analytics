@@ -17,11 +17,10 @@
 # wall, and all 6 GitHub Actions secrets. Every step is idempotent —
 # rerunning is always safe (e.g. to re-seed the DBs or switch buckets).
 #
-# The Access step (5) needs the token to include permission
-# "Account / Access: Apps and Policies / Edit" (see docs/DEPLOY.md step 2).
-# It is scripted via the API because the dashboard's "Enable access policy"
-# button moved in the 2025/26 UI revamp (and may not appear at all before a
-# project's first deployment).
+# The Access step (5) needs two one-time things:
+#   - the token must include "Account / Access: Apps and Policies / Edit"
+#   - the account must be onboarded to Zero Trust: https://one.dash.cloudflare.com
+#     (any team name, Free plan, $0)
 #
 # Requires: node/npx, curl. Recommended: gh (GitHub CLI), logged in.
 
@@ -82,7 +81,6 @@ else
   AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
 
   # Use the real host (Pages may suffix it, e.g. myproj-53x.pages.dev);
-  # a guessed name that belongs to someone else fails with error 12130.
   PAGES_HOST="$(curl -sS "${AUTH[@]}" \
     "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT" \
     | grep -oE '"subdomain": *"[^"]+"' | head -1 | cut -d'"' -f4 || true)"
@@ -124,52 +122,23 @@ EOF
       echo "    done — production + preview URLs now require login"
       echo "    (one-time PIN sent to $ALLOW_EMAIL; verify in an incognito window)"
       ACCESS_DONE=1
-    elif echo "$RESP" | grep -q 'does not belong to zone'; then
-      # Cloudflare's public API refuses Access apps on *.pages.dev (it's
-      # Cloudflare's domain, not a zone in your account). Only the built-in
-      # button inside the Pages project can create this app — and that button
-      # is hidden while the project has zero deployments, so publish a
-      # placeholder first if needed.
-      echo "    *.pages.dev can't be protected via the public API — the built-in"
-      echo "    Pages button is the only way. Preparing it for you:"
-      DEPLOYS="$(curl -sS "${AUTH[@]}" \
-        "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT/deployments" || true)"
-      if ! echo "$DEPLOYS" | grep -q '"id"'; then
-        echo "    no deployment yet — publishing a placeholder page (the button"
-        echo "    does not appear on an empty project)"
-        TMP="$(mktemp -d)"
-        echo "<h1>placeholder - the real dashboard arrives with the first sync</h1>" > "$TMP/index.html"
-        $WRANGLER pages deploy "$TMP" --project-name "$PROJECT" --branch main --commit-dirty=true
-        rm -rf "$TMP"
-      fi
-      cat <<EOF
-    Finish with 2 clicks (~1 min):
-      1. https://dash.cloudflare.com -> Workers & Pages -> $PROJECT ->
-         Settings -> "Enable access policy"   (this one covers preview URLs;
-         if asked to onboard Zero Trust: any team name, Free plan, \$0)
-      2. Click "Enable access policy" a SECOND time — that one covers the
-         production domain $PAGES_HOST.
-      3. Verify: https://one.dash.cloudflare.com -> Access -> Applications
-         lists the app(s) with a policy allowing $ALLOW_EMAIL (login = one-
-         time PIN). Then open https://$PAGES_HOST in an incognito
-         window: you must see a login screen, not the page.
-EOF
-      ACCESS_DONE=2
     else
       echo "    error: Access API call failed —" >&2
       echo "$RESP" >&2
-      echo >&2
-      echo "    If the error mentions a missing organization/team: onboard Zero" >&2
-      echo "    Trust once at https://one.dash.cloudflare.com (any team name," >&2
-      echo "    Free plan — it costs \$0), then rerun this script." >&2
+      cat >&2 <<EOF
+    Hints:
+      - "organization/team" errors: onboard Zero Trust once at
+        https://one.dash.cloudflare.com (any team name, Free plan), rerun.
+      - manual fallback: Zero Trust dashboard -> Access -> Applications ->
+        add a self-hosted app for $PAGES_HOST and *.$PAGES_HOST with a
+        policy allowing $ALLOW_EMAIL.
+EOF
     fi
   fi
 fi
 
 # ---------------------------------------------------------------------------
-# GitHub Actions secrets — all six, if gh is available. Values are passed via
-# --body and never printed. The two Spotify ones come from the wizard's .env
-# (repo ./.env in DEV mode, otherwise next to the DBs in the data dir).
+# GitHub Actions secrets — all six, if gh is available.
 # ---------------------------------------------------------------------------
 MISSING_SECRETS=()
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
@@ -205,7 +174,6 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   done
 
   # Optional: custom user id. The tokens.db/history.db rows are keyed by it,
-  # so CI must use the same value (workflows fall back to "default").
   uid=""
   if [[ -n "$ENV_FILE" ]]; then
     uid="$(grep -E '^SPOTIFY_USER_ID=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
@@ -223,13 +191,7 @@ echo
 echo "============================================================"
 echo "Setup done: bucket \"$BUCKET\", Pages project \"$PROJECT\"."
 
-if [[ "$ACCESS_DONE" == "2" ]]; then
-  cat <<EOF
-
-! Access policy: finish the 2 dashboard clicks printed above — until then
-  the dashboard is PUBLIC.
-EOF
-elif [[ "$ACCESS_DONE" != "1" ]]; then
+if [[ "$ACCESS_DONE" != "1" ]]; then
   cat <<EOF
 
 ! Access policy NOT set — the dashboard is still public. Rerun with your

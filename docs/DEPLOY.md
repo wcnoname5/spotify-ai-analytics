@@ -29,6 +29,11 @@ Steps 0–2 are preparation, step 3 is one script that does everything else, ste
 - [GitHub CLI](https://cli.github.com/), logged in (`gh auth login`) — the
   script uses it to write the repo secrets for you
 - a Cloudflare account (free tier) and this repo pushed to your GitHub
+- Zero Trust onboarded once (needed for the Access login wall):
+  https://one.dash.cloudflare.com → pick any team name → **Free** plan
+  ($0, may ask for a payment method). Nothing else to configure there —
+  no domain or DNS setup needed; the team name is just your login page's
+  address (`<team>.cloudflareaccess.com`).
 
 ### 1. Local data: run the wizard
 
@@ -67,7 +72,11 @@ The first run opens a browser once for `wrangler login`. The script then does
 1. creates the private R2 bucket
 2. uploads `history.db` + `tokens.db` into it
 3. creates the Pages project
-4. sets up the Access login wall. 
+4. sets up the Access login wall on the project's **real** `pages.dev` host
+   (Pages adds a suffix like `-53x` when your project name is taken
+   globally), covering production + preview URLs. Login = one-time PIN to
+   your email. Note: the login page tells *any* email "code sent", but only
+   allowed emails actually receive one — that's anti-enumeration, not a bug.
 5. writes **all 6 GitHub secrets** via `gh`: `R2_BUCKET`, `CF_PAGES_PROJECT`,
    `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, plus `SPOTIFY_CLIENT_ID`
    and `TOKEN_ENCRYPT_KEY` read from the wizard's `.env` (values are never
