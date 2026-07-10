@@ -188,6 +188,17 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
       MISSING_SECRETS+=("$name")
     fi
   done
+
+  # Optional: custom user id. The tokens.db/history.db rows are keyed by it,
+  # so CI must use the same value (workflows fall back to "default").
+  uid=""
+  if [[ -n "$ENV_FILE" ]]; then
+    uid="$(grep -E '^SPOTIFY_USER_ID=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
+    uid="${uid%\"}"; uid="${uid#\"}"
+  fi
+  if [[ -n "$uid" ]]; then
+    gh secret set SPOTIFY_USER_ID --body "$uid"
+  fi
   GH_DONE=1
 else
   GH_DONE=0
