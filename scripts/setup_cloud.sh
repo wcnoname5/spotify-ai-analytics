@@ -78,21 +78,36 @@ elif [[ -z "$ACCOUNT_ID" ]]; then
   echo "==> [5/5] Access policy: SKIPPED — could not auto-detect the account ID;"
   echo "    export CLOUDFLARE_ACCOUNT_ID and rerun"
 else
-  echo "==> [5/5] Access policy: allow only $ALLOW_EMAIL on $PROJECT.pages.dev"
   API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps"
   AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
 
-  EXISTING="$(curl -sS "${AUTH[@]}" "$API?domain=$PROJECT.pages.dev" || true)"
-  if echo "$EXISTING" | grep -q "\"domain\": *\"$PROJECT.pages.dev\""; then
-    echo "    already protected — nothing to do"
+  # Use the real host (Pages may suffix it, e.g. myproj-53x.pages.dev);
+  # a guessed name that belongs to someone else fails with error 12130.
+  PAGES_HOST="$(curl -sS "${AUTH[@]}" \
+    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT" \
+    | grep -oE '"subdomain": *"[^"]+"' | head -1 | cut -d'"' -f4 || true)"
+  PAGES_HOST="${PAGES_HOST:-$PROJECT.pages.dev}"
+
+  echo "==> [5/5] Access policy: allow only $ALLOW_EMAIL on $PAGES_HOST"
+
+  # Only add domains not already covered (e.g. by the button-made preview app).
+  APPS_JSON="$(curl -sS "${AUTH[@]}" "$API" || true)"
+  NEED_DOMAINS=()
+  echo "$APPS_JSON" | grep -qF "\"$PAGES_HOST\"" || NEED_DOMAINS+=("$PAGES_HOST")
+  echo "$APPS_JSON" | grep -qF "\"*.$PAGES_HOST\"" || NEED_DOMAINS+=("*.$PAGES_HOST")
+
+  if [[ ${#NEED_DOMAINS[@]} -eq 0 ]]; then
+    echo "    already protected (production + previews) — nothing to do"
     ACCESS_DONE=1
   else
+    echo "    covering: ${NEED_DOMAINS[*]}"
+    DOMS="$(printf '"%s",' "${NEED_DOMAINS[@]}")"; DOMS="[${DOMS%,}]"
     RESP="$(curl -sS -X POST "${AUTH[@]}" "$API" --data @- <<EOF || true
 {
-  "name": "$PROJECT dashboard",
+  "name": "$PROJECT dashboard (${NEED_DOMAINS[0]})",
   "type": "self_hosted",
-  "domain": "$PROJECT.pages.dev",
-  "self_hosted_domains": ["$PROJECT.pages.dev", "*.$PROJECT.pages.dev"],
+  "domain": "${NEED_DOMAINS[0]}",
+  "self_hosted_domains": $DOMS,
   "session_duration": "24h",
   "app_launcher_visible": false,
   "policies": [
@@ -133,10 +148,10 @@ EOF
          Settings -> "Enable access policy"   (this one covers preview URLs;
          if asked to onboard Zero Trust: any team name, Free plan, \$0)
       2. Click "Enable access policy" a SECOND time — that one covers the
-         production domain $PROJECT.pages.dev.
+         production domain $PAGES_HOST.
       3. Verify: https://one.dash.cloudflare.com -> Access -> Applications
          lists the app(s) with a policy allowing $ALLOW_EMAIL (login = one-
-         time PIN). Then open https://$PROJECT.pages.dev in an incognito
+         time PIN). Then open https://$PAGES_HOST in an incognito
          window: you must see a login screen, not the page.
 EOF
       ACCESS_DONE=2
