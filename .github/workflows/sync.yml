@@ -1,34 +1,27 @@
-name: sync-test
+name: sync
 
-# Manual test-bed for the cloud sync pipeline — run it from the Actions tab
-# against the throwaway `spotify-test` R2 bucket before trusting the hourly
-# sync.yml. Differences from sync.yml:
-#   - workflow_dispatch only: no cron, never triggered by pushes
-#   - bucket name is a run input (default spotify-test), not a secret
-#   - R2 download/upload via wrangler + CLOUDFLARE_API_TOKEN (needs the
-#     "Workers R2 Storage: Edit" permission) — no S3 access-key pair
-#   - Pages deploy goes to the *preview* branch "test", never production
-# Same public-repo log rules as sync.yml: row counts only, no track names.
-# sync.yml runs these exact steps hourly against the real bucket — a green
-# run here means the production pipeline works.
+# Hourly Spotify sync + static dashboard deploy. State (history.db, tokens.db)
+# lives in a private R2 bucket — nothing personal ever enters this repo or its
+# public logs (sync.py prints row counts only; secret values are auto-masked).
+# R2 download/upload and the Pages deploy all use one CLOUDFLARE_API_TOKEN
+# (Workers R2 Storage: Edit + Cloudflare Pages: Edit). Setup: docs/DEPLOY.md.
+# Manual test-bed running the same steps against a test bucket: sync-test.yml.
+# Note: the cron only fires when this file is on the default branch (main).
 
 on:
+  schedule:
+    - cron: "23 * * * *" # hourly, off the top-of-hour congestion window
   workflow_dispatch:
-    inputs:
-      bucket:
-        description: R2 bucket to test against
-        required: true
-        default: spotify-test
 
 concurrency:
-  group: sync-test
+  group: sync
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  sync-test:
+  sync:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -38,7 +31,7 @@ jobs:
       SPOTIFY_USER_ID: ${{ secrets.SPOTIFY_USER_ID || 'default' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      R2_BUCKET: ${{ inputs.bucket }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
     steps:
       - uses: actions/checkout@v5
 
@@ -67,8 +60,8 @@ jobs:
           npx --yes wrangler@4 r2 object put "$R2_BUCKET/history.db" --file data/history.db --remote
           npx --yes wrangler@4 r2 object put "$R2_BUCKET/tokens.db" --file data/tokens.db --remote
 
-      - name: Deploy dashboard preview to Cloudflare Pages
+      - name: Deploy to Cloudflare Pages (production)
         run: >
           npx --yes wrangler@4 pages deploy site
           --project-name="${{ secrets.CF_PAGES_PROJECT }}"
-          --branch=test --commit-dirty=true
+          --branch=main --commit-dirty=true

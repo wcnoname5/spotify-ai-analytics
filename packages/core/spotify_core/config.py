@@ -10,10 +10,16 @@ from spotify_core import paths
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
+        # With DEV=true (repo .env or shell) paths.env_file() resolves to the
+        # cwd .env; otherwise the platformdirs config dir. See paths.py.
         env_file=str(paths.env_file()),
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    # Dev mode: when true, config/.env and data paths point at the repo
+    # checkout (cwd) instead of the platformdirs production locations.
+    dev: bool = Field(default_factory=paths.is_dev, alias="DEV")
 
     # API Keys
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")

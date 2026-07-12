@@ -13,6 +13,9 @@ def _clean_env(monkeypatch):
     monkeypatch.delenv("SPOTIFY_DATA_PATH", raising=False)
     monkeypatch.delenv("HISTORY_DB_PATH", raising=False)
     monkeypatch.delenv("TOKENS_DB_PATH", raising=False)
+    # Pin DEV off so a DEV=true in the developer's repo .env (read via cwd
+    # fallback) doesn't flip the platformdirs-default tests.
+    monkeypatch.setenv("DEV", "false")
 
 
 def test_data_dir_uses_env_override(monkeypatch, tmp_path):
@@ -47,6 +50,30 @@ def test_db_paths_live_under_data_dir(monkeypatch, tmp_path):
     assert paths.history_db() == (tmp_path / "history.db").resolve()
     assert paths.tokens_db() == (tmp_path / "tokens.db").resolve()
     assert paths.spotify_history_dir() == (tmp_path / "spotify_history").resolve()
+
+
+def test_dev_mode_uses_repo_checkout(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEV", "true")
+    monkeypatch.chdir(tmp_path)
+    assert paths.config_dir() == tmp_path.resolve()
+    assert paths.data_dir() == (tmp_path / "data").resolve()
+    assert paths.env_file() == (tmp_path / ".env").resolve()
+
+
+def test_dev_mode_read_from_cwd_env_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("DEV")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("DEV=true\n", encoding="utf-8")
+    assert paths.is_dev() is True
+    assert paths.config_dir() == tmp_path.resolve()
+
+
+def test_explicit_env_var_beats_dev(monkeypatch, tmp_path):
+    monkeypatch.setenv("DEV", "true")
+    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    assert paths.config_dir() == (tmp_path / "cfg").resolve()
+    assert paths.data_dir() == (tmp_path / "data").resolve()
 
 
 def test_ensure_dirs_creates_missing(monkeypatch, tmp_path):

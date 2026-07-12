@@ -94,6 +94,58 @@ def history_has_data() -> bool:
         return False
 
 
+def _active_user_id() -> str:
+    return (
+        os.environ.get("SPOTIFY_USER_ID")
+        or env_file.read_key(paths.env_file(), "SPOTIFY_USER_ID")
+        or "default"
+    )
+
+
+def token_user_ids() -> list[str]:
+    """user_id rows present in tokens.db (empty when the DB is missing/broken)."""
+    import sqlite3
+
+    if not paths.tokens_db().exists():
+        return []
+    try:
+        with sqlite3.connect(paths.tokens_db()) as conn:
+            return [r[0] for r in conn.execute("SELECT user_id FROM spotify_tokens")]
+    except sqlite3.Error:
+        return []
+
+
+def path_warnings() -> list[str]:
+    """Cross-check the two possible .env locations and the tokens.db user rows.
+
+    These are the split-brain traps: a checkout .env and a platformdirs .env
+    that disagree on identity keys, or a SPOTIFY_USER_ID that matches no row
+    in tokens.db. Values are never included — key names and paths only.
+    """
+    warnings: list[str] = []
+
+    platform_env = paths.platform_env_file()
+    cwd_env = paths.cwd_env_file()
+    if platform_env != cwd_env and platform_env.exists() and cwd_env.exists():
+        for key in ("SPOTIFY_CLIENT_ID", "TOKEN_ENCRYPT_KEY", "SPOTIFY_USER_ID"):
+            va = env_file.read_key(platform_env, key)
+            vb = env_file.read_key(cwd_env, key)
+            if va and vb and va != vb:
+                warnings.append(
+                    f"{key} differs between {platform_env} and {cwd_env}; "
+                    f"the active file for this invocation is {paths.env_file()}"
+                )
+
+    users = token_user_ids()
+    active = _active_user_id()
+    if users and active not in users:
+        warnings.append(
+            f"SPOTIFY_USER_ID '{active}' has no token row in {paths.tokens_db()} "
+            f"(rows: {users}) — sync will fail until they match"
+        )
+    return warnings
+
+
 def collect_report() -> dict:
     """Build a `setup_check`-style report from the live filesystem state."""
     checks = {
@@ -124,4 +176,7 @@ def collect_report() -> dict:
         "checks": checks,
         "actions_needed": actions,
         "message": "All set." if not actions else f"{len(actions)} action(s) required.",
+        "paths": paths.describe(),
+        "token_users": token_user_ids(),
+        "warnings": path_warnings(),
     }

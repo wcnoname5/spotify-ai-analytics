@@ -20,8 +20,18 @@ def run_oauth(console: Console, force: bool = False) -> None:
         console.print("[green]Existing Spotify tokens are valid — skipping OAuth.[/green]")
         return
 
-    client_id = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
-    fernet_key = os.environ.get("TOKEN_ENCRYPT_KEY", "").strip()
+    from spotify_core import env_file as _env_file
+
+    client_id = (
+        os.environ.get("SPOTIFY_CLIENT_ID")
+        or _env_file.read_key(paths.env_file(), "SPOTIFY_CLIENT_ID")
+        or ""
+    ).strip()
+    fernet_key = (
+        os.environ.get("TOKEN_ENCRYPT_KEY")
+        or _env_file.read_key(paths.env_file(), "TOKEN_ENCRYPT_KEY")
+        or ""
+    ).strip()
     if not client_id:
         raise RuntimeError("SPOTIFY_CLIENT_ID not set — run earlier wizard steps first.")
     if not fernet_key:

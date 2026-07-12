@@ -192,12 +192,14 @@ def sync(
 
 @app.command()
 def path() -> None:
-    """Print the default path to save the local SQLite database and Configuration files"""
+    """Show the resolved config/data locations, how each was chosen, and any conflicts."""
     from spotify_core import paths
 
-    config_dir = paths.config_dir()
-    data_dir = paths.data_dir()
-    console.print(f"[yellow]Config directory: {config_dir}; Data directory: {data_dir}[/yellow]")
+    from spotify_mcp.wizard import state as _st
+
+    console.print_json(json.dumps(paths.describe()))
+    for w in _st.path_warnings():
+        console.print(f"[yellow]warning: {w}[/yellow]")
 
 @app.command()
 def dashboard(
