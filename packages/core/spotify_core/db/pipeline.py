@@ -150,15 +150,20 @@ def import_json_to_db(json_dir: str, db_path: str) -> dict:
     return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error}
 
 
-def _insert_item_from_api_response(conn, item: dict, source: str = "api"):
-    """Insert a single Spotify API recently-played item into the DB.
+def parse_api_item(item: dict, source: str = "api") -> Optional[dict]:
+    """Parse a single Spotify API recently-played item into a row dict.
+
+    Pure function — no DB connection required, so it can be reused by
+    non-DB-coupled sync paths (e.g. a cron worker without a live connection).
+
     Input:
-        conn: SQLite connection with listening_history table.
         item: dict representing a single play from Spotify API /me/player/recently-played response.
         source: str indicating the source of the data ("api" or "json_import") to populate the source column in the DB.
 
     Returns:
-        (inserted: bool, duplicated: bool, skipped_due_to_unparseable_date: bool, played_at_ms: Optional[int])
+        dict with keys: id, track_id, track_name, artist_name, album_name,
+        played_at, ms_played, source, played_at_ms.
+        None if played_at is missing/unparseable.
     """
     track = item.get("track", {})
     track_uri = track.get("uri", "")
@@ -171,13 +176,40 @@ def _insert_item_from_api_response(conn, item: dict, source: str = "api"):
     except (ValueError, AttributeError):
         # Unparseable date — skip this item but don't fail the whole batch
         logger.warning("Skipping item with unparseable played_at: {}", played_at_str)
-        return False, False, True, None
+        return None
 
     row_id = hashlib.sha1(f"{track_uri}:{played_at_iso}".encode()).hexdigest()
     artists = track.get("artists") or []
     artist_name = artists[0]["name"] if artists else None
     album_name = (track.get("album") or {}).get("name")
     ms_played = track.get("duration_ms")
+
+    return {
+        "id": row_id,
+        "track_id": track_uri,
+        "track_name": track.get("name"),
+        "artist_name": artist_name,
+        "album_name": album_name,
+        "played_at": played_at_iso,
+        "ms_played": ms_played,
+        "source": source,
+        "played_at_ms": played_at_ms,
+    }
+
+
+def _insert_item_from_api_response(conn, item: dict, source: str = "api"):
+    """Insert a single Spotify API recently-played item into the DB.
+    Input:
+        conn: SQLite connection with listening_history table.
+        item: dict representing a single play from Spotify API /me/player/recently-played response.
+        source: str indicating the source of the data ("api" or "json_import") to populate the source column in the DB.
+
+    Returns:
+        (inserted: bool, duplicated: bool, skipped_due_to_unparseable_date: bool, played_at_ms: Optional[int])
+    """
+    row = parse_api_item(item, source=source)
+    if row is None:
+        return False, False, True, None
 
     cur = conn.execute(
         "INSERT OR IGNORE INTO listening_history "
@@ -186,15 +218,15 @@ def _insert_item_from_api_response(conn, item: dict, source: str = "api"):
         " platform, conn_country, reason_start, reason_end, shuffle, skipped) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL)",
         (
-            row_id, track_uri, track.get("name"),
-            artist_name, album_name,
-            played_at_iso, ms_played, source,
+            row["id"], row["track_id"], row["track_name"],
+            row["artist_name"], row["album_name"],
+            row["played_at"], row["ms_played"], row["source"],
         ),
     )
     # inserted if rowcount > 0, otherwise it was a duplicate and skipped
     if cur.rowcount > 0:
-        return True, False, False, played_at_ms
-    return False, True, False, played_at_ms
+        return True, False, False, row["played_at_ms"]
+    return False, True, False, row["played_at_ms"]
 
 
 def sync_api_to_db(
