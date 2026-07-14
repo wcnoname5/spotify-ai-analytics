@@ -486,6 +486,14 @@ def sync_api_to_worker(
     with SpotifyClient(tokens_scratch_db_path, user_id, client_id, fernet_key) as client:
         response = client.get_recently_played(limit=50, after=cursor_ms or None)
 
+    # Re-export and post tokens BEFORE posting tracks/cursor: SpotifyClient
+    # may have rotated the refresh token above, and if post_tracks/post_cursor
+    # raise, we must not leave D1 holding a now-stale refresh token (which
+    # would strand every later cron run in an auth failure).
+    refreshed_row = export_encrypted_row(tokens_scratch_db_path, user_id)
+    if refreshed_row is not None:
+        worker.post_tokens(user_id, refreshed_row)
+
     items = response.get("items", [])
     rows = []
     skipped_parse_error = 0
@@ -505,11 +513,6 @@ def sync_api_to_worker(
 
     if new_cursor_ms > (cursor_ms or 0):
         worker.post_cursor(new_cursor_ms)
-
-    # Re-export in case SpotifyClient refreshed the access/refresh token.
-    refreshed_row = export_encrypted_row(tokens_scratch_db_path, user_id)
-    if refreshed_row is not None:
-        worker.post_tokens(user_id, refreshed_row)
 
     logger.info(
         "Worker sync: {} inserted, {} skipped parse errors, cursor={}",

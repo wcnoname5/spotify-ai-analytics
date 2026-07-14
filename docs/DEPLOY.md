@@ -38,10 +38,13 @@ opens a browser once for `wrangler login`. The script then does
 **everything else**:
 
 1. creates the `spotify-analytics` (prod) and `spotify-analytics-test` D1
-   databases
+   databases, and patches their real `database_id`s into `worker/wrangler.toml`
 2. creates the R2 backup bucket
 3. applies `worker/migrations/` and deploys the Worker to both environments
-4. writes the GitHub secrets via `gh`: `WORKER_URL`, `WORKER_AUTH_TOKEN`,
+4. sets the Worker-side `AUTH_TOKEN` secret (via `wrangler secret put`) for
+   both the prod and `--env test` Worker, from the tokens passed on the
+   command line — without this step every Worker request 401s
+5. writes the GitHub secrets via `gh`: `WORKER_URL`, `WORKER_AUTH_TOKEN`,
    `WORKER_TEST_URL`, `WORKER_TEST_AUTH_TOKEN`, `R2_BACKUP_BUCKET`, plus
    `SPOTIFY_CLIENT_ID`/`TOKEN_ENCRYPT_KEY`/`CLOUDFLARE_ACCOUNT_ID`/
    `CLOUDFLARE_API_TOKEN` read from a local `.env` if present

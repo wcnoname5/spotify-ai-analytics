@@ -55,6 +55,11 @@ def run_local_sync(db_path: Union[str, Path], worker: WorkerClient) -> dict:
     try:
         with conn:
             last_sync_at_ms = _get_last_sync_at_ms(conn)
+            # Read the cursor BEFORE fetching tracks: if new rows land in D1
+            # between these two calls, this run simply misses them (they'll
+            # be picked up next time) rather than permanently skipping rows
+            # that arrived between get_tracks_since and get_cursor.
+            cursor_ms = worker.get_cursor()
             rows = worker.get_tracks_since(last_sync_at_ms)
 
             inserted = 0
@@ -70,7 +75,6 @@ def run_local_sync(db_path: Union[str, Path], worker: WorkerClient) -> dict:
                 if cur.rowcount > 0:
                     inserted += 1
 
-            cursor_ms = worker.get_cursor()
             _set_last_sync_at_ms(conn, cursor_ms)
     finally:
         conn.close()

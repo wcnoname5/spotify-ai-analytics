@@ -30,17 +30,45 @@ WORKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../worker" && pwd)"
 echo "==> [1/5] Cloudflare login (opens a browser the first time)"
 (cd "$WORKER_DIR" && $WRANGLER whoami) || (cd "$WORKER_DIR" && $WRANGLER login)
 
-echo "==> [2/5] D1 databases: $PROD_DB, $TEST_DB"
+echo "==> [2/6] D1 databases: $PROD_DB, $TEST_DB"
 (cd "$WORKER_DIR" && $WRANGLER d1 create "$PROD_DB") \
   || echo "    $PROD_DB exists already — fine, continuing"
 (cd "$WORKER_DIR" && $WRANGLER d1 create "$TEST_DB") \
   || echo "    $TEST_DB exists already — fine, continuing"
 
-echo "==> [3/5] R2 backup bucket: $R2_BACKUP_BUCKET"
+echo "==> [2b/6] Patching worker/wrangler.toml with real database_id values"
+D1_LIST_JSON="$(cd "$WORKER_DIR" && $WRANGLER d1 list --json)"
+python3 - "$WORKER_DIR/wrangler.toml" "$PROD_DB" "$TEST_DB" <<PYEOF
+import json, re, sys
+toml_path, prod_name, test_name = sys.argv[1:4]
+databases = json.loads('''$D1_LIST_JSON''')
+by_name = {d["name"]: d["uuid"] for d in databases}
+prod_id = by_name[prod_name]
+test_id = by_name[test_name]
+
+text = open(toml_path, encoding="utf-8").read()
+
+def patch(text, db_name, db_id):
+    pattern = re.compile(
+        r'(database_name = "%s"\n(?:[^\n]*\n)*?database_id = )"[^"]*"' % re.escape(db_name)
+    )
+    new_text, count = pattern.subn(lambda m: m.group(1) + '"%s"' % db_id, text, count=1)
+    if count != 1:
+        raise SystemExit(f"could not find database_id line for {db_name} in {toml_path}")
+    return new_text
+
+text = patch(text, prod_name, prod_id)
+text = patch(text, test_name, test_id)
+open(toml_path, "w", encoding="utf-8").write(text)
+print(f"    {prod_name} -> {prod_id}")
+print(f"    {test_name} -> {test_id}")
+PYEOF
+
+echo "==> [3/6] R2 backup bucket: $R2_BACKUP_BUCKET"
 (cd "$WORKER_DIR" && $WRANGLER r2 bucket create "$R2_BACKUP_BUCKET") \
   || echo "    bucket exists already — fine, continuing"
 
-echo "==> [4/5] Apply migrations + deploy the Worker (prod + test)"
+echo "==> [4/6] Apply migrations + deploy the Worker (prod + test)"
 (cd "$WORKER_DIR" && $WRANGLER d1 migrations apply "$PROD_DB" --remote)
 (cd "$WORKER_DIR" && $WRANGLER d1 migrations apply "$TEST_DB" --env test --remote)
 DEPLOY_OUT="$(cd "$WORKER_DIR" && $WRANGLER deploy)"
@@ -57,12 +85,16 @@ if [[ -z "$WORKER_URL" || -z "$WORKER_TEST_URL" ]]; then
   echo "    Secrets and variables -> Actions)."
 fi
 
+echo "==> [4b/6] Worker-side AUTH_TOKEN secrets (prod + test) — never printed"
+printf '%s' "$WORKER_AUTH_TOKEN" | (cd "$WORKER_DIR" && $WRANGLER secret put AUTH_TOKEN)
+printf '%s' "$WORKER_TEST_AUTH_TOKEN" | (cd "$WORKER_DIR" && $WRANGLER secret put AUTH_TOKEN --env test)
+
 # ---------------------------------------------------------------------------
 # GitHub Actions secrets — via gh, if available.
 # ---------------------------------------------------------------------------
 MISSING_SECRETS=()
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  echo "==> [5/5] Setting GitHub Actions secrets via gh (values are never printed)"
+  echo "==> [5/6] Setting GitHub Actions secrets via gh (values are never printed)"
   gh secret set WORKER_AUTH_TOKEN --body "$WORKER_AUTH_TOKEN"
   gh secret set WORKER_TEST_AUTH_TOKEN --body "$WORKER_TEST_AUTH_TOKEN"
   gh secret set R2_BACKUP_BUCKET --body "$R2_BACKUP_BUCKET"
