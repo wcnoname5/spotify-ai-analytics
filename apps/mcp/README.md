@@ -6,12 +6,12 @@ Ships with a `spotify-mcp` CLI that walks you through Spotify app registration, 
 
 ## Quick Start
 
+Run from a checkout of this repo (see [the project README](https://github.com/wcnoname5/spotify-ai-analytics#readme) for prerequisites and full setup instructions):
+
 ```bash
-uvx --from spotify-analytics-mcp spotify-mcp setup
+uv run spotify-mcp setup
 ```
 
-See [the project README](https://github.com/wcnoname5/spotify-ai-analytics#readme) for prerequisites and full setup instructions.
-
 ```bash
-uvx --from spotify-analytics-mcp spotify-mcp --help
+uv run spotify-mcp --help
 ```

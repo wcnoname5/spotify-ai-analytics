@@ -26,7 +26,6 @@ def test_env_load_order(tmp_path, monkeypatch):
     for mod in [
         "spotify_core.config",
         "spotify_mcp.config",
-        "spotify_mcp.dashboard.runtime",
     ]:
         if mod in sys.modules:
             del sys.modules[mod]
@@ -34,7 +33,3 @@ def test_env_load_order(tmp_path, monkeypatch):
     # Import the MCP app config and assert it reads the client id from .env
     mcp_cfg = importlib.import_module("spotify_mcp.config")
     assert mcp_cfg.get_client_id() == "from_env_file"
-
-    # Import the web app config and assert it also reads the same value
-    web_cfg = importlib.import_module("spotify_mcp.dashboard.runtime")
-    assert web_cfg.get_client_id() == "from_env_file"

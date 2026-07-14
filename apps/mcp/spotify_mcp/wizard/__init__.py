@@ -4,7 +4,7 @@ from __future__ import annotations
 from rich.console import Console
 
 from spotify_core import paths
-from spotify_mcp.dashboard.dependencies import dashboard_available
+from spotify_mcp.wizard.dependencies import dashboard_available
 
 from . import (
     claude_desktop,
@@ -19,7 +19,7 @@ from . import (
 
 
 def _dashboard_installed() -> bool:
-    """True when the [dashboard] extra's startup dependencies are importable."""
+    """True when the [report] extra's startup dependencies are importable."""
     return dashboard_available()
 
 
@@ -55,8 +55,8 @@ def run_wizard(
         llm_keys.run_step(console=console)
         langfuse_keys.run_step(console=console)
     else:
-        # NB: escape the literal brackets so Rich does not treat [dashboard] as markup.
-        console.print("[dim]Install the \\[dashboard] extra to enable AI reports.[/dim]")
+        # NB: escape the literal brackets so Rich does not treat [report] as markup.
+        console.print("[dim]Install the \\[report] extra to enable AI reports.[/dim]")
 
     claude_desktop.run_step(console=console, install=setup_claude_desktop)
     console.print("\n[bold green]Setup complete.[/bold green]")

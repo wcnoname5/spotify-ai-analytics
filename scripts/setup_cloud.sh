@@ -1,163 +1,81 @@
 #!/usr/bin/env bash
-# One-time Cloudflare setup for the cloud deployment (docs/DEPLOY.md), done
-# from the terminal instead of clicking through the dashboard. Creates the R2
-# bucket, seeds it with your two DBs, creates the Pages project, and (if you
-# pass an email + API token) locks the dashboard behind Cloudflare Access.
+# One-time Cloudflare setup for the D1-backed deployment (docs/DEPLOY.md),
+# Creates the prod + test D1 databases, applies the Worker's migrations,
+# deploys the Worker to both environments, and (if gh is available) writes the GitHub
+# Actions secrets sync.yml/sync-test.yml needed.
 #
 # Usage:
-#   bash scripts/setup_cloud.sh <r2-bucket> <pages-project> [data-dir] [allowed-email]
+#   bash scripts/setup_cloud.sh <worker-auth-token> <worker-test-auth-token> [r2-backup-bucket]
 #
 # Examples:
-#   bash scripts/setup_cloud.sh spotify-test spotify-dashboard                    # infra only
-#   CLOUDFLARE_API_TOKEN=... \
-#   bash scripts/setup_cloud.sh spotify-test spotify-dashboard ./data me@mail.com # + Access
+#   bash scripts/setup_cloud.sh $(openssl rand -hex 32) $(openssl rand -hex 32)
+#   bash scripts/setup_cloud.sh "$PROD_TOKEN" "$TEST_TOKEN" spotify-analytics-backup
 #
-# With CLOUDFLARE_API_TOKEN exported, gh logged in, and the email argument
-# given, this script does EVERYTHING: Cloudflare infra, the Access login
-# wall, and all 6 GitHub Actions secrets. Every step is idempotent —
-# rerunning is always safe (e.g. to re-seed the DBs or switch buckets).
+# With gh logged in, this script does EVERYTHING: Cloudflare infra and all GitHub Actions secrets.
+# Every step is idempotent, rerunning is always safe (e.g. after rotating a token or re-deploying the Worker).
 #
-# The Access step (5) needs two one-time things:
-#   - the token must include "Account / Access: Apps and Policies / Edit"
-#   - the account must be onboarded to Zero Trust: https://one.dash.cloudflare.com
-#     (any team name, Free plan, $0)
-#
-# Requires: node/npx, curl. Recommended: gh (GitHub CLI), logged in.
+# Requires: node/npx (wrangler), gh (GitHub CLI) recommended for the secrets step.
 
 set -euo pipefail
 
-BUCKET="${1:?usage: setup_cloud.sh <r2-bucket> <pages-project> [data-dir] [allowed-email]}"
-PROJECT="${2:?usage: setup_cloud.sh <r2-bucket> <pages-project> [data-dir] [allowed-email]}"
-DATA_DIR="${3:-./data}"
-ALLOW_EMAIL="${4:-}"
+WORKER_AUTH_TOKEN="${1:?usage: setup_cloud.sh <worker-auth-token> <worker-test-auth-token> [r2-backup-bucket]}"
+WORKER_TEST_AUTH_TOKEN="${2:?usage: setup_cloud.sh <worker-auth-token> <worker-test-auth-token> [r2-backup-bucket]}"
+R2_BACKUP_BUCKET="${3:-spotify-analytics-backup}"
 
+PROD_DB="spotify-analytics"
+TEST_DB="spotify-analytics-test"
 WRANGLER="npx --yes wrangler@4"
-
-for f in history.db tokens.db; do
-  if [[ ! -f "$DATA_DIR/$f" ]]; then
-    echo "error: $DATA_DIR/$f not found." >&2
-    echo "Run the wizard first (uv run spotify-mcp). With DEV=true in the repo" >&2
-    echo ".env the DBs land in ./data; otherwise pass the platformdirs data dir" >&2
-    echo "as the 3rd argument (spotify-mcp prints its location)." >&2
-    exit 1
-  fi
-done
+WORKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../worker" && pwd)"
 
 echo "==> [1/5] Cloudflare login (opens a browser the first time)"
-$WRANGLER whoami || $WRANGLER login
+(cd "$WORKER_DIR" && $WRANGLER whoami) || (cd "$WORKER_DIR" && $WRANGLER login)
 
-ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
-if [[ -z "$ACCOUNT_ID" ]]; then
-  ACCOUNT_ID="$($WRANGLER whoami 2>/dev/null | grep -oE '[0-9a-f]{32}' | head -1 || true)"
-fi
+echo "==> [2/5] D1 databases: $PROD_DB, $TEST_DB"
+(cd "$WORKER_DIR" && $WRANGLER d1 create "$PROD_DB") \
+  || echo "    $PROD_DB exists already — fine, continuing"
+(cd "$WORKER_DIR" && $WRANGLER d1 create "$TEST_DB") \
+  || echo "    $TEST_DB exists already — fine, continuing"
 
-echo "==> [2/5] R2 bucket: $BUCKET"
-$WRANGLER r2 bucket create "$BUCKET" \
+echo "==> [3/5] R2 backup bucket: $R2_BACKUP_BUCKET"
+(cd "$WORKER_DIR" && $WRANGLER r2 bucket create "$R2_BACKUP_BUCKET") \
   || echo "    bucket exists already — fine, continuing"
 
-echo "==> [3/5] Seeding DBs into R2 (a few MB each)"
-$WRANGLER r2 object put "$BUCKET/history.db" --file "$DATA_DIR/history.db" --remote
-$WRANGLER r2 object put "$BUCKET/tokens.db" --file "$DATA_DIR/tokens.db" --remote
+echo "==> [4/5] Apply migrations + deploy the Worker (prod + test)"
+(cd "$WORKER_DIR" && $WRANGLER d1 migrations apply "$PROD_DB" --remote)
+(cd "$WORKER_DIR" && $WRANGLER d1 migrations apply "$TEST_DB" --env test --remote)
+DEPLOY_OUT="$(cd "$WORKER_DIR" && $WRANGLER deploy)"
+echo "$DEPLOY_OUT"
+WORKER_URL="$(echo "$DEPLOY_OUT" | grep -oE 'https://[^ ]+\.workers\.dev' | head -1 || true)"
 
-echo "==> [4/5] Pages project: $PROJECT"
-$WRANGLER pages project create "$PROJECT" --production-branch main \
-  || echo "    project exists already — fine, continuing"
+DEPLOY_TEST_OUT="$(cd "$WORKER_DIR" && $WRANGLER deploy --env test)"
+echo "$DEPLOY_TEST_OUT"
+WORKER_TEST_URL="$(echo "$DEPLOY_TEST_OUT" | grep -oE 'https://[^ ]+\.workers\.dev' | head -1 || true)"
 
-# ---------------------------------------------------------------------------
-# Step 5: Cloudflare Access — one self-hosted app covering the production
-# domain AND preview URLs, allowing only $ALLOW_EMAIL (one-time PIN login).
-# ---------------------------------------------------------------------------
-ACCESS_DONE=0
-if [[ -z "$ALLOW_EMAIL" ]]; then
-  echo "==> [5/5] Access policy: SKIPPED (no email argument given)"
-elif [[ -z "${CLOUDFLARE_API_TOKEN:-}" ]]; then
-  echo "==> [5/5] Access policy: SKIPPED — export CLOUDFLARE_API_TOKEN first"
-  echo "    (token needs 'Account / Access: Apps and Policies / Edit'; then rerun)"
-elif [[ -z "$ACCOUNT_ID" ]]; then
-  echo "==> [5/5] Access policy: SKIPPED — could not auto-detect the account ID;"
-  echo "    export CLOUDFLARE_ACCOUNT_ID and rerun"
-else
-  API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/access/apps"
-  AUTH=(-H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json")
-
-  # Use the real host (Pages may suffix it, e.g. myproj-53x.pages.dev);
-  PAGES_HOST="$(curl -sS "${AUTH[@]}" \
-    "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PROJECT" \
-    | grep -oE '"subdomain": *"[^"]+"' | head -1 | cut -d'"' -f4 || true)"
-  PAGES_HOST="${PAGES_HOST:-$PROJECT.pages.dev}"
-
-  echo "==> [5/5] Access policy: allow only $ALLOW_EMAIL on $PAGES_HOST"
-
-  # Only add domains not already covered (e.g. by the button-made preview app).
-  APPS_JSON="$(curl -sS "${AUTH[@]}" "$API" || true)"
-  NEED_DOMAINS=()
-  echo "$APPS_JSON" | grep -qF "\"$PAGES_HOST\"" || NEED_DOMAINS+=("$PAGES_HOST")
-  echo "$APPS_JSON" | grep -qF "\"*.$PAGES_HOST\"" || NEED_DOMAINS+=("*.$PAGES_HOST")
-
-  if [[ ${#NEED_DOMAINS[@]} -eq 0 ]]; then
-    echo "    already protected (production + previews) — nothing to do"
-    ACCESS_DONE=1
-  else
-    echo "    covering: ${NEED_DOMAINS[*]}"
-    DOMS="$(printf '"%s",' "${NEED_DOMAINS[@]}")"; DOMS="[${DOMS%,}]"
-    RESP="$(curl -sS -X POST "${AUTH[@]}" "$API" --data @- <<EOF || true
-{
-  "name": "$PROJECT dashboard (${NEED_DOMAINS[0]})",
-  "type": "self_hosted",
-  "domain": "${NEED_DOMAINS[0]}",
-  "self_hosted_domains": $DOMS,
-  "session_duration": "24h",
-  "app_launcher_visible": false,
-  "policies": [
-    {
-      "name": "allow $ALLOW_EMAIL",
-      "decision": "allow",
-      "include": [ { "email": { "email": "$ALLOW_EMAIL" } } ]
-    }
-  ]
-}
-EOF
-)"
-    if echo "$RESP" | grep -q '"success": *true'; then
-      echo "    done — production + preview URLs now require login"
-      echo "    (one-time PIN sent to $ALLOW_EMAIL; verify in an incognito window)"
-      ACCESS_DONE=1
-    else
-      echo "    error: Access API call failed —" >&2
-      echo "$RESP" >&2
-      cat >&2 <<EOF
-    Hints:
-      - "organization/team" errors: onboard Zero Trust once at
-        https://one.dash.cloudflare.com (any team name, Free plan), rerun.
-      - manual fallback: Zero Trust dashboard -> Access -> Applications ->
-        add a self-hosted app for $PAGES_HOST and *.$PAGES_HOST with a
-        policy allowing $ALLOW_EMAIL.
-EOF
-    fi
-  fi
+if [[ -z "$WORKER_URL" || -z "$WORKER_TEST_URL" ]]; then
+  echo "    warning: could not parse the Worker URL(s) from the deploy output —"
+  echo "    set WORKER_URL/WORKER_TEST_URL manually (GitHub -> repo Settings ->"
+  echo "    Secrets and variables -> Actions)."
 fi
 
 # ---------------------------------------------------------------------------
-# GitHub Actions secrets — all six, if gh is available.
+# GitHub Actions secrets — via gh, if available.
 # ---------------------------------------------------------------------------
 MISSING_SECRETS=()
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  echo "==> Setting GitHub Actions secrets via gh (values are never printed)"
-  gh secret set R2_BUCKET --body "$BUCKET"
-  gh secret set CF_PAGES_PROJECT --body "$PROJECT"
-  if [[ -n "$ACCOUNT_ID" ]]; then
-    gh secret set CLOUDFLARE_ACCOUNT_ID --body "$ACCOUNT_ID"
+  echo "==> [5/5] Setting GitHub Actions secrets via gh (values are never printed)"
+  gh secret set WORKER_AUTH_TOKEN --body "$WORKER_AUTH_TOKEN"
+  gh secret set WORKER_TEST_AUTH_TOKEN --body "$WORKER_TEST_AUTH_TOKEN"
+  gh secret set R2_BACKUP_BUCKET --body "$R2_BACKUP_BUCKET"
+
+  if [[ -n "$WORKER_URL" ]]; then
+    gh secret set WORKER_URL --body "$WORKER_URL"
+    gh secret set WORKER_TEST_URL --body "$WORKER_TEST_URL"
   else
-    MISSING_SECRETS+=("CLOUDFLARE_ACCOUNT_ID")
-  fi
-  if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
-    gh secret set CLOUDFLARE_API_TOKEN --body "$CLOUDFLARE_API_TOKEN"
-  else
-    MISSING_SECRETS+=("CLOUDFLARE_API_TOKEN")
+    MISSING_SECRETS+=("WORKER_URL" "WORKER_TEST_URL")
   fi
 
   ENV_FILE=""
-  for cand in "./.env" "$DATA_DIR/.env"; do
+  for cand in "./.env" "./data/.env"; do
     [[ -f "$cand" ]] && { ENV_FILE="$cand"; break; }
   done
   for name in SPOTIFY_CLIENT_ID TOKEN_ENCRYPT_KEY; do
@@ -172,16 +90,6 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
       MISSING_SECRETS+=("$name")
     fi
   done
-
-  # Optional: custom user id. The tokens.db/history.db rows are keyed by it,
-  uid=""
-  if [[ -n "$ENV_FILE" ]]; then
-    uid="$(grep -E '^SPOTIFY_USER_ID=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
-    uid="${uid%\"}"; uid="${uid#\"}"
-  fi
-  if [[ -n "$uid" ]]; then
-    gh secret set SPOTIFY_USER_ID --body "$uid"
-  fi
   GH_DONE=1
 else
   GH_DONE=0
@@ -189,26 +97,16 @@ fi
 
 echo
 echo "============================================================"
-echo "Setup done: bucket \"$BUCKET\", Pages project \"$PROJECT\"."
-
-if [[ "$ACCESS_DONE" != "1" ]]; then
-  cat <<EOF
-
-! Access policy NOT set — the dashboard is still public. Rerun with your
-  email (CLOUDFLARE_API_TOKEN needs Access: Apps and Policies / Edit):
-     export CLOUDFLARE_API_TOKEN=<token>
-     bash scripts/setup_cloud.sh $BUCKET $PROJECT $DATA_DIR <your-email>
-EOF
-fi
+echo "Setup done: D1 databases \"$PROD_DB\" + \"$TEST_DB\", Worker deployed."
 
 if [[ "$GH_DONE" != "1" ]]; then
   cat <<EOF
 
 ! GitHub secrets NOT set — gh is missing or not logged in. Run 'gh auth login'
-  and rerun this script, or add these 6 by hand in GitHub -> repo Settings ->
+  and rerun this script, or add these by hand in GitHub -> repo Settings ->
   Secrets and variables -> Actions:
-     R2_BUCKET=$BUCKET   CF_PAGES_PROJECT=$PROJECT   CLOUDFLARE_ACCOUNT_ID
-     CLOUDFLARE_API_TOKEN   SPOTIFY_CLIENT_ID   TOKEN_ENCRYPT_KEY
+     WORKER_URL   WORKER_AUTH_TOKEN   WORKER_TEST_URL   WORKER_TEST_AUTH_TOKEN
+     R2_BACKUP_BUCKET   SPOTIFY_CLIENT_ID   TOKEN_ENCRYPT_KEY
 EOF
 elif [[ ${#MISSING_SECRETS[@]} -gt 0 ]]; then
   cat <<EOF
@@ -221,17 +119,16 @@ EOF
   done
   echo "   (SPOTIFY_CLIENT_ID / TOKEN_ENCRYPT_KEY live in the wizard's .env)"
 else
-  echo "All 6 GitHub Actions secrets are set."
+  echo "All GitHub Actions secrets are set."
 fi
 
 cat <<'EOF'
 
 Next:
+  - One-time backfill (production R2 -> D1): scripts/migrate_r2_to_d1.py)
   - Dry-run the pipeline:  gh workflow run sync-test && gh run watch
-    (or GitHub -> Actions -> sync-test -> Run workflow; deploys a Pages
-     *preview* from the test bucket — production is never touched)
+    (runs against the throwaway spotify-analytics-test D1 database)
   - Go live: merge to main. The hourly cron in sync.yml only fires from the
-    default branch; first run within the hour, then open
-    https://<project>.pages.dev (Access login -> dashboard).
+    default branch; first run within the hour (at :23).
 ============================================================
 EOF

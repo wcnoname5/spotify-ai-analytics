@@ -26,7 +26,7 @@ def _record_steps(monkeypatch, called):
 
 
 def test_dashboard_installed_requires_all_startup_dependencies(monkeypatch):
-    import spotify_mcp.dashboard.dependencies as deps
+    import spotify_mcp.wizard.dependencies as deps
 
     def fake_find_spec(name):
         return object() if name == "streamlit" else None
