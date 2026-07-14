@@ -92,6 +92,30 @@ def init_tokens_db(db_path: Union[str, Path]) -> None:
 
     logger.info("Tokens database initialized at {}", db_path)
 
+def init_meta_table(db_path: Union[str, Path]) -> None:
+    """Create the local-only ``meta`` key/value table if it doesn't exist.
+
+    This table is local-cache bookkeeping only (e.g. the local-sync cursor)
+    — it is NOT part of the generated D1 schema (see ``schema.py``) and must
+    never be added there. Safe to call multiple times (idempotent).
+
+    Args:
+        db_path: Path to the SQLite database file. Parent directory will be
+                 created automatically if it does not exist.
+    """
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        conn.commit()
+
+    logger.info("Meta table initialized at {}", db_path)
+
+
 def get_connection(db_path: Union[str, Path]) -> sqlite3.Connection:
     """Open a connection with sensible defaults (WAL mode, foreign keys on).
 
