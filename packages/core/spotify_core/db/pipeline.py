@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Optional
 
 from spotify_dataloader.data_loader import SpotifyDataLoader
-from .migrations import init_history_db as _migrations_init_history_db, get_connection
+from .migrations import init_history_db as _migrations_init_history_db, init_tokens_db, get_connection
 from ..spotify_client.client import SpotifyClient
-from ..spotify_client.token_store import load_tokens
+from ..spotify_client.token_store import load_tokens, export_encrypted_row, import_encrypted_row
 
 _CHEATSHEET = """
 === Spotify History DB — Quick Reference ===
@@ -437,6 +437,89 @@ def sync_api_up_to_date(
     logger.info("Backfill: {} inserted, {} skipped duplicated, {} skipped parse errors, cursor={}", inserted, skipped_duplicated, skipped_parse_error, new_cursor_ms)
     return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error, "cursor_ms": new_cursor_ms}
 
+
+
+def sync_api_to_worker(
+    tokens_scratch_db_path: str,
+    user_id: str,
+    client_id: str,
+    fernet_key: bytes,
+    worker,
+) -> dict:
+    """Fetch recent plays from the Spotify API and push them to the Worker/D1.
+
+    D1 is the source of truth: the cursor and encrypted token row are read
+    from and written back to the Worker (never a local DB). A scratch local
+    tokens DB is used only so the unmodified ``SpotifyClient``/``token_store``
+    code can run against it — it is populated from the Worker's token row and
+    re-exported afterward (picking up any refresh ``SpotifyClient`` performed).
+
+    Args:
+        tokens_scratch_db_path: Path to a throwaway SQLite file (e.g. inside
+            a ``tempfile.TemporaryDirectory()``) used only for the duration
+            of this call.
+        user_id: Spotify user ID.
+        client_id: Spotify app client ID (needed for token refresh).
+        fernet_key: Raw Fernet key bytes — SpotifyClient decrypts tokens
+            locally to call the Spotify API, even though the scratch DB and
+            the Worker only ever see ciphertext.
+        worker: A ``WorkerClient`` instance.
+
+    Returns:
+        {"inserted": int, "skipped_parse_error": int, "cursor_ms": int}
+
+    Raises:
+        RuntimeError: If the Worker has no stored token row for user_id.
+    """
+    encrypted_row = worker.get_tokens(user_id)
+    if encrypted_row is None:
+        raise RuntimeError(
+            f"No OAuth tokens found in Worker for user '{user_id}'. "
+            "Run the OAuth flow first: spotify-mcp reauth"
+        )
+
+    init_tokens_db(tokens_scratch_db_path)
+    import_encrypted_row(tokens_scratch_db_path, user_id, encrypted_row)
+
+    cursor_ms = worker.get_cursor()
+
+    with SpotifyClient(tokens_scratch_db_path, user_id, client_id, fernet_key) as client:
+        response = client.get_recently_played(limit=50, after=cursor_ms or None)
+
+    items = response.get("items", [])
+    rows = []
+    skipped_parse_error = 0
+    new_cursor_ms = cursor_ms or 0
+    for item in items:
+        row = parse_api_item(item, source="api")
+        if row is None:
+            skipped_parse_error += 1
+            continue
+        played_at_ms = row.pop("played_at_ms")
+        new_cursor_ms = max(new_cursor_ms, played_at_ms)
+        rows.append(row)
+
+    inserted = 0
+    if rows:
+        inserted = worker.post_tracks(rows)
+
+    if new_cursor_ms > (cursor_ms or 0):
+        worker.post_cursor(new_cursor_ms)
+
+    # Re-export in case SpotifyClient refreshed the access/refresh token.
+    refreshed_row = export_encrypted_row(tokens_scratch_db_path, user_id)
+    if refreshed_row is not None:
+        worker.post_tokens(user_id, refreshed_row)
+
+    logger.info(
+        "Worker sync: {} inserted, {} skipped parse errors, cursor={}",
+        inserted, skipped_parse_error, new_cursor_ms,
+    )
+    return {
+        "inserted": inserted,
+        "skipped_parse_error": skipped_parse_error,
+        "cursor_ms": new_cursor_ms,
+    }
 
 
 def open_inspect_shell(db_path: str) -> None:
