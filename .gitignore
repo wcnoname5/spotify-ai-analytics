@@ -225,3 +225,6 @@ data/spotify_history/*
 !data/spotify_history/sample_history.json
 # logs
 logs/
+
+# superpowers subagent-driven-development scratch
+.superpowers/
