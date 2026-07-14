@@ -78,7 +78,7 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   for cand in "./.env" "./data/.env"; do
     [[ -f "$cand" ]] && { ENV_FILE="$cand"; break; }
   done
-  for name in SPOTIFY_CLIENT_ID TOKEN_ENCRYPT_KEY; do
+  for name in SPOTIFY_CLIENT_ID TOKEN_ENCRYPT_KEY CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN; do
     val=""
     if [[ -n "$ENV_FILE" ]]; then
       val="$(grep -E "^${name}=" "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
@@ -107,6 +107,7 @@ if [[ "$GH_DONE" != "1" ]]; then
   Secrets and variables -> Actions:
      WORKER_URL   WORKER_AUTH_TOKEN   WORKER_TEST_URL   WORKER_TEST_AUTH_TOKEN
      R2_BACKUP_BUCKET   SPOTIFY_CLIENT_ID   TOKEN_ENCRYPT_KEY
+     CLOUDFLARE_ACCOUNT_ID   CLOUDFLARE_API_TOKEN
 EOF
 elif [[ ${#MISSING_SECRETS[@]} -gt 0 ]]; then
   cat <<EOF
@@ -117,7 +118,8 @@ EOF
   for name in "${MISSING_SECRETS[@]}"; do
     echo "     gh secret set $name"
   done
-  echo "   (SPOTIFY_CLIENT_ID / TOKEN_ENCRYPT_KEY live in the wizard's .env)"
+  echo "   (SPOTIFY_CLIENT_ID / TOKEN_ENCRYPT_KEY / CLOUDFLARE_ACCOUNT_ID /"
+  echo "    CLOUDFLARE_API_TOKEN live in the wizard's .env)"
 else
   echo "All GitHub Actions secrets are set."
 fi

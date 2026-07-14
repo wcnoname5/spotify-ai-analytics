@@ -1,10 +1,9 @@
 name: sync
 
 # Hourly Spotify sync -> D1.
-# Setup: docs/DEPLOY.md.
-# Manual test-bed running the same steps against the throwaway
-# Trsuting this one only after `sync-test.yml` dry run turns green
-# Note: the cron only fires when this file is on the default branch (main).
+# Setup: docs/DEPLOY.md. Trust this one only after a `sync-test.yml` dry run
+# turns green. Note: the cron only fires when this file is on the default
+# branch (main).
 
 on:
   schedule:

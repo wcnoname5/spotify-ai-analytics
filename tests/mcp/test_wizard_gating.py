@@ -29,11 +29,19 @@ def test_dashboard_installed_requires_all_startup_dependencies(monkeypatch):
     import spotify_mcp.wizard.dependencies as deps
 
     def fake_find_spec(name):
-        return object() if name == "streamlit" else None
+        return object() if name == deps._REPORT_IMPORTS[0] else None
 
     monkeypatch.setattr(deps.importlib.util, "find_spec", fake_find_spec)
 
     assert wiz._dashboard_installed() is False
+
+
+def test_dashboard_installed_true_when_all_present(monkeypatch):
+    import spotify_mcp.wizard.dependencies as deps
+
+    monkeypatch.setattr(deps.importlib.util, "find_spec", lambda name: object())
+
+    assert wiz._dashboard_installed() is True
 
 
 def test_wizard_skips_llm_steps_without_dashboard(tmp_path, monkeypatch):

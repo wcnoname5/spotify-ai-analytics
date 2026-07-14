@@ -43,7 +43,8 @@ opens a browser once for `wrangler login`. The script then does
 3. applies `worker/migrations/` and deploys the Worker to both environments
 4. writes the GitHub secrets via `gh`: `WORKER_URL`, `WORKER_AUTH_TOKEN`,
    `WORKER_TEST_URL`, `WORKER_TEST_AUTH_TOKEN`, `R2_BACKUP_BUCKET`, plus
-   `SPOTIFY_CLIENT_ID`/`TOKEN_ENCRYPT_KEY` read from a local `.env` if present
+   `SPOTIFY_CLIENT_ID`/`TOKEN_ENCRYPT_KEY`/`CLOUDFLARE_ACCOUNT_ID`/
+   `CLOUDFLARE_API_TOKEN` read from a local `.env` if present
 
 Every step is idempotent — rerunning is always safe (e.g. after rotating a
 token or redeploying the Worker). The end of the run prints exactly what (if

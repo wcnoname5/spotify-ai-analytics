@@ -28,9 +28,6 @@ dependencies = [
 [project.scripts]
 spotify-mcp = "spotify_mcp.cli:app"
 
-[project.entry-points."pipx.run"]
-spotify-analytics-mcp = "spotify_mcp.cli:app"
-
 [project.optional-dependencies]
 report = [
     "spotify-analytics-core[report]",
