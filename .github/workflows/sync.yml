@@ -71,14 +71,3 @@ jobs:
           with WorkerClient(os.environ['WORKER_URL'], os.environ['WORKER_AUTH_TOKEN']) as worker:
               print(f'listening_history row count: {worker.get_tracks_count()}')
           "
-
-      # Backup: export the full D1 database and drop it in R2. This is a
-      # backup copy only — D1 (via the Worker) remains the source of truth;
-      # nothing ever reads this dump back in.
-      - name: Export D1 to backup.sql
-        working-directory: worker
-        run: npx wrangler d1 export spotify-analytics --remote --output backup.sql
-
-      - name: Upload D1 backup to R2
-        working-directory: worker
-        run: npx wrangler r2 object put "${{ secrets.R2_BACKUP_BUCKET }}/backup.sql" --file backup.sql --remote
