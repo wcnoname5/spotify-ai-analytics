@@ -4,6 +4,12 @@ import {
   handleGetTracksCount,
   handlePostTracks,
 } from "./tracks";
+import {
+  handleGetCursor,
+  handleGetTokens,
+  handlePostCursor,
+  handlePostTokens,
+} from "./tokens";
 
 export interface Env {
   DB: D1Database;
@@ -26,6 +32,18 @@ export default {
     }
     if (pathname === "/api/tracks" && method === "POST") {
       return handlePostTracks(request, env);
+    }
+    if (pathname === "/api/tokens" && method === "GET") {
+      return handleGetTokens(request, env);
+    }
+    if (pathname === "/api/tokens" && method === "POST") {
+      return handlePostTokens(request, env);
+    }
+    if (pathname === "/api/cursor" && method === "GET") {
+      return handleGetCursor(request, env);
+    }
+    if (pathname === "/api/cursor" && method === "POST") {
+      return handlePostCursor(request, env);
     }
 
     return new Response("Not Found", { status: 404 });
