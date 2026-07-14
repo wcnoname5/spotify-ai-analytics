@@ -33,8 +33,8 @@ _HISTORY_COLUMNS = {
     "conn_country": "TEXT",
     "reason_start": "TEXT",
     "reason_end":   "TEXT",
-    "shuffle":      "INTEGER", # Bool, but bool is not a native SQLite type, so use INTEGER with 0/1 values.
-    "skipped":      "INTEGER", # Bool, but bool is not a native SQLite type, so use INTEGER with 0/1 values.
+    "shuffle":      "INTEGER", # Bool, use INTEGER with 0/1 in SQLite.
+    "skipped":      "INTEGER", # Bool.
 }
 
 
@@ -49,9 +49,6 @@ def _migrate_history_db(conn: sqlite3.Connection) -> None:
 
 def init_history_db(db_path: Union[str, Path]) -> None:
     """Create history.db with listening_history, sync_state, and index.
-
-    Does NOT create spotify_tokens — that table lives in tokens.db,
-    owned by spotify_client/token_store.py.
     Safe to call multiple times (idempotent).
 
     Args:
@@ -74,7 +71,6 @@ def init_history_db(db_path: Union[str, Path]) -> None:
 
 def init_tokens_db(db_path: Union[str, Path]) -> None:
     """Create tokens.db with the spotify_tokens table if it doesn't exist.
-
     Safe to call multiple times (idempotent).
 
     Args:
