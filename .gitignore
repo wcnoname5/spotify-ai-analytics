@@ -139,6 +139,9 @@ celerybeat.pid
 .dev.vars
 .dev.vars.*
 
+# Node
+node_modules/
+
 # Environments
 .env
 .envrc

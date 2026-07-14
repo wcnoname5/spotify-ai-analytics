@@ -1,0 +1,16 @@
+name = "spotify-analytics-worker"
+main = "src/index.ts"
+compatibility_date = "2025-01-09"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "spotify-analytics"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[env.test]
+[[env.test.d1_databases]]
+binding = "DB"
+database_name = "spotify-analytics-test"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "migrations"
