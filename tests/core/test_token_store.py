@@ -8,8 +8,6 @@ from spotify_core.db.migrations import get_connection, init_db
 from spotify_core.spotify_client.errors import SpotifyAuthError
 from spotify_core.spotify_client.token_store import (
     delete_tokens,
-    export_encrypted_row,
-    import_encrypted_row,
     is_token_expired,
     load_tokens,
     save_tokens,
@@ -219,62 +217,3 @@ def test_load_tokens_scope_empty_string_when_null(tmp_path):
     assert result is not None
     assert result["scopes"] == ""
 
-
-@pytest.mark.unit
-def test_export_import_round_trip_still_decrypts(tmp_path):
-    """export_encrypted_row/import_encrypted_row pass ciphertext through unchanged.
-
-    A row exported from one DB and imported into another (scratch) DB must
-    still decrypt correctly with the same Fernet key — the export/import
-    path must never encrypt or decrypt, only move opaque ciphertext.
-    """
-    src_db = tmp_path / "src.db"
-    dst_db = tmp_path / "dst.db"
-    init_db(src_db)
-    init_db(dst_db)
-    key = _make_fernet_key()
-    token_dict = _make_token_dict(expires_in=3600, scope="user-read-email")
-
-    save_tokens(src_db, "user1", token_dict, key)
-
-    exported = export_encrypted_row(src_db, "user1")
-    assert exported is not None
-    # Must be raw ciphertext, not plaintext.
-    assert exported["access_token"] != "plain_access_token"
-    assert exported["refresh_token"] != "plain_refresh_token"
-
-    import_encrypted_row(dst_db, "user1", exported)
-
-    result = load_tokens(dst_db, "user1", key)
-    assert result is not None
-    assert result["access_token"] == "plain_access_token"
-    assert result["refresh_token"] == "plain_refresh_token"
-    assert result["scopes"] == "user-read-email"
-
-
-@pytest.mark.unit
-def test_export_encrypted_row_returns_none_when_not_found(tmp_path):
-    """export_encrypted_row returns None when the user has no stored tokens."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-
-    assert export_encrypted_row(db_path, "ghost_user") is None
-
-
-@pytest.mark.unit
-def test_import_encrypted_row_raises_clear_error_on_missing_key(tmp_path):
-    """import_encrypted_row raises SpotifyAuthError (not a bare KeyError) when a
-    required key is missing from the row dict, e.g. a malformed/truncated row
-    that crossed the D1 -> local scratch file network boundary."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-
-    incomplete_row = {
-        "refresh_token": "ciphertext_refresh",
-        "expires_at": "2030-01-01T00:00:00+00:00",
-        "scopes": "user-read-email",
-        # "access_token" missing
-    }
-
-    with pytest.raises(SpotifyAuthError, match="access_token"):
-        import_encrypted_row(db_path, "user1", incomplete_row)

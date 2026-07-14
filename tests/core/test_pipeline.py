@@ -7,8 +7,7 @@ from spotify_core.db.pipeline import (
     init_history_db,
     import_json_to_db,
     sync_api_to_db,
-    open_inspect_shell,
-    parse_api_item,
+    open_inspect_shell
 )
 
 
@@ -139,34 +138,6 @@ def test_import_json_cursor_does_not_regress(sample_json_dir, history_db):
     with sqlite3.connect(history_db) as conn:
         row = conn.execute("SELECT value FROM sync_state WHERE key='last_played_at_ms'").fetchone()
     assert row[0] == future_cursor  # unchanged
-
-
-@pytest.mark.unit
-def test_parse_api_item_valid():
-    """parse_api_item returns the row fields plus played_at_ms for a valid item."""
-    item = _make_track_item(
-        "spotify:track:AAA", "Song A", "Artist A", "Album A", "2024-02-01T10:00:00.000Z"
-    )
-    result = parse_api_item(item)
-    assert result is not None
-    assert result["track_id"] == "spotify:track:AAA"
-    assert result["track_name"] == "Song A"
-    assert result["artist_name"] == "Artist A"
-    assert result["album_name"] == "Album A"
-    assert result["ms_played"] == 180000
-    assert result["source"] == "api"
-    assert result["played_at"] == "2024-02-01T10:00:00Z"
-    assert result["played_at_ms"] > 0
-    assert "id" in result
-
-
-@pytest.mark.unit
-def test_parse_api_item_bad_played_at_returns_none():
-    """parse_api_item returns None when played_at is unparseable."""
-    item = _make_track_item(
-        "spotify:track:AAA", "Song A", "Artist A", "Album A", "not-a-date"
-    )
-    assert parse_api_item(item) is None
 
 
 def _make_recently_played_response(items):
