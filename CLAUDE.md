@@ -54,6 +54,6 @@ uv run pytest                          # run tests
 uv run python apps/mcp/server.py      # run MCP server directly
 uv run python scripts/sync.py         # cron sync: Spotify API -> D1 (needs WORKER_* env)
 uv run python scripts/local_sync.py   # refresh local SQLite cache from D1
-cd worker && npm test                  # Worker unit tests (vitest)
+cd worker && npm run typecheck         # Worker typecheck (no unit tests by choice)
 cd worker && npx wrangler deploy       # deploy the Worker
 ```

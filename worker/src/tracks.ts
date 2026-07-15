@@ -55,7 +55,10 @@ function isTrackRow(value: unknown): value is TrackRow {
   );
 }
 
-/** GET /api/tracks?since=<ms> or ?from=<ms>&to=<ms> -> { tracks: [...] } */
+// comparing 'played_at' (ISO-8601 TEXT column)
+const ISO_RE = /^\d{4}-\d{2}-\d{2}T/;
+
+/** GET /api/tracks?since=<iso> or ?from=<iso>&to=<iso> -> { tracks: [...] } */
 export async function handleGetTracks(
   request: Request,
   env: Env
@@ -67,20 +70,17 @@ export async function handleGetTracks(
 
   let statement;
   if (since !== null) {
-    const sinceMs = Number(since);
-    if (!Number.isFinite(sinceMs)) return badRequest("Invalid 'since'");
+    if (!ISO_RE.test(since)) return badRequest("Invalid 'since' (ISO-8601 expected)");
     statement = env.DB.prepare(
       "SELECT * FROM listening_history WHERE played_at > ? ORDER BY played_at ASC"
-    ).bind(new Date(sinceMs).toISOString());
+    ).bind(since);
   } else if (from !== null && to !== null) {
-    const fromMs = Number(from);
-    const toMs = Number(to);
-    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
-      return badRequest("Invalid 'from'/'to'");
+    if (!ISO_RE.test(from) || !ISO_RE.test(to)) {
+      return badRequest("Invalid 'from'/'to' (ISO-8601 expected)");
     }
     statement = env.DB.prepare(
       "SELECT * FROM listening_history WHERE played_at >= ? AND played_at <= ? ORDER BY played_at ASC"
-    ).bind(new Date(fromMs).toISOString(), new Date(toMs).toISOString());
+    ).bind(from, to);
   } else {
     return badRequest("Provide 'since' or 'from'/'to' query params");
   }

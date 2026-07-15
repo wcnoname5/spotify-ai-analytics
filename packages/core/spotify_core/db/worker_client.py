@@ -99,10 +99,10 @@ class WorkerClient:
     # Tracks
     # ------------------------------------------------------------------
 
-    def get_tracks_since(self, since_ms: int) -> list[dict]:
-        """Return listening_history rows played at or after since_ms."""
+    def get_tracks_since(self, since_iso: str) -> list[dict]:
+        """Return listening_history rows with played_at strictly after since_iso."""
         body = self._request(
-            "GET", "/api/tracks", params={"since": since_ms}
+            "GET", "/api/tracks", params={"since": since_iso}
         ).json()
         return body["tracks"]
 

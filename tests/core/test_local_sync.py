@@ -25,17 +25,16 @@ TRACK_ROW = {
 
 
 @pytest.mark.unit
-def test_run_local_sync_inserts_rows_and_updates_cursor(tmp_path):
-    """Rows returned by the Worker land in listening_history and the meta cursor advances."""
+def test_run_local_sync_inserts_rows_and_advances_cursor(tmp_path):
+    """Rows returned by the Worker land in listening_history; cursor = MAX(played_at)."""
     db_path = tmp_path / "history.db"
     worker = MagicMock()
     worker.get_tracks_since.return_value = [TRACK_ROW]
-    worker.get_cursor.return_value = 1705307400000
 
     result = run_local_sync(db_path, worker)
 
     assert result["inserted"] == 1
-    assert result["cursor_ms"] == 1705307400000
+    assert result["cursor"] == "2024-01-15T08:30:00Z"
 
     conn = get_connection(db_path)
     try:
@@ -43,30 +42,27 @@ def test_run_local_sync_inserts_rows_and_updates_cursor(tmp_path):
             "SELECT track_id FROM listening_history WHERE id = 'row-1'"
         ).fetchone()
         assert row["track_id"] == "spotify:track:abc"
-
-        meta_row = conn.execute(
-            "SELECT value FROM meta WHERE key = 'last_sync_at_ms'"
-        ).fetchone()
-        assert meta_row["value"] == "1705307400000"
     finally:
         conn.close()
 
-    worker.get_tracks_since.assert_called_once_with(0)
+    # First sync on an empty cache asks from the epoch.
+    worker.get_tracks_since.assert_called_once_with("1970-01-01T00:00:00Z")
 
 
 @pytest.mark.unit
-def test_run_local_sync_idempotent_rerun_no_duplicates(tmp_path):
-    """Re-running with the same rows does not create duplicate listening_history rows."""
+def test_run_local_sync_second_run_asks_from_max_played_at(tmp_path):
+    """A re-run passes the cache's MAX(played_at) as the since cursor."""
     db_path = tmp_path / "history.db"
     worker = MagicMock()
     worker.get_tracks_since.return_value = [TRACK_ROW]
-    worker.get_cursor.return_value = 1705307400000
 
     run_local_sync(db_path, worker)
+    worker.get_tracks_since.return_value = []
     second_result = run_local_sync(db_path, worker)
 
     assert second_result["inserted"] == 0
-    assert second_result["skipped_duplicated"] == 1
+    assert second_result["cursor"] == "2024-01-15T08:30:00Z"
+    worker.get_tracks_since.assert_called_with("2024-01-15T08:30:00Z")
 
     conn = get_connection(db_path)
     try:
