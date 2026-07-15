@@ -1,148 +1,59 @@
-# CLAUDE.md — Guide for Claude Code
+# Project Overview
 
-## Project Overview
+Personal Spotify analytics app. Target architecture (see `spotify-project-spec.md`):
 
-Spotify AI Analytics MCP, Dashboard. Combines:
-- A local sqlite to store and sync listening from spotify api.
-- tools to control playback
-
-Building:
-- MCP server for Claude Desktop/Code integration 
-- A Dashboard (local page) with:
-    - Plotly dashboard for streaming history visualization 
-    - a LLM-based report analysis generation block to create periodicly (e.g., weekly) review for listening history
-
-A CLI installer/wizard (Typer, in `apps/mcp/spotify_mcp/`) sets up envs/config and registers the MCP server with Claude Desktop, so low-code/no-code users can run the MCP or dashboard locally.
+- **Cloudflare D1** is the single source of truth (listening history + encrypted Spotify tokens)
+- **Cloudflare Worker** (TypeScript, `worker/`) is the *only* thing that talks to D1 — Bearer-token gated
+- **GitHub Actions cron** (hourly, Python) pulls recent plays from the Spotify API and writes them to D1 via the Worker
+- **Local SQLite** is a pull-only sync cache of D1 (never written to independently); MCP and report generation read it
 
 ---
 
 ## Repo Layout
 
-Each package nests its source under a `spotify_*` import package; the directory name and the distribution name differ (see table).
-
 ```
-packages/core/        # spotify-analytics-core  → src: spotify_core/
-                      #   agent/ db/ memory/ report/ spotify_client/ spotify_utils/
-packages/dataloader/  # spotify-analytics-dataloader → src: spotify_dataloader/ (Polars + Pydantic ingestion)
-apps/mcp/             # spotify-analytics-mcp → src: spotify_mcp/ (MCP server + Typer CLI/wizard + dashboard/ Streamlit UI)
+packages/core/        # spotify_core: db/ report/ spotify_client/ spotify_utils/
+packages/dataloader/  # spotify_dataloader: Polars + Pydantic ingestion
+apps/mcp/             # spotify_mcp: MCP server + Typer CLI
+worker/               # Cloudflare Worker (TS) + D1 migrations
+scripts/              # cron sync, local sync, one-off migration scripts
 data/                 # Local SQLite DBs and JSON exports — never commit data/*.db
-tests/                # Pytest suite (tests/core, tests/mcp, tests/web, tests/integration)
+tests/                # Pytest suite (tests/core, tests/mcp)
 ```
-
-| path | distribution name | import package |
-|---|---|---|
-| `packages/core/` | `spotify-analytics-core` | `spotify_core` |
-| `packages/dataloader/` | `spotify-analytics-dataloader` | `spotify_dataloader` |
-| `apps/mcp/` | `spotify-analytics-mcp` | `spotify_mcp` |
 
 ---
 
-## Development Rules
+## Coding Conventions
 
 ### Always
-- Use `uv` for all dependency management (`uv add`, `uv sync`, `uv run`)
-- Use python version>=3.12
+- Use `uv` for all Python dependency management (`uv add`, `uv sync`, `uv run`); Python >= 3.12
 - Run `uv run pytest` before declaring any task done
-- Keep query/transform logic in `spotify_core/db/queries.py` and `spotify_dataloader/` as pure functions — no side effects, no I/O
-- All Spotify API calls go through `packages/core/spotify_core/spotify_client/` only — never call `httpx`/`requests` to Spotify directly from other modules
-- Encrypt tokens before writing to SQLite — never store plaintext access/refresh tokens
+- D1 is the source of truth; local SQLite is a cache — all D1 access goes through the Worker, never direct
+- All Spotify API calls go through `packages/core/spotify_core/spotify_client/` only
+- Encrypt tokens (Fernet) before they touch SQLite or the wire — the Worker/D1 only ever see ciphertext; decrypt only inside `spotify_client/`
+- The D1 schema is generated from `spotify_core/db/schema.py` — never hand-author a second schema
 
 ### Never
 - Commit `data/*.db` files or `.env` files
-- Use `localhost` in OAuth redirect URIs — Spotify banned this Nov 2025, use `127.0.0.1` explicitly
-
-### Imports
-- `packages/core` modules import from each other via package names (uv workspace)
-- `apps/mcp/` imports from `spotify_core` / `spotify_dataloader` only — no direct Spotify API calls
-
----
-
-## OAuth Rules
-
-- Flow: Authorization Code with PKCE (mandatory — Spotify deprecated Implicit Grant Nov 2025)
-- Redirect URI: always `http://127.0.0.1:{port}/callback` — never `localhost`
-- Tokens: encrypt before storing in SQLite, decrypt only in `spotify_core/spotify_client/` module
-
----
-
-## MCP Server Conventions
-
-- Each MCP tool function must have a clear docstring (Claude uses it as tool description)
-- Tools should be stateless wrappers — all state lives in `packages/core`
-- Return structured dicts, not raw strings, where possible
-- Tool names: `snake_case`, descriptive (`sync_history` not `sync`)
-- Server entry point is `apps/mcp/server.py` (FastMCP `mcp` object, see `fastmcp.json`); tool implementations live in `apps/mcp/spotify_mcp/`
-
-## CLI / Installer Wizard
-
-- The `spotify-mcp` console script (`spotify_mcp.cli:app`, Typer) is the user-facing installer
-- Interactive setup steps live in `apps/mcp/spotify_mcp/wizard/` (spotify_app, credentials, oauth_step, claude_desktop, history_import, state)
-- Wizard tests live in `tests/mcp/`
-
-## Cloud Deployment (optional)
-
-- `.github/workflows/sync.yml`: hourly cron — pulls `history.db`/`tokens.db` from a private Cloudflare R2 bucket, runs `scripts/sync.py` (wraps `sync_api_to_db`), regenerates the static dashboard via `scripts/build_dashboard.py`, uploads DBs back, deploys `site/` to Cloudflare Pages (gated by Cloudflare Access). Setup: `docs/DEPLOY.md`.
-- The repo is public and Actions logs are public: CI scripts must never print track names, tokens, or DB contents — row counts only.
-- The cloud DB copy is independent of any local install; local flows (wizard/MCP/Streamlit) are unaffected.
-
----
-
-## Testing
-
-```bash
-uv run pytest                          # run all tests
-uv run pytest tests/core               # run a package's suite (tests/core, tests/mcp, tests/web)
-uv run pytest -k "test_queries"         # run by keyword
-```
-
-- Unit tests for queries/`dataloader/`: mock filesystem, no real Spotify calls
-- Integration tests for `spotify_client/`: use `pytest-recording` or mock responses
-- MCP tools: test tool logic separately from MCP transport layer
+- Print track names or tokens in GitHub Actions logs (public repo) — row counts only
+- Use `localhost` in OAuth redirect URIs — use `127.0.0.1` explicitly (Spotify banned localhost Nov 2025; PKCE flow is mandatory)
 
 ---
 
 ## Environment Variables
 
-```bash
-# Required for MCP and web both
-SPOTIFY_CLIENT_ID=    # set by the CLI wizard
-TOKEN_ENCRYPT_KEY=    # Fernet key; auto-generated by the CLI wizard
-
-# AI report block (dashboard) — all optional; absence degrades gracefully
-GEMINI_API_KEY=       # or OPENAI_API_KEY — only these two are wired up
-# ANTHROPIC_API_KEY=  # NOT yet supported by the report block
-LANGFUSE_PUBLIC_KEY=  # Langfuse tracing (all 3 keys needed, or none)
-LANGFUSE_SECRET_KEY=
-LANGFUSE_BASE_URL=
-
-# Optional
-SPOTIFY_USER_ID=      # placeholder for future multi-user; unused in single-user mode
-LOG_LEVEL=INFO        # DEBUG for verbose output
-DEV=true # Development setting for 
-```
-
-Only `SPOTIFY_CLIENT_ID` and `TOKEN_ENCRYPT_KEY` are written by the wizard; LLM
-and Langfuse keys must be added by hand for the AI report block. Tunables with
-defaults (`USE_GEMINI`, `GEMINI_MODEL`, `OPENAI_MODEL`, `*_DB_PATH`,
-`SPOTIFY_DATA_PATH`) live in `spotify_core/config.py`.
-
-**Where `.env` lives:** the CLI wizard writes to the platformdirs config dir
-(`paths.config_dir()/.env`), *not* the repo root. At runtime that file is loaded
-first, then a cwd `.env` as a dev-only fallback (no override). For checkout-mode
-dev, set `DEV=true` in the repo `.env` (or shell) — config and `data/` then
-resolve to the repo checkout. Explicit `SPOTIFY_MCP_CONFIG_DIR` /
-`SPOTIFY_MCP_DATA_DIR` still override everything. If DEV in repo `.env` exist, it will read repo `.env` instead or wizard setting. (see `da888fcc51ac9f61dd6c52adeec3aed540444039`)
+Check `.env.example`, tunables with defaults live in `spotify_core/config.py`.
 
 ---
 
 ## Common Commands
 
 ```bash
-uv sync                                                  # install all dependencies
-uv run python apps/mcp/server.py                         # run MCP server directly
-uv run spotify-mcp                                        # run the CLI installer/wizard
-uv run spotify-mcp dashboard                             # run the Streamlit dashboard
-uv run pytest                                            # run tests
-uv add <package> --package spotify-analytics-core        # add dep to core package
-uv add <package> --package spotify-analytics-mcp         # add dep to mcp app
+uv sync                                # install all Python dependencies
+uv run pytest                          # run tests
+uv run python apps/mcp/server.py      # run MCP server directly
+uv run python scripts/sync.py         # cron sync: Spotify API -> D1 (needs WORKER_* env)
+uv run python scripts/local_sync.py   # refresh local SQLite cache from D1
+cd worker && npm test                  # Worker unit tests (vitest)
+cd worker && npx wrangler deploy       # deploy the Worker
 ```
