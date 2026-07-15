@@ -1,0 +1,189 @@
+/* Chart chrome tokens (dataviz reference palette) — light default, dark via
+   prefers-color-scheme. Series color: blue (validated both modes). */
+:root {
+  color-scheme: light dark;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.1);
+  --series: #2a78d6;
+  --up: #006300;
+  --down: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.1);
+    --series: #3987e5;
+    --up: #0ca30c;
+    --down: #d03b3b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--page);
+  color: var(--ink);
+}
+
+#app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0 0 1rem;
+}
+
+h3 {
+  font-size: 1rem;
+  margin: 0 0 0.6rem;
+  color: var(--ink);
+}
+
+/* Filter row — one row, above everything it scopes */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.filters .range-btn {
+  font: inherit;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.filters .range-btn:hover {
+  border-color: var(--muted);
+}
+.filters .range-btn.current {
+  color: var(--ink);
+  font-weight: 700;
+  border-color: var(--series);
+}
+.filters .period {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.banner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+/* Stat tiles */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.metric {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+}
+.metric .label {
+  color: var(--ink-2);
+  font-size: 0.85rem;
+}
+.metric .value {
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+.metric .delta {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.delta.up {
+  color: var(--up);
+}
+.delta.down {
+  color: var(--down);
+}
+
+/* Cards & columns */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+.cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--grid);
+}
+th {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+td.num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+th.num {
+  text-align: right;
+}
+a {
+  color: var(--series);
+}
+
+details > summary {
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 0.6rem;
+}
+
+.loading {
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+footer {
+  margin-top: 2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}

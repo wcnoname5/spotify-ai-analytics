@@ -15,6 +15,7 @@ Personal Spotify analytics app. Target architecture (see `spotify-project-spec.m
 packages/core/        # spotify_core: db/ report/ spotify_client/ spotify_utils/
 packages/dataloader/  # spotify_dataloader: Polars + Pydantic ingestion
 apps/mcp/             # spotify_mcp: MCP server + Typer CLI
+apps/tauri/           # Tauri 2 desktop app (Vite + TS frontend, src-tauri/ Rust shell) — deps separate from worker/
 worker/               # Cloudflare Worker (TS) + D1 migrations
 scripts/              # cron sync, local sync, one-off migration scripts
 data/                 # Local SQLite DBs and JSON exports — never commit data/*.db
