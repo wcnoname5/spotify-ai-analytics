@@ -5,25 +5,59 @@
 # Actions secrets sync.yml/sync-test.yml needed.
 #
 # Usage:
-#   bash scripts/setup_cloud.sh <worker-auth-token> <worker-test-auth-token>
+#   bash scripts/setup_cloud.sh [worker-auth-token] [worker-test-auth-token]
 #
-# Example:
-#   bash scripts/setup_cloud.sh $(openssl rand -hex 32) $(openssl rand -hex 32)
-#
-# With gh logged in, this script does EVERYTHING: Cloudflare infra and all GitHub Actions secrets.
-# Every step is idempotent, rerunning is always safe (e.g. after rotating a token or re-deploying the Worker).
-#
-# Requires: node/npx (wrangler), gh (GitHub CLI) recommended for the secrets step.
+# Requires: node/npx (wrangler), gh (GitHub CLI).
 
 set -euo pipefail
 
-WORKER_AUTH_TOKEN="${1:?usage: setup_cloud.sh <worker-auth-token> <worker-test-auth-token>}"
-WORKER_TEST_AUTH_TOKEN="${2:?usage: setup_cloud.sh <worker-auth-token> <worker-test-auth-token>}"
+# Windows ships a "python3"/"python" shim (App Execution Alias) that prints an
+# install nag and exits nonzero when no real interpreter is installed, instead
+# of failing command -v. Actually invoke each candidate to find a working one.
+resolve_python() {
+  for c in python3 python; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c 'pass' >/dev/null 2>&1; then
+      echo "$c"; return
+    fi
+  done
+  echo "uv run python"
+}
+PYTHON="$(resolve_python)"
+
+gen_hex() { openssl rand -hex 32 2>/dev/null || $PYTHON -c 'import secrets; print(secrets.token_hex(32))'; }
+WORKER_AUTH_TOKEN="${1:-$(gen_hex)}"
+WORKER_TEST_AUTH_TOKEN="${2:-$(gen_hex)}"
 
 PROD_DB="spotify-analytics"
 TEST_DB="spotify-analytics-test"
 WRANGLER="npx --yes wrangler@4"
 WORKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../worker" && pwd)"
+
+# ---------------------------------------------------------------------------
+# [0/5] .env: ensure SPOTIFY_CLIENT_ID (prompt) and TOKEN_ENCRYPT_KEY (generate).
+# Existing values are never overwritten
+# ---------------------------------------------------------------------------
+ENV_FILE=""
+for cand in "./.env" "./data/.env"; do
+  [[ -f "$cand" ]] && { ENV_FILE="$cand"; break; }
+done
+[[ -z "$ENV_FILE" ]] && { ENV_FILE="./.env"; touch "$ENV_FILE"; }
+
+env_get() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//'; }
+
+echo "==> [0/5] Checking $ENV_FILE"
+if [[ -z "$(env_get SPOTIFY_CLIENT_ID)" ]]; then
+  read -r -p "    Paste your Spotify Client ID (developer.spotify.com dashboard): " CLIENT_ID
+  [[ -z "$CLIENT_ID" ]] && { echo "    Client ID is required."; exit 1; }
+  printf 'SPOTIFY_CLIENT_ID=%s\n' "$CLIENT_ID" >> "$ENV_FILE"
+fi
+if [[ -z "$(env_get TOKEN_ENCRYPT_KEY)" ]]; then
+  NEW_KEY="$($PYTHON -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())' 2>/dev/null \
+    || uv run python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+  printf 'TOKEN_ENCRYPT_KEY=%s\n' "$NEW_KEY" >> "$ENV_FILE"
+  echo "    Generated a new TOKEN_ENCRYPT_KEY in $ENV_FILE — do NOT lose this file;"
+  echo "    losing the key makes stored tokens unrecoverable."
+fi
 
 echo "==> [1/5] Cloudflare login (opens a browser the first time)"
 (cd "$WORKER_DIR" && $WRANGLER whoami) || (cd "$WORKER_DIR" && $WRANGLER login)
@@ -35,8 +69,9 @@ echo "==> [2/5] D1 databases: $PROD_DB, $TEST_DB"
   || echo "    $TEST_DB exists already — fine, continuing"
 
 echo "==> [2b/5] Patching worker/wrangler.toml with real database_id values"
+[[ -f "$WORKER_DIR/wrangler.toml" ]] || cp "$WORKER_DIR/wrangler.toml.example" "$WORKER_DIR/wrangler.toml"
 D1_LIST_JSON="$(cd "$WORKER_DIR" && $WRANGLER d1 list --json)"
-python3 - "$WORKER_DIR/wrangler.toml" "$PROD_DB" "$TEST_DB" <<PYEOF
+$PYTHON - "$WORKER_DIR/wrangler.toml" "$PROD_DB" "$TEST_DB" <<PYEOF
 import json, re, sys
 toml_path, prod_name, test_name = sys.argv[1:4]
 databases = json.loads('''$D1_LIST_JSON''')
@@ -83,6 +118,14 @@ echo "==> [3b/5] Worker-side AUTH_TOKEN secrets (prod + test) — never printed"
 printf '%s' "$WORKER_AUTH_TOKEN" | (cd "$WORKER_DIR" && $WRANGLER secret put AUTH_TOKEN)
 printf '%s' "$WORKER_TEST_AUTH_TOKEN" | (cd "$WORKER_DIR" && $WRANGLER secret put AUTH_TOKEN --env test)
 
+# write WORKER_* to .env file, never overwrite an existing value.
+if [[ -n "$WORKER_URL" && -z "$(env_get WORKER_URL)" ]]; then
+  printf 'WORKER_URL=%s\n' "$WORKER_URL" >> "$ENV_FILE"
+fi
+if [[ -z "$(env_get WORKER_AUTH_TOKEN)" ]]; then
+  printf 'WORKER_AUTH_TOKEN=%s\n' "$WORKER_AUTH_TOKEN" >> "$ENV_FILE"
+fi
+
 # ---------------------------------------------------------------------------
 # GitHub Actions secrets — via gh, if available.
 # ---------------------------------------------------------------------------
@@ -99,16 +142,8 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
     MISSING_SECRETS+=("WORKER_URL" "WORKER_TEST_URL")
   fi
 
-  ENV_FILE=""
-  for cand in "./.env" "./data/.env"; do
-    [[ -f "$cand" ]] && { ENV_FILE="$cand"; break; }
-  done
-  for name in SPOTIFY_CLIENT_ID TOKEN_ENCRYPT_KEY CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_API_TOKEN; do
-    val=""
-    if [[ -n "$ENV_FILE" ]]; then
-      val="$(grep -E "^${name}=" "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
-      val="${val%\"}"; val="${val#\"}"
-    fi
+  for name in SPOTIFY_CLIENT_ID TOKEN_ENCRYPT_KEY; do
+    val="$(env_get "$name")"
     if [[ -n "$val" ]]; then
       gh secret set "$name" --body "$val"
     else
@@ -120,6 +155,26 @@ else
   GH_DONE=0
 fi
 
+echo "==> [5/5] Seeding D1 with local tokens + listening history (skips whatever D1 already has)"
+sleep 5
+if [[ -n "$WORKER_URL" ]]; then
+  # A freshly-set `wrangler secret put` can take a few seconds to propagate to
+  # every edge node, so an immediate request may 401 — retry a few times.
+  PUSH_OK=0
+  for attempt in 1 2 3 4 5; do
+    if WORKER_URL="$WORKER_URL" WORKER_AUTH_TOKEN="$WORKER_AUTH_TOKEN" \
+        uv run python scripts/seed_d1.py; then
+      PUSH_OK=1
+      break
+    fi
+    echo "    (attempt $attempt/5 failed — secret may still be propagating, retrying in 5s)"
+    sleep 5
+  done
+  [[ "$PUSH_OK" == "1" ]] || echo "    ! Seeding incomplete — if you haven't done OAuth yet, run 'uv run spotify-mcp setup' once, then rerun this script."
+else
+  echo "    ! Skipped (Worker URL unknown) — run scripts/seed_d1.py manually."
+fi
+
 echo
 echo "============================================================"
 echo "Setup done: D1 databases \"$PROD_DB\" + \"$TEST_DB\", Worker deployed."
@@ -128,11 +183,7 @@ if [[ "$GH_DONE" != "1" ]]; then
   cat <<EOF
 
 ! GitHub secrets NOT set — gh is missing or not logged in. Run 'gh auth login'
-  and rerun this script, or add these by hand in GitHub -> repo Settings ->
-  Secrets and variables -> Actions:
-     WORKER_URL   WORKER_AUTH_TOKEN   WORKER_TEST_URL   WORKER_TEST_AUTH_TOKEN
-     SPOTIFY_CLIENT_ID   TOKEN_ENCRYPT_KEY
-     CLOUDFLARE_ACCOUNT_ID   CLOUDFLARE_API_TOKEN
+  and rerun this script.
 EOF
 elif [[ ${#MISSING_SECRETS[@]} -gt 0 ]]; then
   cat <<EOF
@@ -143,8 +194,6 @@ EOF
   for name in "${MISSING_SECRETS[@]}"; do
     echo "     gh secret set $name"
   done
-  echo "   (SPOTIFY_CLIENT_ID / TOKEN_ENCRYPT_KEY / CLOUDFLARE_ACCOUNT_ID /"
-  echo "    CLOUDFLARE_API_TOKEN live in the wizard's .env)"
 else
   echo "All GitHub Actions secrets are set."
 fi
@@ -152,7 +201,6 @@ fi
 cat <<'EOF'
 
 Next:
-  - One-time backfill (production R2 -> D1): scripts/migrate_r2_to_d1.py)
   - Dry-run the pipeline:  gh workflow run sync-test && gh run watch
     (runs against the throwaway spotify-analytics-test D1 database)
   - Go live: merge to main. The hourly cron in sync.yml only fires from the

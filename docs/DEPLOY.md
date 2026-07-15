@@ -19,75 +19,56 @@ local SQLite; it never writes to D1 directly.
 
 ### 0. Prerequisites (once per machine)
 
-- Node.js >= 18 — the setup script and Worker deploy use `npx wrangler`
-- [GitHub CLI](https://cli.github.com/), logged in (`gh auth login`) — the
+- Node.js >= 18: the setup script and Worker deploy use `npx wrangler`
+- [GitHub CLI](https://cli.github.com/), logged in (`gh auth login`): the
   script uses it to write the repo secrets for you
-- a Cloudflare account (free tier) and this repo pushed to your GitHub
-- a `.env` file at the repo root (or `data/.env`) with the four values the
-  setup script forwards into GitHub Actions secrets:
 
-  ```bash
-  SPOTIFY_CLIENT_ID=      # Spotify app client ID (developer.spotify.com dashboard)
-  TOKEN_ENCRYPT_KEY=      # Fernet key encrypting the tokens; the one your existing
-                          # tokens were encrypted with, or for a fresh install:
-                          # uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-  CLOUDFLARE_ACCOUNT_ID=  # Cloudflare dashboard -> right sidebar of any zone/Workers page
-  CLOUDFLARE_API_TOKEN=   # dash.cloudflare.com/profile/api-tokens -> Create Token,
-                          # needs Workers Scripts:Edit + D1:Edit permissions
-  ```
+- Create a Cloudflare account (free tier) and this repo pushed/forked to your GitHub
 
-  Missing values aren't fatal — the script ends by printing exactly which
-  secrets you still need to `gh secret set` by hand. The two Worker Bearer
-  tokens (`WORKER_AUTH_TOKEN`/`WORKER_TEST_AUTH_TOKEN`) do NOT go in `.env` —
-  you pass them on the command line in step 1, and `WORKER_URL`/
-  `WORKER_TEST_URL` are auto-captured from the deploy output.
+- Run `uv run spotify-mcp setup` finishing local OAuth (prompts for your
+  Spotify Client ID, generates the token-encryption key, runs the OAuth flow, and optionally imports a Spotify JSON history export)
 
 ### 1. Run the setup script
 
 ```bash
-bash scripts/setup_cloud.sh <worker-auth-token> <worker-test-auth-token>
-#                           ^Bearer token for sync.yml ^for sync-test.yml
+bash scripts/setup_cloud.sh
 ```
 
-Generate the tokens yourself, e.g. `openssl rand -hex 32`. The first run
-opens a browser once for `wrangler login`. The script then does
-**everything else**:
+The first run opens a browser once for `wrangler login`. The script does **everything else**:
 
-1. creates the `spotify-analytics` (prod) and `spotify-analytics-test` D1
-   databases, and patches their real `database_id`s into `worker/wrangler.toml`
-2. applies `worker/migrations/` and deploys the Worker to both environments
-3. sets the Worker-side `AUTH_TOKEN` secret (via `wrangler secret put`) for
-   both the prod and `--env test` Worker, from the tokens passed on the
-   command line — without this step every Worker request 401s
-4. writes the GitHub secrets via `gh`: `WORKER_URL`, `WORKER_AUTH_TOKEN`,
-   `WORKER_TEST_URL`, `WORKER_TEST_AUTH_TOKEN`, plus
-   `SPOTIFY_CLIENT_ID`/`TOKEN_ENCRYPT_KEY`/`CLOUDFLARE_ACCOUNT_ID`/
-   `CLOUDFLARE_API_TOKEN` read from the `.env` of step 0
+1. ensures `.env` has `SPOTIFY_CLIENT_ID` (prompt) and generated `TOKEN_ENCRYPT_KEY`.  Existing values are never overwritten.
+2. creates the `spotify-analytics` (prod) and `spotify-analytics-test` D1
+   databases, patches their real `database_id`s into `worker/wrangler.toml`
+3. applies `worker/migrations/` and deploys the Worker to both environments
+4. generates the two Worker Bearer tokens and sets them as both the
+   Worker-side `AUTH_TOKEN` secrets and the GitHub Actions secrets
+   (`WORKER_URL`, `WORKER_AUTH_TOKEN`, `WORKER_TEST_URL`,
+   `WORKER_TEST_AUTH_TOKEN`, plus `SPOTIFY_CLIENT_ID`/`TOKEN_ENCRYPT_KEY`
+   from `.env`)
+5. seeds D1 from your local data: the encrypted OAuth token row *and* all
+   local listening history (wizard OAuth + JSON import) — each part is
+   skipped when D1 is already up to date
 
-Every step is idempotent — rerunning is always safe (e.g. after rotating a
-token or redeploying the Worker). The end of the run prints exactly what (if
-anything) is still missing and the command to fix it.
+Every step is idempotent — rerunning is always safe, and a run without
+arguments also rotates the Bearer tokens. The end of the run prints exactly
+what (if anything) is still missing and the command to fix it.
 
-### 2. One-time historical backfill (existing users only)
+From the seed onward the hourly cron keeps D1 current. To re-seed manually
+(e.g. after another JSON import, or with a restored `history.db` placed at
+the local data path): `uv run python scripts/seed_d1.py [--force]`.
 
-If you're migrating from the old R2-hosted SQLite setup, run
-`scripts/migrate_r2_to_d1.py` once to backfill existing history/tokens into
-D1. Fresh installs can skip this — `sync.py` populates D1 from scratch.
-
-### 3. Dry-run with sync-test
+### 2. Dry-run with sync-test
 
 ```bash
 gh workflow run sync-test && gh run watch
 ```
 
-or GitHub -> **Actions** -> **sync-test** -> **Run workflow**. Green = the
-Worker deploys, migrations apply, and a sync writes rows into the throwaway
-`spotify-analytics-test` D1 database.
+or GitHub -> **Actions** -> **sync-test** -> **Run workflow**. (The test Worker was already deployed by the setup script). Green = a sync
+writes rows into the throwaway `spotify-analytics-test` D1 database.
 
-> If sync-test doesn't show up in the Actions tab: GitHub only lists
-> workflows that exist on the default branch — merge the branch first.
+> If sync-test doesn't show up in the Actions tab: GitHub only lists workflows that exist on the default branch or add `--ref <my-branch>` to reference workflow at specified branch
 
-### 4. Go live
+### 3. Go live
 
 Merge to main. The hourly cron in `sync.yml` activates automatically — first
 run within the hour (at :23), writing into the production `spotify-analytics`
@@ -96,6 +77,9 @@ D1 database.
 ## Ongoing
 
 - The cron runs hourly against production D1.
+- Worker deploys are manual and local: after changing `worker/`, run
+  `cd worker && npx wrangler deploy` (and `--env test`), or just rerun the
+  setup script. The cron never deploys.
 - Nothing to maintain locally — the local SQLite cache is a pull-only mirror
   of D1, refreshed on demand; it's never written to independently.
 - GitHub disables scheduled workflows after **60 days without repo
