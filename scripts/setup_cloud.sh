@@ -44,6 +44,13 @@ done
 [[ -z "$ENV_FILE" ]] && { ENV_FILE="./.env"; touch "$ENV_FILE"; }
 
 env_get() { grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^"//' -e 's/"$//'; }
+env_set() { # upsert KEY=value in $ENV_FILE (overwrites an existing line)
+  if grep -qE "^$1=" "$ENV_FILE"; then
+    sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
+  fi
+}
 
 echo "==> [0/5] Checking $ENV_FILE"
 if [[ -z "$(env_get SPOTIFY_CLIENT_ID)" ]]; then
@@ -118,13 +125,11 @@ echo "==> [3b/5] Worker-side AUTH_TOKEN secrets (prod + test) — never printed"
 printf '%s' "$WORKER_AUTH_TOKEN" | (cd "$WORKER_DIR" && $WRANGLER secret put AUTH_TOKEN)
 printf '%s' "$WORKER_TEST_AUTH_TOKEN" | (cd "$WORKER_DIR" && $WRANGLER secret put AUTH_TOKEN --env test)
 
-# write WORKER_* to .env file, never overwrite an existing value.
-if [[ -n "$WORKER_URL" && -z "$(env_get WORKER_URL)" ]]; then
-  printf 'WORKER_URL=%s\n' "$WORKER_URL" >> "$ENV_FILE"
-fi
-if [[ -z "$(env_get WORKER_AUTH_TOKEN)" ]]; then
-  printf 'WORKER_AUTH_TOKEN=%s\n' "$WORKER_AUTH_TOKEN" >> "$ENV_FILE"
-fi
+# Write WORKER_* to .env, OVERWRITING stale values: each run without args
+# rotates the Bearer token on the Worker and in GitHub secrets, so a
+# leftover old value in .env would 401 every local script.
+[[ -n "$WORKER_URL" ]] && env_set WORKER_URL "$WORKER_URL"
+env_set WORKER_AUTH_TOKEN "$WORKER_AUTH_TOKEN"
 
 # ---------------------------------------------------------------------------
 # GitHub Actions secrets — via gh, if available.
@@ -155,24 +160,36 @@ else
   GH_DONE=0
 fi
 
-echo "==> [5/5] Seeding D1 with local tokens + listening history (skips whatever D1 already has)"
+echo "==> [5/5] Seeding D1 (prod: tokens + history; test: tokens only) — skips whatever D1 already has"
 sleep 5
-if [[ -n "$WORKER_URL" ]]; then
-  # A freshly-set `wrangler secret put` can take a few seconds to propagate to
-  # every edge node, so an immediate request may 401 — retry a few times.
-  PUSH_OK=0
+# A freshly-set `wrangler secret put` can take a few seconds to propagate to
+# every edge node, so an immediate request may 401 — retry a few times.
+seed_env() { # $1=url $2=token $3...=extra seed_d1.py args
+  local url="$1" token="$2"; shift 2
+  local attempt
   for attempt in 1 2 3 4 5; do
-    if WORKER_URL="$WORKER_URL" WORKER_AUTH_TOKEN="$WORKER_AUTH_TOKEN" \
-        uv run python scripts/seed_d1.py; then
-      PUSH_OK=1
-      break
+    if WORKER_URL="$url" WORKER_AUTH_TOKEN="$token" uv run python scripts/seed_d1.py "$@"; then
+      return 0
     fi
     echo "    (attempt $attempt/5 failed — secret may still be propagating, retrying in 5s)"
     sleep 5
   done
-  [[ "$PUSH_OK" == "1" ]] || echo "    ! Seeding incomplete — if you haven't done OAuth yet, run 'uv run spotify-mcp setup' once, then rerun this script."
+  return 1
+}
+
+if [[ -n "$WORKER_URL" ]]; then
+  seed_env "$WORKER_URL" "$WORKER_AUTH_TOKEN" \
+    || echo "    ! Prod seeding incomplete — if you haven't done OAuth yet, run 'uv run spotify-mcp setup' once, then rerun this script."
 else
-  echo "    ! Skipped (Worker URL unknown) — run scripts/seed_d1.py manually."
+  echo "    ! Prod seed skipped (Worker URL unknown) — run scripts/seed_d1.py manually."
+fi
+if [[ -n "$WORKER_TEST_URL" ]]; then
+  # Test D1 needs a token row too or sync-test can never pass; history would
+  # just waste free-tier writes on a throwaway DB.
+  seed_env "$WORKER_TEST_URL" "$WORKER_TEST_AUTH_TOKEN" --tokens-only \
+    || echo "    ! Test-env token seed failed — sync-test will fail until this succeeds."
+else
+  echo "    ! Test seed skipped (test Worker URL unknown)."
 fi
 
 echo

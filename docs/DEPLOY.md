@@ -45,9 +45,10 @@ The first run opens a browser once for `wrangler login`. The script does **every
    (`WORKER_URL`, `WORKER_AUTH_TOKEN`, `WORKER_TEST_URL`,
    `WORKER_TEST_AUTH_TOKEN`, plus `SPOTIFY_CLIENT_ID`/`TOKEN_ENCRYPT_KEY`
    from `.env`)
-5. seeds D1 from your local data: the encrypted OAuth token row *and* all
-   local listening history (wizard OAuth + JSON import) — each part is
-   skipped when D1 is already up to date
+5. seeds D1 from your local data — prod gets the encrypted OAuth token row
+   *and* all local listening history (wizard OAuth + JSON import); the test
+   D1 gets the token row only. Each part is skipped when D1 is already up
+   to date
 
 Every step is idempotent — rerunning is always safe, and a run without
 arguments also rotates the Bearer tokens. The end of the run prints exactly
@@ -66,7 +67,7 @@ gh workflow run sync-test && gh run watch
 or GitHub -> **Actions** -> **sync-test** -> **Run workflow**. (The test Worker was already deployed by the setup script). Green = a sync
 writes rows into the throwaway `spotify-analytics-test` D1 database.
 
-> If sync-test doesn't show up in the Actions tab: GitHub only lists workflows that exist on the default branch or add `--ref <my-branch>` to reference workflow at specified branch
+> If sync-test doesn't show up in the Actions tab: GitHub only lists workflows that exist on the default branch. merge to main for the first time. Add flag `--ref <my-branch>` to run workflow at specified branch
 
 ### 3. Go live
 

@@ -12,8 +12,11 @@ place it at the local history path (`spotify-mcp path` shows it) first.
 
 Prints row counts only — never track names or tokens.
 
+--tokens-only skips the history part (used for the throwaway test D1, which
+only needs a token row for sync-test to run).
+
 Usage:
-    WORKER_URL=... WORKER_AUTH_TOKEN=... uv run python scripts/seed_d1.py [--force]
+    WORKER_URL=... WORKER_AUTH_TOKEN=... uv run python scripts/seed_d1.py [--force] [--tokens-only]
 """
 import os
 import sqlite3
@@ -96,7 +99,7 @@ def main() -> int:
     user_id = os.environ.get("SPOTIFY_USER_ID", "default")
     with WorkerClient(worker_url, worker_auth_token) as worker:
         tokens_ok = seed_tokens(worker, user_id)
-        history_ok = seed_history(worker)
+        history_ok = True if "--tokens-only" in sys.argv else seed_history(worker)
 
     return 0 if (tokens_ok and history_ok) else 1
 
