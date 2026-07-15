@@ -28,13 +28,8 @@ dependencies = [
 [project.scripts]
 spotify-mcp = "spotify_mcp.cli:app"
 
-[project.entry-points."pipx.run"]
-spotify-analytics-mcp = "spotify_mcp.cli:app"
-
 [project.optional-dependencies]
-dashboard = [
-    "streamlit>=1.52",
-    "plotly>=6.5",
+report = [
     "spotify-analytics-core[report]",
     "langchain-openai>=1.0",
 ]

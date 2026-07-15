@@ -1,128 +1,95 @@
-# Cloud Deployment (GitHub Actions + Cloudflare R2/Pages)
+# Cloud Deployment (GitHub Actions + Cloudflare D1)
 
-Runs the hourly Spotify sync in GitHub Actions and publishes a private static
-dashboard on Cloudflare Pages. Your PC never needs to be on.
-Everything fits in the free tiers (public-repo Actions minutes are free and unlimited).
+Runs the hourly Spotify sync in GitHub Actions, writing straight into
+Cloudflare D1 through the Worker. Your PC never needs to be on.
+Everything fits in the free tiers (public-repo Actions minutes are free and
+unlimited; D1/Workers free tier is generous for a single-user history table).
 
 ```
 GitHub Actions (hourly cron)
-  ├─ download history.db + tokens.db from R2
-  ├─ scripts/sync.py          → fetch recent plays from the Spotify API
-  ├─ scripts/build_dashboard.py → site/*.html (static Plotly)
-  ├─ upload both DBs back to R2 (tokens.db too — refresh tokens can rotate)
-  └─ wrangler pages deploy site/
-Cloudflare R2      = private storage for the two SQLite files
-Cloudflare Pages   = hosts the dashboard
-Cloudflare Access  = restricts the dashboard to your email
+  └─ scripts/sync.py -> Worker (Bearer token) -> D1 (spotify-analytics)
+Cloudflare D1     = single source of truth for listening history + encrypted tokens
+Cloudflare Worker = the only thing that talks to D1 (worker/)
 ```
 
-The local flow (wizard, MCP server, Streamlit dashboard) is untouched and
-independent; the cloud copy of the DB lives its own life after the initial upload.
+The local flow (wizard, MCP server) pulls a read-only sync cache of D1 into
+local SQLite; it never writes to D1 directly.
 
 ## One-time setup
 
-Steps 0–2 are preparation, step 3 is one script that does everything else, steps 4–5 are verification.
-
 ### 0. Prerequisites (once per machine)
 
-- Node.js ≥ 18 — the setup script drives Cloudflare via `npx wrangler`
-- [GitHub CLI](https://cli.github.com/), logged in (`gh auth login`) — the
+- Node.js >= 18: the setup script and Worker deploy use `npx wrangler`
+- [GitHub CLI](https://cli.github.com/), logged in (`gh auth login`): the
   script uses it to write the repo secrets for you
-- a Cloudflare account (free tier) and this repo pushed to your GitHub
-- Zero Trust onboarded once (needed for the Access login wall):
-  https://one.dash.cloudflare.com → pick any team name → **Free** plan
-  ($0, may ask for a payment method). Nothing else to configure there —
-  no domain or DNS setup needed; the team name is just your login page's
-  address (`<team>.cloudflareaccess.com`).
 
-### 1. Local data: run the wizard
+- Create a Cloudflare account (free tier) and this repo pushed/forked to your GitHub
 
-```bash
-uv run spotify-mcp        # OAuth → tokens.db, history import → history.db
-```
+- Run `uv run spotify-mcp setup` finishing local OAuth (prompts for your
+  Spotify Client ID, generates the token-encryption key, runs the OAuth flow, and optionally imports a Spotify JSON history export)
 
-The repo `.env` and the DBs (and `.env`) are in the platformdirs dirs (`spotify-mcp` prints the location), pass it as the script's 3rd argument.
-
-> Warning: if `DEV=true` is set in `.env` under this repo root, the config and DB will be under root instead of platformdirs dirs (run `spotify-mcp path` to double check current path)
-
-### 2. Cloudflare API token (the only dashboard step)
-
-https://dash.cloudflare.com/profile/api-tokens → **Create Token** →
-**Custom token**, with these three permissions:
-
-| Permission | Used for |
-|---|---|
-| Account / **Workers R2 Storage** / Edit | CI downloads/uploads the DBs |
-| Account / **Cloudflare Pages** / Edit | CI deploys the dashboard |
-| Account / **Access: Apps and Policies** / Edit | step 3's login wall (script-only; unused but harmless in CI) |
-
-Copy the token — it is shown only once.
-
-### 3. Run the setup script
+### 1. Run the setup script
 
 ```bash
-export CLOUDFLARE_API_TOKEN=<token from step 2>
-bash scripts/setup_cloud.sh spotify-test spotify-dashboard ./data you@example.com
-#                           ^bucket      ^pages-project    ^db dir ^your email
+bash scripts/setup_cloud.sh
 ```
 
-The first run opens a browser once for `wrangler login`. The script then does
-**everything else**:
+The first run opens a browser once for `wrangler login`. The script does **everything else**:
 
-1. creates the private R2 bucket
-2. uploads `history.db` + `tokens.db` into it
-3. creates the Pages project
-4. sets up the Access login wall on the project's **real** `pages.dev` host
-   (Pages adds a suffix like `-53x` when your project name is taken
-   globally), covering production + preview URLs. Login = one-time PIN to
-   your email. Note: the login page tells *any* email "code sent", but only
-   allowed emails actually receive one — that's anti-enumeration, not a bug.
-5. writes **all 6 GitHub secrets** via `gh`: `R2_BUCKET`, `CF_PAGES_PROJECT`,
-   `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, plus `SPOTIFY_CLIENT_ID`
-   and `TOKEN_ENCRYPT_KEY` read from the wizard's `.env` (values are never
-   printed)
+1. ensures `.env` has `SPOTIFY_CLIENT_ID` (prompt) and generated `TOKEN_ENCRYPT_KEY`.  Existing values are never overwritten.
+2. creates the `spotify-analytics` (prod) and `spotify-analytics-test` D1
+   databases, patches their real `database_id`s into `worker/wrangler.toml`
+3. applies `worker/migrations/` and deploys the Worker to both environments
+4. generates the two Worker Bearer tokens and sets them as both the
+   Worker-side `AUTH_TOKEN` secrets and the GitHub Actions secrets
+   (`WORKER_URL`, `WORKER_AUTH_TOKEN`, `WORKER_TEST_URL`,
+   `WORKER_TEST_AUTH_TOKEN`, plus `SPOTIFY_CLIENT_ID`/`TOKEN_ENCRYPT_KEY`
+   from `.env`)
+5. seeds D1 from your local data — prod gets the encrypted OAuth token row
+   *and* all local listening history (wizard OAuth + JSON import); the test
+   D1 gets the token row only. Each part is skipped when D1 is already up
+   to date
 
-Every step is idempotent — rerunning is always safe. The end of the run
-prints exactly what (if anything) is still missing and the command to fix it.
-Two possible fails:
+Every step is idempotent — rerunning is always safe, and a run without
+arguments also rotates the Bearer tokens. The end of the run prints exactly
+what (if anything) is still missing and the command to fix it.
 
-- Access step fails mentioning organization/team → onboard Zero Trust once at
-  https://one.dash.cloudflare.com (any team name, **Free** plan, $0), rerun.
-- Custom `SPOTIFY_USER_ID` (default is `default`)? Add it as an `env` entry
-  in both workflow files.
+From the seed onward the hourly cron keeps D1 current. To re-seed manually
+(e.g. after another JSON import, or with a restored `history.db` placed at
+the local data path): `uv run python scripts/seed_d1.py [--force]`.
 
-### 4. Dry-run with sync-test
+### 2. Dry-run with sync-test
 
 ```bash
 gh workflow run sync-test && gh run watch
 ```
 
-or GitHub → **Actions** → **sync-test** → **Run workflow**. Green = the whole pipeline works: R2 round-trip, Spotify token refresh, dashboard build, Pages deploy.
+or GitHub -> **Actions** -> **sync-test** -> **Run workflow**. (The test Worker was already deployed by the setup script). Green = a sync
+writes rows into the throwaway `spotify-analytics-test` D1 database.
 
-It publishes to the *preview* URL `https://test.<project>.pages.dev`. You can test it by open in an incognito window: you must hit the Access login first, then see the dashboard.
+> If sync-test doesn't show up in the Actions tab: GitHub only lists workflows that exist on the default branch. merge to main for the first time. Add flag `--ref <my-branch>` to run workflow at specified branch
 
-> If sync-test doesn't show up in the Actions tab: GitHub only lists workflows that exist on the default branch : merge the branch first.
+### 3. Go live
 
-### 5. Go live
-
-1. Testing used the throwaway `spotify-test` bucket. For the real one, rerun
-   step 3 with the production bucket name (e.g. `spotify-analytics`). Or keep `spotify-test` is also fine.
-2. Merge to main. The hourly cron in `sync.yml` activates automatically —
-   first run within the hour (at :23).
-3. Check the first green run in the Actions tab, then open
-   `https://<project>.pages.dev`: Access login → dashboard. Done.
+Merge to main. The hourly cron in `sync.yml` activates automatically — first
+run within the hour (at :23), writing into the production `spotify-analytics`
+D1 database.
 
 ## Ongoing
 
-- The cron runs hourly; the dashboard footer shows the last update (UTC).
-- Nothing to maintain locally — token refresh (including rotation) is
-  handled by the workflow via `tokens.db` round-tripping through R2.
-- GitHub disables scheduled workflows after **60 days without repo activity**; any push (or re-enabling in the Actions tab) revives it.
-- If tokens ever become invalid (e.g. you revoke the app), redo step 1's
-  OAuth, then rerun step 3 — it re-seeds both DBs.
+- The cron runs hourly against production D1.
+- Worker deploys are manual and local: after changing `worker/`, run
+  `cd worker && npx wrangler deploy` (and `--env test`), or just rerun the
+  setup script. The cron never deploys.
+- Nothing to maintain locally — the local SQLite cache is a pull-only mirror
+  of D1, refreshed on demand; it's never written to independently.
+- GitHub disables scheduled workflows after **60 days without repo
+  activity**; any push (or re-enabling in the Actions tab) revives it.
+- No automated backup: if you want a manual snapshot, `cd worker &&
+  npx wrangler d1 export spotify-analytics --remote --output backup.sql`.
 
 ## Forking this setup
 
-Fork the repo, then do the One-time setup above with your own Spotify app,
-Cloudflare account, and secrets — the setup script works unchanged. Enable
-the workflow in the Actions tab (disabled by default on forks).
+Fork the repo, then do the One-time setup above with your own Spotify app
+and Cloudflare account — the setup script works unchanged. Enable the
+workflow in the Actions tab (disabled by default on forks).

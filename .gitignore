@@ -136,8 +136,12 @@ celerybeat.pid
 
 # Cloudflare / Wrangler
 .wrangler/
+*/wrangler.toml
 .dev.vars
 .dev.vars.*
+
+# Node
+node_modules/
 
 # Environments
 .env
@@ -225,3 +229,6 @@ data/spotify_history/*
 !data/spotify_history/sample_history.json
 # logs
 logs/
+
+# superpowers subagent-driven-development scratch
+.superpowers/

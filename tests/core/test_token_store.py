@@ -5,6 +5,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from spotify_core.db.migrations import get_connection, init_db
+from spotify_core.spotify_client.errors import SpotifyAuthError
 from spotify_core.spotify_client.token_store import (
     delete_tokens,
     is_token_expired,
@@ -215,3 +216,4 @@ def test_load_tokens_scope_empty_string_when_null(tmp_path):
     result = load_tokens(db_path, "user_null_scope", key)
     assert result is not None
     assert result["scopes"] == ""
+

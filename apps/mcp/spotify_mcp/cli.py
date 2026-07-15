@@ -26,14 +26,7 @@ from spotify_mcp.wizard import state as _state
 
 from loguru import logger
 
-from spotify_mcp.dashboard.dependencies import dashboard_available
-
 console = Console()
-
-
-def _dashboard_available() -> bool:
-    """True when the [dashboard] extra's startup dependencies are importable."""
-    return dashboard_available()
 
 
 app = typer.Typer(
@@ -200,31 +193,6 @@ def path() -> None:
     console.print_json(json.dumps(paths.describe()))
     for w in _st.path_warnings():
         console.print(f"[yellow]warning: {w}[/yellow]")
-
-@app.command()
-def dashboard(
-    port: Annotated[int, typer.Option("--port", help="Port for the Streamlit server.")] = 8501,
-) -> None:
-    """Launch the Streamlit dashboard (requires the dashboard extra)."""
-    import subprocess
-    import sys
-    from importlib.resources import as_file, files
-
-    if not _dashboard_available():
-        # NB: escape the literal brackets so Rich does not treat [dashboard] as markup.
-        console.print(
-            "[red]Dashboard dependencies are not installed.[/red]\n"
-            'Install with:  uvx --from "spotify-analytics-mcp\\[dashboard]" spotify-mcp dashboard'
-        )
-        raise typer.Exit(code=1)
-
-    with as_file(files("spotify_mcp.dashboard") / "main_page.py") as page:
-        result = subprocess.run(
-            [sys.executable, "-m", "streamlit", "run", str(page), "--server.port", str(port)]
-        )
-    if result.returncode:
-        raise typer.Exit(code=result.returncode)
-
 
 @app.command()
 def serve() -> None:

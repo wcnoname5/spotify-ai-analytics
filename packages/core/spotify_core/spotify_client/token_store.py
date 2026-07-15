@@ -162,6 +162,92 @@ def is_token_expired(
     return expired
 
 
+def export_encrypted_row(
+    db_path: Union[str, Path],
+    user_id: str,
+) -> dict | None:
+    """Export the raw (still-encrypted) token row for a user.
+
+    Passes ``access_token``/``refresh_token`` through as opaque ciphertext —
+    never decrypts. Intended for moving token rows between a Cloudflare D1
+    store and a local scratch SQLite file without ever touching plaintext.
+
+    Args:
+        db_path: Path to the SQLite database.
+        user_id: Spotify user ID to look up.
+
+    Returns:
+        Dict with keys ``access_token``, ``refresh_token`` (ciphertext
+        strings), ``expires_at`` (raw string), and ``scopes``, or ``None``
+        if not found.
+    """
+    with closing(get_connection(db_path)) as conn:
+        row = conn.execute(
+            "SELECT access_token, refresh_token, expires_at, scopes "
+            "FROM spotify_tokens WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+
+    if row is None:
+        logger.debug("export_encrypted_row: no row found for user {}", user_id)
+        return None
+
+    return {
+        "access_token": row["access_token"],
+        "refresh_token": row["refresh_token"],
+        "expires_at": row["expires_at"],
+        "scopes": row["scopes"] or "",
+    }
+
+
+def import_encrypted_row(
+    db_path: Union[str, Path],
+    user_id: str,
+    row: dict,
+) -> None:
+    """Import a raw (still-encrypted) token row for a user.
+
+    Passes ``access_token``/``refresh_token`` through as opaque ciphertext —
+    never encrypts. Counterpart to :func:`export_encrypted_row`.
+
+    Args:
+        db_path: Path to the SQLite database (must already be initialised).
+        user_id: Spotify user ID (primary key).
+        row: Dict with keys ``access_token``, ``refresh_token`` (ciphertext
+            strings), ``expires_at`` (raw string), and ``scopes``.
+
+    Raises:
+        SpotifyAuthError: If ``row`` is missing ``access_token``,
+            ``refresh_token``, or ``expires_at``.
+    """
+    missing = [
+        key for key in ("access_token", "refresh_token", "expires_at") if key not in row
+    ]
+    if missing:
+        raise SpotifyAuthError(
+            f"Cannot import token row for user {user_id}: missing required key(s) {missing}."
+        )
+
+    with closing(get_connection(db_path)) as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO spotify_tokens
+                (user_id, access_token, refresh_token, expires_at, scopes)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                row["access_token"],
+                row["refresh_token"],
+                row["expires_at"],
+                row.get("scopes", ""),
+            ),
+        )
+        conn.commit()
+
+    logger.info("Encrypted token row imported for user {}", user_id)
+
+
 def delete_tokens(
     db_path: Union[str, Path],
     user_id: str,

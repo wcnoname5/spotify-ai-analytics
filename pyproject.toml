@@ -17,13 +17,11 @@ dependencies = [
     "numpy>=2.4.0",
     "openai>=2.14.0",
     "pandas>=2.3.3",
-    "plotly>=6.5.0",
     "polars>=1.36.1",
     "pydantic==2.12.5",
     "pydantic-settings==2.12.0",
     "pytest>=9.0.2",
     "python-dotenv==1.2.1",
-    "streamlit>=1.52.2",
     # workspace members — ensures uv sync at the root installs all transitive deps
     "spotify-analytics-core",
     "spotify-analytics-dataloader",

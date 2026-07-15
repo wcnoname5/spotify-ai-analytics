@@ -1,12 +1,8 @@
 name: sync
 
-# Hourly Spotify sync + static dashboard deploy. State (history.db, tokens.db)
-# lives in a private R2 bucket — nothing personal ever enters this repo or its
-# public logs (sync.py prints row counts only; secret values are auto-masked).
-# R2 download/upload and the Pages deploy all use one CLOUDFLARE_API_TOKEN
-# (Workers R2 Storage: Edit + Cloudflare Pages: Edit). Setup: docs/DEPLOY.md.
-# Manual test-bed running the same steps against a test bucket: sync-test.yml.
-# Note: the cron only fires when this file is on the default branch (main).
+# Hourly Spotify sync -> D1.
+# Setup: docs/DEPLOY.md. Trust this one only after a `sync-test.yml` dry run
+# turns green. Note: the cron only fires when this file is on the default branch (main).
 
 on:
   schedule:
@@ -29,9 +25,8 @@ jobs:
       SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
       TOKEN_ENCRYPT_KEY: ${{ secrets.TOKEN_ENCRYPT_KEY }}
       SPOTIFY_USER_ID: ${{ secrets.SPOTIFY_USER_ID || 'default' }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      WORKER_URL: ${{ secrets.WORKER_URL }}
+      WORKER_AUTH_TOKEN: ${{ secrets.WORKER_AUTH_TOKEN }}
     steps:
       - uses: actions/checkout@v5
 
@@ -39,29 +34,16 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: uv sync --frozen --no-dev
+      - name: Sync from Spotify API to D1
+        run: uv run python scripts/sync.py
 
-      - name: Download DBs from R2
+      - name: Print D1 row count
         run: |
-          mkdir -p data
-          npx --yes wrangler@4 r2 object get "$R2_BUCKET/history.db" --file data/history.db --remote
-          npx --yes wrangler@4 r2 object get "$R2_BUCKET/tokens.db" --file data/tokens.db --remote
-
-      - name: Sync from Spotify API
-        run: uv run scripts/sync.py
-
-      - name: Build static dashboard
-        run: uv run scripts/build_dashboard.py
-
-      # tokens.db goes back too — Spotify may rotate the refresh token
-      - name: Upload DBs back to R2
-        run: |
-          npx --yes wrangler@4 r2 object put "$R2_BUCKET/history.db" --file data/history.db --remote
-          npx --yes wrangler@4 r2 object put "$R2_BUCKET/tokens.db" --file data/tokens.db --remote
-
-      - name: Deploy to Cloudflare Pages (production)
-        run: >
-          npx --yes wrangler@4 pages deploy site
-          --project-name="${{ secrets.CF_PAGES_PROJECT }}"
-          --branch=main --commit-dirty=true
+          uv run python -c "
+          import os
+          from spotify_core.db.worker_client import WorkerClient
+          with WorkerClient(os.environ['WORKER_URL'], os.environ['WORKER_AUTH_TOKEN']) as worker:
+              print(f'listening_history row count: {worker.get_tracks_count()}')
+          "
