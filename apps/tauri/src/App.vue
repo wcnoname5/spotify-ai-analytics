@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import Database from "@tauri-apps/plugin-sql"; // SPIKE(task-1): remove in task 5
 import PlotChart from "./components/PlotChart.vue";
 import { fetchTracks, sampleTracks, type TrackRow } from "./lib/api";
 import {
@@ -60,6 +61,31 @@ async function load() {
 }
 onMounted(load);
 watch(range, load);
+
+// SPIKE(task-1): remove in task 5 — proves tauri-plugin-sql/sqlx can read the
+// shared .sql file with ?N indexed params against the real local cache DB.
+onMounted(async () => {
+  try {
+    const topArtistsSql = `
+SELECT artist_name,
+       SUM(ms_played) / 60000 AS total_mins,
+       COUNT(*) AS play_count
+FROM listening_history
+WHERE artist_name IS NOT NULL
+  AND (?1 IS NULL OR played_at >= ?1)
+  AND (?2 IS NULL OR played_at <= ?2)
+GROUP BY artist_name
+ORDER BY total_mins DESC
+LIMIT ?3`;
+    const db = await Database.load(
+      "sqlite:C:/Users/mdbs-user/Documents/Projects/spotify_sqlite/data/history.db"
+    );
+    const rows = await db.select(topArtistsSql, [null, null, 5]);
+    console.log("SPIKE(task-1) top_artists rows:", rows);
+  } catch (err) {
+    console.error("SPIKE(task-1) tauri-plugin-sql check failed:", err);
+  }
+});
 
 const period = computed(() => {
   if (rows.value.length === 0) return "no data";
