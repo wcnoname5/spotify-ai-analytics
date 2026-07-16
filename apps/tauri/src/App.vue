@@ -34,6 +34,7 @@ const loading = ref(false);
 const usingSample = ref(false);
 const offlineNotice = ref<"unconfigured" | "error" | null>(null);
 const loadFailedNotice = ref(false);
+const loadFailedDetail = ref("");
 
 const summary = ref<ListeningSummary | null>(null);
 const prevSummary = ref<ListeningSummary | null>(null);
@@ -111,6 +112,7 @@ async function load() {
     // Real data failed (db/query error) — fall back to sample data so the
     // dashboard still renders something, same as browser mode.
     loadFailedNotice.value = true;
+    loadFailedDetail.value = e instanceof Error ? e.message : String(e);
     usingSample.value = true;
     loadFromSample(current, previous, isAll);
   } finally {
@@ -226,6 +228,7 @@ const trendTraces = computed(() => [
   <p v-if="loadFailedNotice" class="banner">
     Could not load real data — showing <strong>sample data</strong> instead. Check the console for
     details.
+    <code v-if="loadFailedDetail">{{ loadFailedDetail }}</code>
   </p>
   <p v-if="offlineNotice === 'unconfigured'" class="banner">
     Data not synced — no Worker configured. Set WORKER_URL / WORKER_AUTH_TOKEN in the repo root

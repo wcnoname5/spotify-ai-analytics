@@ -3,6 +3,9 @@
 // ever gets are these INSERT OR IGNORE rows sourced from D1 via the Worker.
 import maxPlayedAtSql from "@sql/max_played_at.sql?raw";
 import insertTrackSql from "@sql/insert_track.sql?raw";
+// Rust-side fetch: the Worker has no CORS headers (frozen by design), and the
+// webview's own fetch enforces CORS against the localhost origin.
+import { fetch } from "@tauri-apps/plugin-http";
 import { getDb } from "./db";
 import type { TrackRow } from "./api";
 
@@ -23,7 +26,10 @@ export async function syncOnStartup(): Promise<SyncResult> {
     const res = await fetch(`${__WORKER_URL__}/api/tracks?since=${encodeURIComponent(cursor)}`, {
       headers: { Authorization: `Bearer ${__WORKER_AUTH_TOKEN__}` },
     });
-    if (!res.ok) return { offline: true, reason: "error" };
+    if (!res.ok) {
+      console.error(`syncOnStartup: worker responded ${res.status}`);
+      return { offline: true, reason: "error" };
+    }
 
     const body = (await res.json()) as { tracks: TrackRow[] };
     const tracks = body.tracks ?? [];
