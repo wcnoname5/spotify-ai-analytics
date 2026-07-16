@@ -1,23 +1,29 @@
-"""SQLite schema definitions (DDL, data definition language) for the Spotify AI Analytics database."""
+"""SQLite schema definitions (DDL, data definition language) for the Spotify AI Analytics database.
 
-LISTENING_HISTORY_DDL = """
-CREATE TABLE IF NOT EXISTS listening_history (
-    id           TEXT PRIMARY KEY,
-    track_id     TEXT NOT NULL,
-    track_name   TEXT,
-    artist_name  TEXT,
-    album_name   TEXT,
-    played_at    DATETIME NOT NULL, -- stored in ISO format (UTC)
-    ms_played    INTEGER,
-    source       TEXT DEFAULT 'api' CHECK(source IN ('api', 'json_import')),
-    platform     TEXT,
-    conn_country TEXT,
-    reason_start TEXT,
-    reason_end   TEXT,
-    shuffle      INTEGER,            -- BOOLEAN stored as 0/1
-    skipped      INTEGER             -- BOOLEAN stored as 0/1
-);
+listening_history + sync_state + the played_at index are defined in the
+shared db/sql/schema.sql (single source of truth, also read by the Tauri
+dashboard's TS data layer). spotify_tokens is Python/MCP-only and stays
+inline here — it never needs to exist in the Tauri-side cache.
 """
+from importlib.resources import files
+
+
+def _load_ddl_statements() -> list[str]:
+    """Read schema.sql and split it into individual CREATE statements.
+
+    Strips `--` line comments before splitting on `;` (the file has no
+    semicolons inside comments or string literals), then drops any
+    empty/whitespace-only fragments left over from the trailing split.
+    """
+    raw = files("spotify_core.db.sql").joinpath("schema.sql").read_text()
+    lines = []
+    for line in raw.splitlines():
+        code = line.split("--", 1)[0]
+        lines.append(code)
+    stripped = "\n".join(lines)
+    statements = [s.strip() for s in stripped.split(";")]
+    return [s for s in statements if s]
+
 
 SPOTIFY_TOKENS_DDL = """
 CREATE TABLE IF NOT EXISTS spotify_tokens (
@@ -29,20 +35,10 @@ CREATE TABLE IF NOT EXISTS spotify_tokens (
 );
 """
 
-# Index for common queries
-LISTENING_HISTORY_INDEX_DDL = """
-CREATE INDEX IF NOT EXISTS idx_listening_history_played_at
-    ON listening_history(played_at DESC);
-"""
+# DDL for data/history.db (listening history + sync cursor): listening_history,
+# sync_state, played_at index — in that order, as they appear in schema.sql.
+HISTORY_DDL = _load_ddl_statements()
 
-SYNC_STATE_DDL = """
-CREATE TABLE IF NOT EXISTS sync_state (
-    key    TEXT PRIMARY KEY,
-    value  INTEGER NOT NULL
-);
-"""
-
-# DDL for data/history.db (listening history + sync cursor)
-HISTORY_DDL = [LISTENING_HISTORY_DDL, SYNC_STATE_DDL, LISTENING_HISTORY_INDEX_DDL]
-
-ALL_DDL = [LISTENING_HISTORY_DDL, SPOTIFY_TOKENS_DDL, SYNC_STATE_DDL, LISTENING_HISTORY_INDEX_DDL]
+# HISTORY_DDL plus the Python-only spotify_tokens table, inserted after
+# listening_history to match the original ALL_DDL ordering.
+ALL_DDL = [HISTORY_DDL[0], SPOTIFY_TOKENS_DDL, *HISTORY_DDL[1:]]

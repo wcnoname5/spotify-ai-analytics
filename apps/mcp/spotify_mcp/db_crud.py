@@ -108,7 +108,6 @@ def register(mcp: FastMCP) -> None:
     )
     def get_recent_playback(
         limit: Annotated[int, Field(default=10, ge=1, le=50, description="Number of recent plays to return (1–50, default 10).")] = 10,
-        show_track_id: Annotated[bool, Field(default=False, description="If True, include track_id (Spotify URI) in each track. Required when you intend to pass results to play_track or add_to_queue.")] = False,
         user_id: Annotated[str, Field(description="Spotify user ID. Defaults to SPOTIFY_USER_ID env var.")] = DEFAULT_USER_ID,
     ) -> dict:
         """Sync recent plays from the Spotify API into the local DB, then return them.
@@ -119,17 +118,16 @@ def register(mcp: FastMCP) -> None:
 
         Args:
             limit: Number of recent plays to return (1–50, default 10).
-            show_track_id: Include Spotify track URI in results (default false).
             user_id: Spotify user ID. Defaults to SPOTIFY_USER_ID env var.
 
         Returns:
             {
                 "tracks": [{"track_name": str, "artist_name": str, "album_name": str,
-                            "played_at": str, "ms_played": int}],
+                            "played_at": str, "ms_played": int, "track_id": str}],
                 "synced": {"inserted": int, "skipped_duplicated": int, "cursor_ms": int},
             }
-            plus "track_id": str per track when show_track_id is true.
             or {"error": str, "requires_auth": bool}.
+            track_id is the Spotify URI — pass it to play_track or add_to_queue.
         """
         try:
             from spotify_core.db.pipeline import sync_api_to_db
@@ -142,7 +140,7 @@ def register(mcp: FastMCP) -> None:
                 client_id=get_client_id(),
                 fernet_key=get_fernet_key(),
             )
-            tracks = get_recent_plays(DB_PATH, limit=limit, show_track_id=show_track_id)
+            tracks = get_recent_plays(DB_PATH, limit=limit)
             for track in tracks:
                 track["played_at"] = utc_iso_to_local(track.get("played_at"))
             logger.debug(
@@ -210,23 +208,21 @@ def register(mcp: FastMCP) -> None:
         limit: Annotated[int, Field(default=10, ge=1, le=100, description="Number of top tracks to return (1–100, default 10).")] = 10,
         start_date: Annotated[Optional[str], Field(default=None, description="Filter plays on or after this date. Format: YYYY-MM-DD, e.g. '2024-01-01'.")] = None,
         end_date: Annotated[Optional[str], Field(default=None, description="Filter plays on or before this date. Format: YYYY-MM-DD, e.g. '2024-12-31'.")] = None,
-        show_track_id: Annotated[bool, Field(default=False, description="If True, include track_id (Spotify URI, e.g. 'spotify:track:<id>') in each result. Required when you intend to pass results to create_playlist or play_track.")] = False,
     ) -> list:
         """Return top tracks ranked by play count from the local history DB.
 
         Does not require Spotify auth — reads from the local SQLite database only.
         Use start_date/end_date to scope the ranking to a specific time window.
-        Set show_track_id=true when you need URIs for playlist creation or playback.
 
         Args:
             limit: Number of top tracks to return (1–100, default 10).
             start_date: Optional inclusive start date filter in YYYY-MM-DD format.
             end_date: Optional inclusive end date filter in YYYY-MM-DD format.
-            show_track_id: Include Spotify track URI in results (default false).
 
         Returns:
-            List of {"track_name": str, "artist_name": str, "play_count": int, "total_mins": int},
-            plus "track_id": str when show_track_id is true. Ordered by play_count desc.
+            List of {"track_id": str, "track_name": str, "artist_name": str,
+            "play_count": int, "total_mins": int}, ordered by play_count desc.
+            track_id is the Spotify URI — pass it to create_playlist or play_track.
             If the DB is empty, returns [{"warning": ... }].
         """
         if is_history_empty(DB_PATH):
@@ -234,7 +230,7 @@ def register(mcp: FastMCP) -> None:
             return [EMPTY_DB_RESPONSE]
         try:
             from spotify_core.db.queries import get_top_tracks as _get_top_tracks
-            result = _get_top_tracks(DB_PATH, limit=limit, start_date=start_date, end_date=end_date, show_track_id=show_track_id)
+            result = _get_top_tracks(DB_PATH, limit=limit, start_date=start_date, end_date=end_date)
             logger.debug("[Tool] get_top_tracks success: returned {} tracks", len(result))
             return result
         except Exception as exc:
