@@ -1,18 +1,25 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import Database from "@tauri-apps/plugin-sql"; // SPIKE(task-1): remove in task 5
 import PlotChart from "./components/PlotChart.vue";
-import { fetchTracks, sampleTracks, type TrackRow } from "./lib/api";
+import { sampleRecentPlays, sampleStats } from "./lib/api";
+import { isTauri } from "./lib/db";
+import { syncOnStartup } from "./lib/sync";
 import {
-  delta,
-  formatMinutes,
-  metrics,
-  minutesByDay,
+  dailyTrend,
+  listeningSummary,
   playsByHour,
-  spotifyUrl,
-  topArtistsByTime,
-  topTracksByPlays,
-} from "./lib/stats";
+  recentPlays,
+  topArtists,
+  topTracks,
+  type DailyTrend,
+  type ListeningSummary,
+  type PlaysByHour,
+  type Range,
+  type RecentPlay,
+  type TopArtist,
+  type TopTrack,
+} from "./lib/queries";
+import { delta, formatMinutes, spotifyUrl } from "./lib/stats";
 
 type RangeKey = "7" | "30" | "90" | "all";
 const RANGES: { key: RangeKey; label: string }[] = [
@@ -23,10 +30,17 @@ const RANGES: { key: RangeKey; label: string }[] = [
 ];
 
 const range = ref<RangeKey>("30");
-const rows = ref<TrackRow[]>([]); // current window
-const prevRows = ref<TrackRow[]>([]); // previous window of equal length (for deltas)
 const loading = ref(false);
 const usingSample = ref(false);
+const offlineNotice = ref(false);
+
+const summary = ref<ListeningSummary | null>(null);
+const prevSummary = ref<ListeningSummary | null>(null);
+const artists = ref<TopArtist[]>([]);
+const tracks = ref<TopTrack[]>([]);
+const recent = ref<RecentPlay[]>([]);
+const daily = ref<DailyTrend[]>([]);
+const hours = ref<PlaysByHour[]>([]);
 
 // Theme (drives Plotly chrome; CSS handles the rest)
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -35,123 +49,149 @@ const onTheme = (e: MediaQueryListEvent) => (dark.value = e.matches);
 onMounted(() => darkQuery.addEventListener("change", onTheme));
 onUnmounted(() => darkQuery.removeEventListener("change", onTheme));
 
-const EPOCH = "2008-01-01T00:00:00Z"; // before Spotify existed — "all time"
+/** Current window + the equal-length previous window (for metric deltas). "All" maps to nulls. */
+function toRanges(key: RangeKey): { current: Range; previous: Range; isAll: boolean } {
+  if (key === "all") {
+    return { current: { start: null, end: null }, previous: { start: null, end: null }, isAll: true };
+  }
+  const days = Number(key);
+  const now = new Date();
+  const boundary = new Date(now.getTime() - days * 86_400_000);
+  const from = new Date(now.getTime() - 2 * days * 86_400_000);
+  return {
+    current: { start: boundary.toISOString(), end: now.toISOString() },
+    previous: { start: from.toISOString(), end: boundary.toISOString() },
+    isAll: false,
+  };
+}
+
+async function loadFromDb(current: Range, previous: Range, isAll: boolean) {
+  const [s, ta, tt, rp, dt, pbh] = await Promise.all([
+    listeningSummary(current),
+    topArtists(current, 10),
+    topTracks(current, 10),
+    recentPlays(50),
+    dailyTrend(current),
+    playsByHour(current),
+  ]);
+  summary.value = s;
+  artists.value = ta;
+  tracks.value = tt;
+  recent.value = rp;
+  daily.value = dt;
+  hours.value = pbh;
+  prevSummary.value = isAll ? null : await listeningSummary(previous);
+}
+
+function loadFromSample(current: Range, previous: Range, isAll: boolean) {
+  const data = sampleStats(current);
+  summary.value = data.summary;
+  artists.value = data.topArtists;
+  tracks.value = data.topTracks;
+  daily.value = data.dailyTrend;
+  hours.value = data.playsByHour;
+  recent.value = sampleRecentPlays(50);
+  prevSummary.value = isAll ? null : sampleStats(previous).summary;
+}
 
 async function load() {
   loading.value = true;
-  const now = new Date();
-  const days = range.value === "all" ? null : Number(range.value);
-  // One request covers current + previous window; split client-side.
-  const fromIso = days ? new Date(now.getTime() - 2 * days * 86_400_000).toISOString() : EPOCH;
-  const boundaryIso = days ? new Date(now.getTime() - days * 86_400_000).toISOString() : EPOCH;
+  const { current, previous, isAll } = toRanges(range.value);
   try {
-    let all: TrackRow[];
-    try {
-      all = await fetchTracks(fromIso, now.toISOString());
+    if (isTauri) {
       usingSample.value = false;
-    } catch {
-      all = sampleTracks(fromIso, now.toISOString());
+      await loadFromDb(current, previous, isAll);
+    } else {
       usingSample.value = true;
+      loadFromSample(current, previous, isAll);
     }
-    rows.value = all.filter((r) => r.played_at >= boundaryIso);
-    prevRows.value = days ? all.filter((r) => r.played_at < boundaryIso) : [];
   } finally {
     loading.value = false;
   }
 }
-onMounted(load);
+
+onMounted(async () => {
+  if (isTauri) {
+    const result = await syncOnStartup();
+    if ("offline" in result) {
+      offlineNotice.value = true;
+    } else {
+      console.log(`Startup sync: inserted ${result.inserted} new play(s).`);
+    }
+  }
+  await load();
+});
 watch(range, load);
 
-// SPIKE(task-1): remove in task 5 — proves tauri-plugin-sql/sqlx can read the
-// shared .sql file with ?N indexed params against the real local cache DB.
-onMounted(async () => {
-  try {
-    const topArtistsSql = `
-SELECT artist_name,
-       SUM(ms_played) / 60000 AS total_mins,
-       COUNT(*) AS play_count
-FROM listening_history
-WHERE artist_name IS NOT NULL
-  AND (?1 IS NULL OR played_at >= ?1)
-  AND (?2 IS NULL OR played_at <= ?2)
-GROUP BY artist_name
-ORDER BY total_mins DESC
-LIMIT ?3`;
-    const db = await Database.load(
-      "sqlite:C:/Users/mdbs-user/Documents/Projects/spotify_sqlite/data/history.db"
-    );
-    const rows = await db.select(topArtistsSql, [null, null, 5]);
-    console.log("SPIKE(task-1) top_artists rows:", rows);
-  } catch (err) {
-    console.error("SPIKE(task-1) tauri-plugin-sql check failed:", err);
-  }
-});
-
 const period = computed(() => {
-  if (rows.value.length === 0) return "no data";
+  if (!summary.value || summary.value.total_plays === 0) return "no data";
   const fmt = (iso: string) => iso.slice(0, 10);
-  return `${fmt(rows.value[0].played_at)} ~ ${fmt(rows.value[rows.value.length - 1].played_at)}`;
+  return `${fmt(summary.value.earliest_played_at!)} ~ ${fmt(summary.value.latest_played_at!)}`;
 });
 
-const current = computed(() => metrics(rows.value));
-const previous = computed(() => metrics(prevRows.value));
-const tiles = computed(() => [
-  { label: "Plays", value: String(current.value.plays), d: delta(current.value.plays, previous.value.plays) },
-  {
-    label: "Listening time",
-    value: formatMinutes(current.value.minutes),
-    d: delta(current.value.minutes, previous.value.minutes),
-  },
-  {
-    label: "Unique artists",
-    value: String(current.value.uniqueArtists),
-    d: delta(current.value.uniqueArtists, previous.value.uniqueArtists),
-  },
-  {
-    label: "Unique tracks",
-    value: String(current.value.uniqueTracks),
-    d: delta(current.value.uniqueTracks, previous.value.uniqueTracks),
-  },
-]);
+const tiles = computed(() => {
+  const cur = summary.value;
+  const prev = prevSummary.value;
+  const plays = cur?.total_plays ?? 0;
+  const mins = cur?.total_mins_played ?? 0;
+  const uArtists = cur?.unique_artists ?? 0;
+  const uTracks = cur?.unique_tracks ?? 0;
+  return [
+    { label: "Plays", value: String(plays), d: prev ? delta(plays, prev.total_plays) : null },
+    {
+      label: "Listening time",
+      value: formatMinutes(mins),
+      d: prev ? delta(mins, prev.total_mins_played ?? 0) : null,
+    },
+    {
+      label: "Unique artists",
+      value: String(uArtists),
+      d: prev ? delta(uArtists, prev.unique_artists) : null,
+    },
+    {
+      label: "Unique tracks",
+      value: String(uTracks),
+      d: prev ? delta(uTracks, prev.unique_tracks) : null,
+    },
+  ];
+});
 
-const topArtists = computed(() => topArtistsByTime(rows.value));
-const topTracks = computed(() => topTracksByPlays(rows.value));
-const recent = computed(() =>
-  [...rows.value].sort((a, b) => b.played_at.localeCompare(a.played_at)).slice(0, 50)
-);
+const hasData = computed(() => (summary.value?.total_plays ?? 0) > 0);
+
 const lastUpdated = computed(() =>
-  rows.value.length ? recent.value[0].played_at.replace("T", " ").slice(0, 16) + " UTC" : "—"
+  recent.value.length ? recent.value[0].played_at.replace("T", " ").slice(0, 16) + " UTC" : "—"
 );
 
 const seriesColor = computed(() => (dark.value ? "#3987e5" : "#2a78d6"));
 
-const hourTraces = computed(() => [
-  {
-    type: "bar" as const,
-    x: [...Array(24).keys()],
-    y: playsByHour(rows.value),
-    marker: { color: seriesColor.value },
-    hovertemplate: "%{y} plays<extra></extra>",
-  },
-]);
+const hourTraces = computed(() => {
+  const counts = new Array(24).fill(0);
+  for (const h of hours.value) counts[h.hour] = h.play_count;
+  return [
+    {
+      type: "bar" as const,
+      x: [...Array(24).keys()],
+      y: counts,
+      marker: { color: seriesColor.value },
+      hovertemplate: "%{y} plays<extra></extra>",
+    },
+  ];
+});
 const hourLayout = computed(() => ({
   xaxis: { title: { text: "Hour of day (local)" }, dtick: 2 },
   bargap: 0.25, // thin marks with a visible surface gap between bars
 }));
 
-const trendTraces = computed(() => {
-  const daily = minutesByDay(rows.value);
-  return [
-    {
-      type: "scatter" as const,
-      mode: "lines" as const,
-      x: daily.map((d) => d.day),
-      y: daily.map((d) => d.minutes),
-      line: { color: seriesColor.value, width: 2 },
-      hovertemplate: "%{y} min<extra></extra>",
-    },
-  ];
-});
+const trendTraces = computed(() => [
+  {
+    type: "scatter" as const,
+    mode: "lines" as const,
+    x: daily.value.map((d) => d.bucket),
+    y: daily.value.map((d) => d.total_mins),
+    line: { color: seriesColor.value, width: 2 },
+    hovertemplate: "%{y} min<extra></extra>",
+  },
+]);
 </script>
 
 <template>
@@ -175,6 +215,9 @@ const trendTraces = computed(() => {
     Showing <strong>sample data</strong> — no Worker configured. Set WORKER_URL / WORKER_AUTH_TOKEN
     in the repo root .env and restart the dev server.
   </p>
+  <p v-if="offlineNotice" class="banner">
+    Data not synced (offline) — showing last cached data.
+  </p>
 
   <div :class="{ loading }">
     <div class="metrics">
@@ -194,9 +237,9 @@ const trendTraces = computed(() => {
         <table>
           <thead><tr><th>Artist</th><th class="num">Listening time</th></tr></thead>
           <tbody>
-            <tr v-for="a in topArtists" :key="a.artist">
-              <td>{{ a.artist }}</td>
-              <td class="num">{{ formatMinutes(a.minutes) }}</td>
+            <tr v-for="a in artists" :key="a.artist_name">
+              <td>{{ a.artist_name }}</td>
+              <td class="num">{{ formatMinutes(a.total_mins) }}</td>
             </tr>
           </tbody>
         </table>
@@ -206,11 +249,11 @@ const trendTraces = computed(() => {
         <table>
           <thead><tr><th>Track</th><th>Artist</th><th class="num">Plays</th><th>Spotify</th></tr></thead>
           <tbody>
-            <tr v-for="t in topTracks" :key="t.trackId">
-              <td>{{ t.track }}</td>
-              <td>{{ t.artist }}</td>
-              <td class="num">{{ t.plays }}</td>
-              <td><a :href="spotifyUrl(t.trackId)" target="_blank" rel="noopener">Open</a></td>
+            <tr v-for="t in tracks" :key="t.track_id">
+              <td>{{ t.track_name }}</td>
+              <td>{{ t.artist_name }}</td>
+              <td class="num">{{ t.play_count }}</td>
+              <td><a :href="spotifyUrl(t.track_id)" target="_blank" rel="noopener">Open</a></td>
             </tr>
           </tbody>
         </table>
@@ -219,13 +262,13 @@ const trendTraces = computed(() => {
 
     <div class="card">
       <h3>Daily Activity Pattern</h3>
-      <PlotChart v-if="rows.length" :traces="hourTraces" :layout="hourLayout" :dark="dark" />
+      <PlotChart v-if="hasData" :traces="hourTraces" :layout="hourLayout" :dark="dark" />
       <p v-else>No data in this period.</p>
     </div>
 
     <div class="card">
       <h3>Listening Trend</h3>
-      <PlotChart v-if="rows.length" :traces="trendTraces" :dark="dark" />
+      <PlotChart v-if="hasData" :traces="trendTraces" :dark="dark" />
       <p v-else>No data in this period.</p>
     </div>
 
@@ -242,7 +285,7 @@ const trendTraces = computed(() => {
           <tr><th>Played at (UTC)</th><th>Track</th><th>Artist</th><th>Album</th><th>Spotify</th></tr>
         </thead>
         <tbody>
-          <tr v-for="r in recent" :key="r.id">
+          <tr v-for="r in recent" :key="`${r.track_id}-${r.played_at}`">
             <td>{{ r.played_at.replace("T", " ").slice(0, 19) }}</td>
             <td>{{ r.track_name }}</td>
             <td>{{ r.artist_name }}</td>
