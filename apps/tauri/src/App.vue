@@ -32,7 +32,8 @@ const RANGES: { key: RangeKey; label: string }[] = [
 const range = ref<RangeKey>("30");
 const loading = ref(false);
 const usingSample = ref(false);
-const offlineNotice = ref(false);
+const offlineNotice = ref<"unconfigured" | "error" | null>(null);
+const loadFailedNotice = ref(false);
 
 const summary = ref<ListeningSummary | null>(null);
 const prevSummary = ref<ListeningSummary | null>(null);
@@ -105,6 +106,13 @@ async function load() {
       usingSample.value = true;
       loadFromSample(current, previous, isAll);
     }
+  } catch (e) {
+    console.error("Failed to load dashboard data:", e);
+    // Real data failed (db/query error) — fall back to sample data so the
+    // dashboard still renders something, same as browser mode.
+    loadFailedNotice.value = true;
+    usingSample.value = true;
+    loadFromSample(current, previous, isAll);
   } finally {
     loading.value = false;
   }
@@ -114,7 +122,7 @@ onMounted(async () => {
   if (isTauri) {
     const result = await syncOnStartup();
     if ("offline" in result) {
-      offlineNotice.value = true;
+      offlineNotice.value = result.reason;
     } else {
       console.log(`Startup sync: inserted ${result.inserted} new play(s).`);
     }
@@ -211,12 +219,20 @@ const trendTraces = computed(() => [
     <span class="period">Period: {{ period }}</span>
   </div>
 
-  <p v-if="usingSample" class="banner">
-    Showing <strong>sample data</strong> — no Worker configured. Set WORKER_URL / WORKER_AUTH_TOKEN
-    in the repo root .env and restart the dev server.
+  <p v-if="usingSample && !loadFailedNotice" class="banner">
+    Showing <strong>sample data</strong> — the browser build always shows sample data. Run
+    <code>npm run tauri dev</code> for real data from the local cache.
   </p>
-  <p v-if="offlineNotice" class="banner">
-    Data not synced (offline) — showing last cached data.
+  <p v-if="loadFailedNotice" class="banner">
+    Could not load real data — showing <strong>sample data</strong> instead. Check the console for
+    details.
+  </p>
+  <p v-if="offlineNotice === 'unconfigured'" class="banner">
+    Data not synced — no Worker configured. Set WORKER_URL / WORKER_AUTH_TOKEN in the repo root
+    .env and restart the dev server.
+  </p>
+  <p v-if="offlineNotice === 'error'" class="banner">
+    Data not synced (sync failed) — showing last cached data.
   </p>
 
   <div :class="{ loading }">

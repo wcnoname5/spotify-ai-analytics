@@ -25,6 +25,12 @@ export interface TrackRow {
   played_at: string; // ISO-8601 UTC
   ms_played?: number | null;
   source?: string | null;
+  platform?: string | null;
+  conn_country?: string | null;
+  reason_start?: string | null;
+  reason_end?: string | null;
+  shuffle?: number | null;
+  skipped?: number | null;
 }
 
 const SAMPLE_EPOCH = "2008-01-01T00:00:00Z"; // before Spotify existed — "all time"
