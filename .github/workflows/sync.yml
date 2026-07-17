@@ -1,12 +1,12 @@
 name: sync
 
-# Hourly Spotify sync -> D1.
-# Setup: docs/DEPLOY.md. Trust this one only after a `sync-test.yml` dry run
-# turns green. Note: the cron only fires when this file is on the default branch (main).
+# Manual-fallback Spotify sync -> D1.
+# The hourly cron moved to the Cloudflare Worker's scheduled() handler
+# (worker/src/sync.ts, crons = ["7 * * * *"]). Keep this workflow_dispatch-only
+# path as a manual fallback; don't re-add `schedule` — two writers race on
+# Spotify refresh-token rotation.
 
 on:
-  schedule:
-    - cron: "23 * * * *" # hourly, off the top-of-hour congestion window
   workflow_dispatch:
 
 concurrency:

@@ -4,7 +4,7 @@ Personal Spotify analytics app. Target architecture (see `spotify-project-spec.m
 
 - **Cloudflare D1** is the single source of truth (listening history + encrypted Spotify tokens)
 - **Cloudflare Worker** (TypeScript, `worker/`) is the *only* thing that talks to D1 — Bearer-token gated
-- **GitHub Actions cron** (hourly, Python) pulls recent plays from the Spotify API and writes them to D1 via the Worker
+- **Worker cron** (hourly `scheduled()` handler in `worker/src/sync.ts`) pulls recent plays from the Spotify API into D1 directly; the old GitHub Actions workflow remains as a `workflow_dispatch` manual fallback only
 - **Local SQLite** is a pull-only sync cache of D1 (never written to independently); MCP and report generation read it
 
 ---
@@ -30,7 +30,7 @@ tests/                # Pytest suite (tests/core, tests/mcp)
 - Run `uv run pytest` before declaring any task done
 - D1 is the source of truth; local SQLite is a cache — all D1 access goes through the Worker, never direct
 - All Spotify API calls go through `packages/core/spotify_core/spotify_client/` only
-- Encrypt tokens (Fernet) before they touch SQLite or the wire — the Worker/D1 only ever see ciphertext; decrypt only inside `spotify_client/`
+- Encrypt tokens (Fernet) before they touch SQLite or the wire — D1 only ever sees ciphertext; decrypt only inside `spotify_client/` (Python: reauth wizard/MCP) and the Worker cron sync (`worker/src/fernet.ts` + `sync.ts`)
 - The D1 schema is generated from `spotify_core/db/schema.py` — never hand-author a second schema
 
 ### Never
@@ -52,7 +52,7 @@ Check `.env.example`, tunables with defaults live in `spotify_core/config.py`.
 uv sync                                # install all Python dependencies
 uv run pytest                          # run tests
 uv run python apps/mcp/server.py      # run MCP server directly
-uv run python scripts/sync.py         # cron sync: Spotify API -> D1 (needs WORKER_* env)
+uv run python scripts/sync.py         # manual-fallback sync: Spotify API -> D1 (needs WORKER_* env); hourly cron runs in the Worker
 uv run python scripts/local_sync.py   # refresh local SQLite cache from D1
 cd worker && npm run typecheck         # Worker typecheck (no unit tests by choice)
 cd worker && npx wrangler deploy       # deploy the Worker

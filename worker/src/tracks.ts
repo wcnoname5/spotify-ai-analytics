@@ -37,7 +37,7 @@ const COLUMNS = [
   "skipped",
 ] as const;
 
-const INSERT_SQL = `INSERT OR IGNORE INTO listening_history (${COLUMNS.join(
+export const INSERT_SQL = `INSERT OR IGNORE INTO listening_history (${COLUMNS.join(
   ", "
 )}) VALUES (${COLUMNS.map(() => "?").join(", ")})`;
 
