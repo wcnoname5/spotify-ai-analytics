@@ -109,12 +109,8 @@ async function load() {
     }
   } catch (e) {
     console.error("Failed to load dashboard data:", e);
-    // Real data failed (db/query error) — fall back to sample data so the
-    // dashboard still renders something, same as browser mode.
     loadFailedNotice.value = true;
     loadFailedDetail.value = e instanceof Error ? e.message : String(e);
-    usingSample.value = true;
-    loadFromSample(current, previous, isAll);
   } finally {
     loading.value = false;
   }

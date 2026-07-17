@@ -1,6 +1,6 @@
 // Thin async wrappers around the shared .sql/ files (packages/core/spotify_core/db/sql),
 // imported as raw text via the `@sql` alias and run against the local cache DB (db.ts).
-// Param order mirrors the Task 2 convention: ?1=start, ?2=end, ?3=tz modifier (where used),
+// Param order convention: ?1=start, ?2=end, ?3=tz modifier (where used),
 // trailing params (LIMIT, ...) after.
 import listeningSummarySql from "@sql/listening_summary.sql?raw";
 import topArtistsSql from "@sql/top_artists.sql?raw";

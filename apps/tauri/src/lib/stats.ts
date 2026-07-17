@@ -1,6 +1,5 @@
-// Pure formatters shared by both the Tauri (SQL-backed) and sample-data
-// rendering paths. Aggregation now happens in SQL (queries.ts) or, for the
-// sample fallback, in api.ts's sampleStats/sampleRecentPlays.
+// Pure formatters shared by both the Tauri (SQL-backed) and sample-data rendering paths.
+// Aggregation now happens in SQL (queries.ts) or, for the sample fallback, in api.ts's sampleStats/sampleRecentPlays.
 
 /** % change vs a previous value; null when there is no baseline. */
 export function delta(current: number, previous: number): number | null {

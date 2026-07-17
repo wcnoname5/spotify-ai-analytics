@@ -1,8 +1,7 @@
 // Sample-data fallback for browser dev (`npm run dev`, no Tauri runtime). The
 // real Worker/D1 API path lives in sync.ts (startup sync into local SQLite);
-// this module now only produces deterministic sample rows and aggregates
-// them into the same shapes queries.ts returns, so App.vue can render
-// standalone without Tauri.
+// this module produces deterministic sample rows and aggregates them into the same shapes queries.ts returns
+// App.vue can render standalone without Tauri.
 import type {
   Range,
   ListeningSummary,
@@ -13,9 +12,7 @@ import type {
   PlaysByHour,
 } from "./queries";
 
-// Mirror of the Worker's row shape (worker/src/tracks.ts). Deliberately
-// copied, not imported — the two packages keep separate dependency trees;
-// extract a shared types file if this surface ever grows past one interface.
+// listening history rows, as returned by the Worker/D1 API and inserted into local SQLite.
 export interface TrackRow {
   id: string;
   track_id: string;
@@ -33,6 +30,7 @@ export interface TrackRow {
   skipped?: number | null;
 }
 
+// TODO: sample can be deleted in the future.
 const SAMPLE_EPOCH = "2008-01-01T00:00:00Z"; // before Spotify existed — "all time"
 
 /** Deterministic sample data so the shell is workable without a Worker. */
