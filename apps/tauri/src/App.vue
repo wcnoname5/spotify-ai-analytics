@@ -93,8 +93,8 @@ function toRanges(key: RangeKey | "custom"): { current: Range; previous: Range; 
 async function loadFromDb(current: Range, previous: Range, isAll: boolean) {
   const [s, ta, tt, rp, dt, pbh] = await Promise.all([
     listeningSummary(current),
-    topArtists(current, 10),
-    topTracks(current, 10),
+    topArtists(current, 20),
+    topTracks(current, 20),
     recentPlays(50),
     dailyTrend(current),
     playsByHour(current),
@@ -109,14 +109,14 @@ async function loadFromDb(current: Range, previous: Range, isAll: boolean) {
 }
 
 function loadFromSample(current: Range, previous: Range, isAll: boolean) {
-  const data = sampleStats(current);
+  const data = sampleStats(current, 20);
   summary.value = data.summary;
   artists.value = data.topArtists;
   tracks.value = data.topTracks;
   daily.value = data.dailyTrend;
   hours.value = data.playsByHour;
   recent.value = sampleRecentPlays(50);
-  prevSummary.value = isAll ? null : sampleStats(previous).summary;
+  prevSummary.value = isAll ? null : sampleStats(previous, 20).summary;
 }
 
 async function load() {
@@ -282,31 +282,33 @@ const trendTraces = computed(() => [
     <div class="cols">
       <div class="card">
         <h3>Top Artists — by listening time</h3>
-        <table>
-          <thead><tr><th>Artist</th><th class="num">Listening time</th></tr></thead>
-          <!-- TODO: add a slider (constraint the box max height), max shown up to 20 -->
-          <tbody>
-            <tr v-for="a in artists" :key="a.artist_name">
-              <td>{{ a.artist_name }}</td>
-              <td class="num">{{ formatMinutes(a.total_mins) }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Artist</th><th class="num">Listening time</th></tr></thead>
+            <tbody>
+              <tr v-for="a in artists" :key="a.artist_name">
+                <td>{{ a.artist_name }}</td>
+                <td class="num">{{ formatMinutes(a.total_mins) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       <div class="card">
         <h3>Top Tracks — by play count</h3>
-        <table>
-          <!-- TODO: add a slider (constraint the box max height), max shown up to 20 -->
-          <thead><tr><th>Track</th><th>Artist</th><th class="num">Plays</th><th>Spotify</th></tr></thead>
-          <tbody>
-            <tr v-for="t in tracks" :key="t.track_id">
-              <td>{{ t.track_name }}</td>
-              <td>{{ t.artist_name }}</td>
-              <td class="num">{{ t.play_count }}</td>
-              <td><a :href="spotifyUrl(t.track_id)" target="_blank" rel="noopener">Open</a></td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Track</th><th>Artist</th><th class="num">Plays</th><th>Spotify</th></tr></thead>
+            <tbody>
+              <tr v-for="t in tracks" :key="t.track_id">
+                <td>{{ t.track_name }}</td>
+                <td>{{ t.artist_name }}</td>
+                <td class="num">{{ t.play_count }}</td>
+                <td><a :href="spotifyUrl(t.track_id)" target="_blank" rel="noopener">Open</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -335,7 +337,7 @@ const trendTraces = computed(() => [
 
     <details class="card">
       <summary>Recently Played</summary>
-      <div class="recent-table-scroll">
+      <div class="table-scroll">
         <table>
           <thead>
             <tr><th>Played at (UTC)</th><th>Track</th><th>Artist</th><th>Album</th><th>Spotify</th></tr>

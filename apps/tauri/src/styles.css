@@ -186,9 +186,14 @@ details > summary {
   margin-bottom: 0.6rem;
 }
 
-.recent-table-scroll {
+.table-scroll {
   max-height: 24rem;
   overflow-y: auto;
+}
+.table-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
 }
 
 .loading {
