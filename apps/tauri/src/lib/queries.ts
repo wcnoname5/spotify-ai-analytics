@@ -8,11 +8,17 @@ import topTracksSql from "@sql/top_tracks.sql?raw";
 import recentPlaysSql from "@sql/recent_plays.sql?raw";
 import trendDailySql from "@sql/trend_daily.sql?raw";
 import playsByHourSql from "@sql/plays_by_hour.sql?raw";
+import dataRangeSql from "@sql/data_range.sql?raw";
 import { getDb } from "./db";
 
 export interface Range {
   start: string | null;
   end: string | null;
+}
+
+export interface DataRange {
+  earliest: string | null;
+  latest: string | null;
 }
 
 /** SQLite `datetime(..., modifier)` string for the browser's local UTC offset. */
@@ -95,4 +101,11 @@ export interface PlaysByHour {
 export async function playsByHour(range: Range): Promise<PlaysByHour[]> {
   const db = await getDb();
   return db.select<PlaysByHour[]>(playsByHourSql, [range.start, range.end, tzModifier()]);
+}
+
+/** Global min/max played_at — drives the date inputs' min/max validation. */
+export async function dataRange(): Promise<DataRange> {
+  const db = await getDb();
+  const rows = await db.select<DataRange[]>(dataRangeSql, []);
+  return rows[0];
 }

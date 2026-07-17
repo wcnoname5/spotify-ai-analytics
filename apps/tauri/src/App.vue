@@ -6,6 +6,7 @@ import { isTauri } from "./lib/db";
 import { syncOnStartup } from "./lib/sync";
 import {
   dailyTrend,
+  dataRange,
   listeningSummary,
   playsByHour,
   recentPlays,
@@ -29,7 +30,12 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: "all", label: "All time" },
 ];
 
-const range = ref<RangeKey>("30");
+const range = ref<RangeKey | "custom">("30");
+const customStart = ref(""); // YYYY-MM-DD, "" = unset
+const customEnd = ref("");
+const minDate = ref(""); // earliest played_at date, set on mount (Tauri only)
+const today = new Date();
+const maxDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 const loading = ref(false);
 const usingSample = ref(false);
 const offlineNotice = ref<"unconfigured" | "error" | null>(null);
@@ -51,8 +57,25 @@ const onTheme = (e: MediaQueryListEvent) => (dark.value = e.matches);
 onMounted(() => darkQuery.addEventListener("change", onTheme));
 onUnmounted(() => darkQuery.removeEventListener("change", onTheme));
 
+function setPreset(k: RangeKey) {
+  customStart.value = "";
+  customEnd.value = "";
+  range.value = k;
+}
+
 /** Current window + the equal-length previous window (for metric deltas). "All" maps to nulls. */
-function toRanges(key: RangeKey): { current: Range; previous: Range; isAll: boolean } {
+function toRanges(key: RangeKey | "custom"): { current: Range; previous: Range; isAll: boolean } {
+  if (key === "custom") {
+    const start = customStart.value ? new Date(customStart.value + "T00:00:00").toISOString() : null;
+    const end = customEnd.value ? new Date(customEnd.value + "T23:59:59.999").toISOString() : null;
+    if (start && end) {
+      const len = Date.parse(end) - Date.parse(start);
+      const prevStart = new Date(Date.parse(start) - len).toISOString();
+      return { current: { start, end }, previous: { start: prevStart, end: start }, isAll: false };
+    }
+    // Open-ended range: no defined "previous", deltas hide (isAll behavior).
+    return { current: { start, end }, previous: { start: null, end: null }, isAll: true };
+  }
   if (key === "all") {
     return { current: { start: null, end: null }, previous: { start: null, end: null }, isAll: true };
   }
@@ -118,6 +141,8 @@ async function load() {
 
 onMounted(async () => {
   if (isTauri) {
+    const dr = await dataRange();
+    if (dr.earliest) minDate.value = dr.earliest.slice(0, 10);
     const result = await syncOnStartup();
     if ("offline" in result) {
       offlineNotice.value = result.reason;
@@ -128,6 +153,12 @@ onMounted(async () => {
   await load();
 });
 watch(range, load);
+// Editing either date switches to custom and reloads.
+watch([customStart, customEnd], () => {
+  if (!customStart.value && !customEnd.value) return;
+  if (range.value === "custom") load();
+  else range.value = "custom"; // watch(range, load) fires the load
+});
 
 const period = computed(() => {
   if (!summary.value || summary.value.total_plays === 0) return "no data";
@@ -209,11 +240,13 @@ const trendTraces = computed(() => [
       :key="r.key"
       class="range-btn"
       :class="{ current: range === r.key }"
-      @click="range = r.key"
+      @click="setPreset(r.key)"
     >
       {{ r.label }}
     </button>
-    <!-- TODO: custom from/to range picker (presets first per dataviz interaction spec) -->
+    <input type="date" v-model="customStart" :min="minDate || undefined" :max="customEnd || maxDate" />
+    <span>–</span>
+    <input type="date" v-model="customEnd" :min="customStart || minDate || undefined" :max="maxDate" />
     <span class="period">Period: {{ period }}</span>
   </div>
 
