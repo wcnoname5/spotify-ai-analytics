@@ -49,6 +49,7 @@ const tracks = ref<TopTrack[]>([]);
 const recent = ref<RecentPlay[]>([]);
 const daily = ref<DailyTrend[]>([]);
 const hours = ref<PlaysByHour[]>([]);
+const hourMetric = ref<"plays" | "mins">("plays");
 
 // Theme (drives Plotly chrome; CSS handles the rest)
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -202,15 +203,16 @@ const lastUpdated = computed(() =>
 const seriesColor = computed(() => (dark.value ? "#3987e5" : "#2a78d6"));
 
 const hourTraces = computed(() => {
-  const counts = new Array(24).fill(0);
-  for (const h of hours.value) counts[h.hour] = h.play_count;
+  const y = new Array(24).fill(0);
+  for (const h of hours.value) y[h.hour] = hourMetric.value === "plays" ? h.play_count : h.total_mins;
   return [
     {
       type: "bar" as const,
       x: [...Array(24).keys()],
-      y: counts,
+      y,
       marker: { color: seriesColor.value },
-      hovertemplate: "%{y} plays<extra></extra>",
+      hovertemplate:
+        hourMetric.value === "plays" ? "%{y} plays<extra></extra>" : "%{y} min<extra></extra>",
     },
   ];
 });
@@ -313,9 +315,13 @@ const trendTraces = computed(() => [
     </div>
 
     <div class="card">
-      <h3>Daily Activity Pattern</h3>
-      <!-- TODO: 1. add a button at the top-right has two options: play count and hour plays -->
-      <!-- TODO: 2. if change to "hour plays", the chart will display hourly play counts (also hover_template)-->
+      <div class="card-head">
+        <h3>Daily Activity Pattern</h3>
+        <div>
+          <button class="range-btn" :class="{ current: hourMetric === 'plays' }" @click="hourMetric = 'plays'">Plays</button>
+          <button class="range-btn" :class="{ current: hourMetric === 'mins' }" @click="hourMetric = 'mins'">Listening time</button>
+        </div>
+      </div>
       <PlotChart v-if="hasData" :traces="hourTraces" :layout="hourLayout" :dark="dark" />
       <p v-else>No data in this period.</p>
     </div>

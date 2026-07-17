@@ -96,6 +96,7 @@ export async function dailyTrend(range: Range): Promise<DailyTrend[]> {
 export interface PlaysByHour {
   hour: number;
   play_count: number;
+  total_mins: number;
 }
 
 export async function playsByHour(range: Range): Promise<PlaysByHour[]> {

@@ -150,9 +150,17 @@ export function sampleStats(range: Range, limit = 10): SampleData {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([bucket, e]) => ({ bucket, total_mins: Math.round(e.mins), play_count: e.plays }));
 
-  const hourCounts = new Array(24).fill(0);
-  for (const r of rows) hourCounts[new Date(r.played_at).getHours()] += 1;
-  const playsByHour: PlaysByHour[] = hourCounts.map((play_count, hour) => ({ hour, play_count }));
+  const hourAgg = Array.from({ length: 24 }, () => ({ plays: 0, mins: 0 }));
+  for (const r of rows) {
+    const h = new Date(r.played_at).getHours();
+    hourAgg[h].plays += 1;
+    hourAgg[h].mins += (r.ms_played ?? 0) / 60_000;
+  }
+  const playsByHour: PlaysByHour[] = hourAgg.map((e, hour) => ({
+    hour,
+    play_count: e.plays,
+    total_mins: Math.round(e.mins),
+  }));
 
   return { summary, topArtists, topTracks, dailyTrend, playsByHour };
 }
