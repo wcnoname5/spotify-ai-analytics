@@ -28,7 +28,7 @@
 [Spotify API]
      │ 每小時
      ▼
-[GitHub Actions cron + Python] ──write──▶ [Cloudflare D1]
+[Worker cron (scheduled(), TS)] ──write──▶ [Cloudflare D1]
                                                 │
                                      [Cloudflare Worker API]
                                        (Bearer token 驗證)
@@ -104,7 +104,7 @@
 ## 6. 建議實作順序
 
 1. Worker API + D1 schema 定案，含 auth middleware
-2. GitHub Actions cron script 上線，驗證資料持續寫入
+2. Worker cron（scheduled() handler）上線，驗證資料持續寫入
 3. 本地同步腳本（增量 sync 邏輯）
 4. Python + LangChain 報告生成，先跑通本地 SQLite → 報告輸出
 5. Vue dashboard 基本圖表 + filter（先在瀏覽器測試，不急著包 Tauri）

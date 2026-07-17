@@ -1,8 +1,9 @@
-"""CI entry point: sync recent plays from the Spotify API into D1 via the Worker.
+"""DEPRECATED manual fallback: sync recent plays from the Spotify API into D1.
 
-Run by .github/workflows/sync.yml. D1 (through the Worker) is the single
-source of truth — no local DB round trip, no R2.
-Prints only row counts — Actions logs on a public repo are world-readable.
+The hourly cron now runs inside the Worker (worker/src/sync.ts); this script
+is only run by the workflow_dispatch-only .github/workflows/sync.yml and will
+be deleted once the Worker cron has proven itself.
+Prints only row counts for logging.
 """
 import os
 import sys

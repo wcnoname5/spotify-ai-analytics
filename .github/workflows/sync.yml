@@ -1,6 +1,7 @@
 name: sync
 
-# Manual-fallback Spotify sync -> D1.
+# DEPRECATED — manual-fallback Spotify sync -> D1; will be deleted once the
+# Worker cron has proven itself.
 # The hourly cron moved to the Cloudflare Worker's scheduled() handler
 # (worker/src/sync.ts, crons = ["7 * * * *"]). Keep this workflow_dispatch-only
 # path as a manual fallback; don't re-add `schedule` — two writers race on
