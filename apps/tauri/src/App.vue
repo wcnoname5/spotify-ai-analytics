@@ -19,7 +19,7 @@ import {
   type TopArtist,
   type TopTrack,
 } from "./lib/queries";
-import { delta, formatMinutes, spotifyUrl } from "./lib/stats";
+import { delta, formatMinutes, spotifyUrl } from "./lib/formatters";
 
 type RangeKey = "7" | "30" | "90" | "all";
 const RANGES: { key: RangeKey; label: string }[] = [
@@ -251,6 +251,7 @@ const trendTraces = computed(() => [
         <h3>Top Artists — by listening time</h3>
         <table>
           <thead><tr><th>Artist</th><th class="num">Listening time</th></tr></thead>
+          <!-- TODO: add a slider (constraint the box max height), max shown up to 20 -->
           <tbody>
             <tr v-for="a in artists" :key="a.artist_name">
               <td>{{ a.artist_name }}</td>
@@ -262,6 +263,7 @@ const trendTraces = computed(() => [
       <div class="card">
         <h3>Top Tracks — by play count</h3>
         <table>
+          <!-- TODO: add a slider (constraint the box max height), max shown up to 20 -->
           <thead><tr><th>Track</th><th>Artist</th><th class="num">Plays</th><th>Spotify</th></tr></thead>
           <tbody>
             <tr v-for="t in tracks" :key="t.track_id">
@@ -277,12 +279,17 @@ const trendTraces = computed(() => [
 
     <div class="card">
       <h3>Daily Activity Pattern</h3>
+      <!-- TODO: 1. add a button at the top-right has two options: play count and hour plays -->
+      <!-- TODO: 2. if change to "hour plays", the chart will display hourly play counts (also hover_template)-->
       <PlotChart v-if="hasData" :traces="hourTraces" :layout="hourLayout" :dark="dark" />
       <p v-else>No data in this period.</p>
     </div>
-
+    
     <div class="card">
       <h3>Listening Trend</h3>
+      <!-- TODO: 1. add a button at the top-right has two options: play count and hour plays -->
+      <!-- TODO: 2. if change to "hour plays", the chart will display hourly play counts (also hover_template)-->
+      <!-- TODO: 3. add extra options can change the granularity of x axis: day/week/month -->
       <PlotChart v-if="hasData" :traces="trendTraces" :dark="dark" />
       <p v-else>No data in this period.</p>
     </div>
@@ -294,21 +301,23 @@ const trendTraces = computed(() => [
     </div>
 
     <details class="card">
-      <summary>Recently Played (last 50)</summary>
-      <table>
-        <thead>
-          <tr><th>Played at (UTC)</th><th>Track</th><th>Artist</th><th>Album</th><th>Spotify</th></tr>
-        </thead>
-        <tbody>
-          <tr v-for="r in recent" :key="`${r.track_id}-${r.played_at}`">
-            <td>{{ r.played_at.replace("T", " ").slice(0, 19) }}</td>
-            <td>{{ r.track_name }}</td>
-            <td>{{ r.artist_name }}</td>
-            <td>{{ r.album_name }}</td>
-            <td><a :href="spotifyUrl(r.track_id)" target="_blank" rel="noopener">Open</a></td>
-          </tr>
-        </tbody>
-      </table>
+      <summary>Recently Played</summary>
+      <div class="recent-table-scroll">
+        <table>
+          <thead>
+            <tr><th>Played at (UTC)</th><th>Track</th><th>Artist</th><th>Album</th><th>Spotify</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="r in recent" :key="`${r.track_id}-${r.played_at}`">
+              <td>{{ r.played_at.replace("T", " ").slice(0, 19) }}</td>
+              <td>{{ r.track_name }}</td>
+              <td>{{ r.artist_name }}</td>
+              <td>{{ r.album_name }}</td>
+              <td><a :href="spotifyUrl(r.track_id)" target="_blank" rel="noopener">Open</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </details>
   </div>
 
