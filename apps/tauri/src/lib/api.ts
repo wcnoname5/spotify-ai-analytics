@@ -8,8 +8,9 @@ import type {
   TopArtist,
   TopTrack,
   RecentPlay,
-  DailyTrend,
+  TrendPoint,
   PlaysByHour,
+  Granularity,
 } from "./queries";
 
 // listening history rows, as returned by the Worker/D1 API and inserted into local SQLite.
@@ -73,12 +74,20 @@ export interface SampleData {
   summary: ListeningSummary;
   topArtists: TopArtist[];
   topTracks: TopTrack[];
-  dailyTrend: DailyTrend[];
+  dailyTrend: TrendPoint[];
   playsByHour: PlaysByHour[];
 }
 
+function trendKey(d: Date, g: Granularity): string {
+  if (g === "month")
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const day = new Date(d);
+  if (g === "week") day.setDate(day.getDate() - ((day.getDay() + 6) % 7)); // back to Monday
+  return `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+}
+
 /** Aggregates sample rows for `range` into the same shapes queries.ts returns. */
-export function sampleStats(range: Range, limit = 10): SampleData {
+export function sampleStats(range: Range, limit = 10, granularity: Granularity = "day"): SampleData {
   const fromIso = range.start ?? SAMPLE_EPOCH;
   const toIso = range.end ?? new Date().toISOString();
   const rows = sampleTracks(fromIso, toIso);
@@ -140,13 +149,13 @@ export function sampleStats(range: Range, limit = 10): SampleData {
   const byDay = new Map<string, { mins: number; plays: number }>();
   for (const r of rows) {
     const d = new Date(r.played_at);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const key = trendKey(d, granularity);
     const e = byDay.get(key) ?? { mins: 0, plays: 0 };
     e.mins += (r.ms_played ?? 0) / 60_000;
     e.plays += 1;
     byDay.set(key, e);
   }
-  const dailyTrend: DailyTrend[] = [...byDay.entries()]
+  const dailyTrend: TrendPoint[] = [...byDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([bucket, e]) => ({ bucket, total_mins: Math.round(e.mins), play_count: e.plays }));
 

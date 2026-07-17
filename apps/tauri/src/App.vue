@@ -5,14 +5,15 @@ import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
 import { syncOnStartup } from "./lib/sync";
 import {
-  dailyTrend,
+  trend,
   dataRange,
   listeningSummary,
   playsByHour,
   recentPlays,
   topArtists,
   topTracks,
-  type DailyTrend,
+  type TrendPoint,
+  type Granularity,
   type ListeningSummary,
   type PlaysByHour,
   type Range,
@@ -47,9 +48,11 @@ const prevSummary = ref<ListeningSummary | null>(null);
 const artists = ref<TopArtist[]>([]);
 const tracks = ref<TopTrack[]>([]);
 const recent = ref<RecentPlay[]>([]);
-const daily = ref<DailyTrend[]>([]);
+const daily = ref<TrendPoint[]>([]);
 const hours = ref<PlaysByHour[]>([]);
 const hourMetric = ref<"plays" | "mins">("plays");
+const trendMetric = ref<"plays" | "mins">("mins");
+const trendGranularity = ref<Granularity>("day");
 
 // Theme (drives Plotly chrome; CSS handles the rest)
 const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
@@ -97,7 +100,7 @@ async function loadFromDb(current: Range, previous: Range, isAll: boolean) {
     topArtists(current, 20),
     topTracks(current, 20),
     recentPlays(50),
-    dailyTrend(current),
+    trend(current, trendGranularity.value),
     playsByHour(current),
   ]);
   summary.value = s;
@@ -110,14 +113,14 @@ async function loadFromDb(current: Range, previous: Range, isAll: boolean) {
 }
 
 function loadFromSample(current: Range, previous: Range, isAll: boolean) {
-  const data = sampleStats(current, 20);
+  const data = sampleStats(current, 20, trendGranularity.value);
   summary.value = data.summary;
   artists.value = data.topArtists;
   tracks.value = data.topTracks;
   daily.value = data.dailyTrend;
   hours.value = data.playsByHour;
   recent.value = sampleRecentPlays(50);
-  prevSummary.value = isAll ? null : sampleStats(previous, 20).summary;
+  prevSummary.value = isAll ? null : sampleStats(previous, 20, trendGranularity.value).summary;
 }
 
 async function load() {
@@ -140,6 +143,13 @@ async function load() {
   }
 }
 
+async function refreshTrend() {
+  const { current } = toRanges(range.value);
+  daily.value = usingSample.value
+    ? sampleStats(current, 20, trendGranularity.value).dailyTrend
+    : await trend(current, trendGranularity.value);
+}
+
 onMounted(async () => {
   if (isTauri) {
     const dr = await dataRange();
@@ -160,6 +170,7 @@ watch([customStart, customEnd], () => {
   if (range.value === "custom") load();
   else range.value = "custom"; // watch(range, load) fires the load
 });
+watch(trendGranularity, refreshTrend);
 
 const period = computed(() => {
   if (!summary.value || summary.value.total_plays === 0) return "no data";
@@ -226,9 +237,10 @@ const trendTraces = computed(() => [
     type: "scatter" as const,
     mode: "lines" as const,
     x: daily.value.map((d) => d.bucket),
-    y: daily.value.map((d) => d.total_mins),
+    y: daily.value.map((d) => (trendMetric.value === "plays" ? d.play_count : d.total_mins)),
     line: { color: seriesColor.value, width: 2 },
-    hovertemplate: "%{y} min<extra></extra>",
+    hovertemplate:
+      trendMetric.value === "plays" ? "%{y} plays<extra></extra>" : "%{y} min<extra></extra>",
   },
 ]);
 </script>
@@ -327,10 +339,15 @@ const trendTraces = computed(() => [
     </div>
     
     <div class="card">
-      <h3>Listening Trend</h3>
-      <!-- TODO: 1. add a button at the top-right has two options: play count and hour plays -->
-      <!-- TODO: 2. if change to "hour plays", the chart will display hourly play counts (also hover_template)-->
-      <!-- TODO: 3. add extra options can change the granularity of x axis: day/week/month -->
+      <div class="card-head">
+        <h3>Listening Trend</h3>
+        <div>
+          <button class="range-btn" :class="{ current: trendMetric === 'plays' }" @click="trendMetric = 'plays'">Plays</button>
+          <button class="range-btn" :class="{ current: trendMetric === 'mins' }" @click="trendMetric = 'mins'">Listening time</button>
+          <button v-for="g in (['day', 'week', 'month'] as const)" :key="g" class="range-btn"
+            :class="{ current: trendGranularity === g }" @click="trendGranularity = g">{{ g }}</button>
+        </div>
+      </div>
       <PlotChart v-if="hasData" :traces="trendTraces" :dark="dark" />
       <p v-else>No data in this period.</p>
     </div>

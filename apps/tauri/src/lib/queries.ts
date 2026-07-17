@@ -7,6 +7,8 @@ import topArtistsSql from "@sql/top_artists.sql?raw";
 import topTracksSql from "@sql/top_tracks.sql?raw";
 import recentPlaysSql from "@sql/recent_plays.sql?raw";
 import trendDailySql from "@sql/trend_daily.sql?raw";
+import trendWeeklySql from "@sql/trend_weekly.sql?raw";
+import trendMonthlySql from "@sql/trend_monthly.sql?raw";
 import playsByHourSql from "@sql/plays_by_hour.sql?raw";
 import dataRangeSql from "@sql/data_range.sql?raw";
 import { getDb } from "./db";
@@ -15,6 +17,8 @@ export interface Range {
   start: string | null;
   end: string | null;
 }
+
+export type Granularity = "day" | "week" | "month";
 
 export interface DataRange {
   earliest: string | null;
@@ -82,15 +86,21 @@ export async function recentPlays(limit: number): Promise<RecentPlay[]> {
   return db.select<RecentPlay[]>(recentPlaysSql, [null, null, limit]);
 }
 
-export interface DailyTrend {
+export interface TrendPoint {
   bucket: string;
   total_mins: number;
   play_count: number;
 }
 
-export async function dailyTrend(range: Range): Promise<DailyTrend[]> {
+const TREND_SQL: Record<Granularity, string> = {
+  day: trendDailySql,
+  week: trendWeeklySql,
+  month: trendMonthlySql,
+};
+
+export async function trend(range: Range, granularity: Granularity): Promise<TrendPoint[]> {
   const db = await getDb();
-  return db.select<DailyTrend[]>(trendDailySql, [range.start, range.end, tzModifier()]);
+  return db.select<TrendPoint[]>(TREND_SQL[granularity], [range.start, range.end, tzModifier()]);
 }
 
 export interface PlaysByHour {
