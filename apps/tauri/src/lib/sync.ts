@@ -1,10 +1,7 @@
-// Startup incremental sync: pull new plays from the Worker (D1) into the
-// local SQLite cache. Local SQLite is a pull-only mirror — the only writes it
-// ever gets are these INSERT OR IGNORE rows sourced from D1 via the Worker.
+// Startup incremental sync: Worker (D1) -> local SQLite pull-only mirror.
 import maxPlayedAtSql from "@sql/max_played_at.sql?raw";
 import insertTrackSql from "@sql/insert_track.sql?raw";
-// Rust-side fetch: the Worker has no CORS headers (frozen by design), and the
-// webview's own fetch enforces CORS against the localhost origin.
+// Rust-side fetch: webview fetch enforces CORS, the Worker sends no CORS headers.
 import { fetch } from "@tauri-apps/plugin-http";
 import { getDb } from "./db";
 import type { TrackRow } from "./api";
@@ -34,14 +31,8 @@ export async function syncOnStartup(): Promise<SyncResult> {
     const body = (await res.json()) as { tracks: TrackRow[] };
     const tracks = body.tracks ?? [];
 
-    // No explicit BEGIN/COMMIT here: tauri-plugin-sql's Database is backed by
-    // an sqlx connection pool, so a transaction started on one connection can
-    // have its COMMIT routed to another once anything else queries
-    // concurrently — the COMMIT then errors and leaves a pooled connection
-    // stuck mid-transaction. The inserts are `INSERT OR IGNORE` and
-    // idempotent, so running them sequentially without a wrapping
-    // transaction is safe: a partial sync is harmless and the next startup
-    // re-pulls from the same cursor.
+    // No BEGIN/COMMIT: sqlx pooling can route COMMIT to a different connection.
+    // INSERT OR IGNORE is idempotent; a partial sync re-pulls from the same cursor.
     let inserted = 0;
     for (const t of tracks) {
       const result = await db.execute(insertTrackSql, [

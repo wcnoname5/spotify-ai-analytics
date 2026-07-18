@@ -1,3 +1,4 @@
+-- Python/report-only (get_daily_activity_pattern LLM tool); TS dashboard uses plays_by_hour.sql.
 -- Time segments are local hour-of-day ranges: 0-6, 7-12, 13-18, else (19-23).
 SELECT
     strftime('%w', datetime(played_at, ?3)) AS dow,

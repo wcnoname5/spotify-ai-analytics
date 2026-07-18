@@ -28,7 +28,6 @@ tests/                # Pytest suite (tests/core, tests/mcp)
 
 ### Always
 - Use `uv` for all Python dependency management (`uv add`, `uv sync`, `uv run`); Python >= 3.12
-- Run `uv run pytest` before declaring any task done
 - D1 is the source of truth; local SQLite is a cache — all D1 access goes through the Worker, never direct
 - All Spotify API calls go through `packages/core/spotify_core/spotify_client/` only
 - Encrypt tokens (Fernet) before they touch SQLite or the wire — D1 only ever sees ciphertext; decrypt only inside `spotify_client/` (Python: reauth wizard/MCP) and the Worker cron sync (`worker/src/fernet.ts` + `sync.ts`)

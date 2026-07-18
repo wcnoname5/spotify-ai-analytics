@@ -1,6 +1,6 @@
 # Session Summary — 2026-07-16
 
-Branch: `frontend-tauri` (9 commits, b11d72d..d667d62, **not merged**).
+Branch: `frontend-tauri` (PR #14).
 Spec/plan: `docs/superpowers/specs/2026-07-16-shared-sql-local-cache-design.md`, `docs/superpowers/plans/2026-07-16-shared-sql-local-cache.md`.
 
 ## What's done
@@ -17,7 +17,7 @@ Spec/plan: `docs/superpowers/specs/2026-07-16-shared-sql-local-cache-design.md`,
 Decouple the existing LangGraph report engine from the wizard/MCP flow into a spawn-per-call script.
 - [ ] `scripts/report.py`: args `--style`, `--period` (+ dates), reads local `history.db`, prints the report to stdout
 - [ ] Reuse `spotify_core/report/` engine as-is; no new engine code
-- [ ] Verify: `uv run python scripts/report.py --style casual --period 30d` produces a report
+- [ ] Verify: `uv run python scripts/report.py --style casual --period 30d` produces a report (shell only for smoke run)
 
 ### 2. PyInstaller sidecar spike (biggest unknown — do before any report UI work)
 Prove the report engine can ship inside the Tauri app.
@@ -26,8 +26,8 @@ Prove the report engine can ship inside the Tauri app.
 - [ ] Decision gate: if unworkable (size/AV false positives), fall back to "requires local Python/uv" documented mode
 - [ ] Only after the spike: Tauri `Report` button → sidecar spawn → stream output into the UI
 
-### 3. Custom date range + dimension filters (now pure SQL, no Worker work)
-- [ ] Date range picker in App.vue (native `<input type="date">` ×2), feeding the existing `{start, end}` range params
+### 3. Dimension filters (now pure SQL, no Worker work)
+- [x] Date range picker in App.vue (done: `ed57896` + follow-ups — custom range, granularity, chart toggles)
 - [ ] Artist/source filter: new `.sql` variants (or add `?N` filter params to existing files) + thin wrappers both sides
 
 ### 4. Packaging hardening (before any distribution)
@@ -36,4 +36,4 @@ Prove the report engine can ship inside the Tauri app.
 - [ ] Tauri external links via plugin-opener; timezone display consistency check (charts local vs tables UTC)
 
 ### Ride list (known, deliberately unfixed)
-sqlx pulls mysql/pg deps via tauri-plugin-sql (upstream); Recently Played is now global last-50 (not range-scoped); sync failures show no reason detail in UI (console only); `plays_by_hour.sql` has no Python caller (TS-only by design).
+sqlx pulls mysql/pg deps via tauri-plugin-sql (upstream); Recently Played is now global last-50 (not range-scoped); sync failures show no reason detail in UI (console only); `plays_by_hour.sql` is TS-only and `activity_pattern.sql` is Python/report-only (both by design).

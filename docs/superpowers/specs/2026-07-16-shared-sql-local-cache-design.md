@@ -1,7 +1,7 @@
 # Shared SQL Module + Local-Cache Dashboard Design
 
 **Date:** 2026-07-16
-**Status:** Approved for planning
+**Status:** Implemented (branch `frontend-tauri`, PR #14)
 **Scope:** Extract analytics SQL into shared `.sql` files usable from both Python (MCP / AI report) and TypeScript (Tauri dashboard); add startup incremental sync to the Tauri app; switch the dashboard from frontend-JS aggregation over raw rows to local SQLite queries.
 
 ## Decisions (settled with user)
@@ -69,7 +69,7 @@ One statement per file, loaded as text by both languages:
 - `db.ts`: opens the shared db via tauri-plugin-sql (sqlite), absolute path injected from `HISTORY_DB_PATH` (fallback: resolved `<repo>/data/history.db`), enables WAL. If the db file/table is missing, runs `schema.sql` first.
 - SQL loading: Vite alias `@sql` → `packages/core/spotify_core/db/sql`, imported with `?raw` (embedded at build time; needs `server.fs.allow` for the path outside the app root).
 - `queries.ts`: one thin wrapper per `.sql` file mirroring the Python names; tz param computed from `Date.getTimezoneOffset()`.
-- `sync.ts`: `syncOnStartup()` — cursor from `max_played_at.sql` → `fetch(GET /api/tracks?since=)` with Bearer from injected `WORKER_AUTH_TOKEN` → batched `insert_track.sql` in one transaction.
+- `sync.ts`: `syncOnStartup()` — cursor from `max_played_at.sql` → `fetch(GET /api/tracks?since=)` with Bearer from injected `WORKER_AUTH_TOKEN` → sequential `insert_track.sql` (no wrapping transaction: sqlx pooling routes COMMIT unreliably; inserts are idempotent).
 
 ## Component 4 — dashboard switchover and deletions
 
@@ -81,12 +81,7 @@ One statement per file, loaded as text by both languages:
 - Sync failure (offline / Worker down): render from the existing cache; show a non-blocking "data not refreshed" notice.
 - Missing db **and** offline: sample-data fallback.
 - Empty result sets: queries return empty arrays; existing empty states cover the UI.
-- `INSERT OR IGNORE` + single transaction make a crashed/partial sync harmless — next startup re-pulls from the same cursor.
-
-## Risks / spike first
-
-- **The one technical risk:** `?1` indexed-param binding through tauri-plugin-sql (sqlx). Before the full rollout, spike a single query (`top_artists.sql`) end-to-end in both Python and the Tauri app. If sqlx rejects `?N`, fall back to plain positional `?` with parameter lists ordered identically in both wrappers.
-- `loadEnv`/`define` puts `WORKER_AUTH_TOKEN` into the dev bundle — acceptable for local dev; must move to Rust-side keychain before any packaged distribution (already on the roadmap).
+- Idempotent `INSERT OR IGNORE` makes a crashed/partial sync harmless — next startup re-pulls from the same cursor.
 
 ## Explicitly deferred
 
@@ -94,10 +89,4 @@ One statement per file, loaded as text by both languages:
 - Packaged-app db path strategy (appDataDir vs configured path).
 - Worker CORS headers (only needed for a pure-browser deployment that may never happen).
 - Materialized/pre-aggregated tables — 74k rows with the existing `idx_listening_history_played_at` index is milliseconds; revisit only if measurably slow.
-
-## Implementation order
-
-1. Spike: `top_artists.sql` running from both Python and Tauri (param binding proof).
-2. Extract all SQL files + Python refactor (`queries.py`, `local_sync.py`, `schema.py`); pytest green.
-3. TS layer: `db.ts`, `queries.ts`, `sync.ts`, Vite config (alias, `loadEnv`/`define`).
-4. Dashboard switchover + delete old aggregation/proxy paths; verify in `npm run tauri dev`.
+- Token storage: `loadEnv`/`define` puts `WORKER_AUTH_TOKEN` into the dev bundle — acceptable for local dev; must move to Rust-side keychain before any packaged distribution.
