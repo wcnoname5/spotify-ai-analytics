@@ -31,7 +31,7 @@ tests/                # Pytest suite (tests/core, tests/mcp)
 - D1 is the source of truth; local SQLite is a cache — all D1 access goes through the Worker, never direct
 - All Spotify API calls go through `packages/core/spotify_core/spotify_client/` only
 - Encrypt tokens (Fernet) before they touch SQLite or the wire — D1 only ever sees ciphertext; decrypt only inside `spotify_client/` (Python: reauth wizard/MCP) and the Worker cron sync (`worker/src/fernet.ts` + `sync.ts`)
-- The D1 schema is generated from `spotify_core/db/schema.py` — never hand-author a second schema
+- The schema's single source of truth is `spotify_core/db/sql/schema.sql` (loaded by `schema.py`, shared with the Tauri TS layer) — never hand-author a second schema
 
 ### Never
 - Commit `data/*.db` files or `.env` files
