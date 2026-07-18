@@ -1,7 +1,7 @@
 # AI Report in the Tauri App (CLI entry + Rust spawn) — Design
 
 **Date:** 2026-07-18
-**Status:** Approved for planning
+**Status:** Finished (commit `260ab4e`)
 **Scope:** Give the report engine a process entry point and surface it in the Tauri dashboard by spawning Python from the Rust backend. Engine code (`spotify_core/report/`) is untouched and free to keep evolving — the boundary is argv in, markdown on stdout out.
 
 ## Decisions (settled with user)

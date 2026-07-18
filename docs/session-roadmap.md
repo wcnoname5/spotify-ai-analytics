@@ -12,7 +12,7 @@ Date: 2026-07-18
 
 ### 1. Report history: storage + retrieval
 Save generated reports so user/LLM can query past records. Decision: **no R2, no .txt files** — text is KB-scale, lives in a table.
-- [ ] `reports` table in D1 via `schema.sql` (style, period_type, start_date, end_date, provider, model, generated_at, revision_count, approved, report_text)
+- [ ] `reports` table in D1 via `schema.sql` (style, period_type, start_date, end_date, provider, model, generated_at, revision_count, report_text)
 - [ ] Worker: plain CRUD `POST /api/reports` + `GET /api/reports?since=` (same cursor shape as `/api/tracks`; thaws the Worker freeze for CRUD only — aggregation stays banned)
 - [ ] App saves after successful generation; local `history.db` mirrors via the existing pull-sync pattern (keeps the cache disposable)
 - [ ] Past-reports UI (list + view) and MCP read access from the local mirror
