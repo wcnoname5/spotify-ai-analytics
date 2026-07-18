@@ -3,7 +3,7 @@ import pytest
 import sqlite3
 from pathlib import Path
 from spotify_core.db.migrations import init_db, init_history_db, get_connection
-from spotify_core.db.schema import ALL_DDL, LISTENING_HISTORY_DDL, SPOTIFY_TOKENS_DDL, HISTORY_DDL, SYNC_STATE_DDL
+from spotify_core.db.schema import ALL_DDL, SPOTIFY_TOKENS_DDL, HISTORY_DDL
 
 
 @pytest.mark.unit

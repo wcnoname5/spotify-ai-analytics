@@ -2,8 +2,13 @@
 
 All functions take a db_path and return plain Python structures —
 no Polars or in-memory data loading required.
+
+Query bodies live in packages/core/spotify_core/db/sql/*.sql (shared with the
+Tauri dashboard's TS data layer) — this module only loads, binds params, and
+shapes results.
 """
 import os
+from importlib.resources import files
 from loguru import logger
 from datetime import datetime
 from typing import Optional
@@ -11,6 +16,11 @@ from .errors import HistoryNotInitializedError
 from .migrations import get_connection
 
 _DATE_FMT = "%Y-%m-%d"
+
+
+def _sql(name: str) -> str:
+    """Load a query body from db/sql/<name>.sql."""
+    return files("spotify_core.db.sql").joinpath(f"{name}.sql").read_text()
 
 
 def _ensure_history_db(db_path: str) -> None:
@@ -46,23 +56,14 @@ def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> 
         logger.warning("start_date {} is after end_date {} - query will return no rows", start_date, end_date)
 
 
-def _date_window(
-    start_date: Optional[str], end_date: Optional[str]
-) -> tuple[list[str], list]:
-    """Return (where_clauses, params) for an inclusive played_at date range.
+def _widen_end(end_date: Optional[str]) -> Optional[str]:
+    """Widen an inclusive end_date to end-of-day so the boundary day is fully included.
 
-    end_date is widened to end-of-day so the boundary day is fully included.
-    Either bound may be None; the matching clause is then omitted.
+    Returns None unchanged (no end bound).
     """
-    clauses: list[str] = []
-    params: list = []
-    if start_date is not None:
-        clauses.append("played_at >= ?")
-        params.append(start_date)
-    if end_date is not None:
-        clauses.append("played_at <= ?")
-        params.append(end_date + "T23:59:59Z")
-    return clauses, params
+    if end_date is None:
+        return None
+    return end_date + "T23:59:59Z"
 
 
 def get_top_artists(
@@ -84,26 +85,11 @@ def get_top_artists(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    where_clauses = ["artist_name IS NOT NULL"]
-    date_clauses, params = _date_window(start_date, end_date)
-    where_clauses += date_clauses
-
-    where_sql = " AND ".join(where_clauses)
-    sql = f"""
-        SELECT artist_name,
-               SUM(ms_played) / 60000 AS total_mins,
-               COUNT(*) AS play_count
-        FROM listening_history
-        WHERE {where_sql}
-        GROUP BY artist_name
-        ORDER BY total_mins DESC
-        LIMIT ?
-    """
-    params.append(limit)
+    end_widened = _widen_end(end_date)
 
     conn = get_connection(db_path)
     try:
-        rows = conn.execute(sql, params).fetchall()
+        rows = conn.execute(_sql("top_artists"), (start_date, end_widened, limit)).fetchall()
         result = [dict(r) for r in rows]
         logger.debug("get_top_artists: returned {} artists", len(result))
         return result
@@ -119,7 +105,6 @@ def get_top_tracks(
     limit: int = 10,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    show_track_id: bool = False,
 ) -> list[dict]:
     """Top tracks by play count from history.db.
 
@@ -128,37 +113,18 @@ def get_top_tracks(
         limit: Number of tracks to return.
         start_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
         end_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
-        show_track_id: If True, include track_id (Spotify URI) in each result row.
 
     Returns:
-        List of {"track_name": str, "artist_name": str, "play_count": int, "total_mins": int}
-        plus "track_id": str when show_track_id is True.
+        List of {"track_id": str, "track_name": str, "artist_name": str,
+        "play_count": int, "total_mins": int}.
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    where_clauses = ["track_name IS NOT NULL"]
-    date_clauses, params = _date_window(start_date, end_date)
-    where_clauses += date_clauses
-
-    where_sql = " AND ".join(where_clauses)
-    id_col = ", track_id" if show_track_id else ""
-    sql = f"""
-        SELECT track_name,
-               artist_name,
-               COUNT(*) AS play_count,
-               SUM(ms_played) / 60000 AS total_mins
-               {id_col}
-        FROM listening_history
-        WHERE {where_sql}
-        GROUP BY track_id
-        ORDER BY play_count DESC, total_mins DESC
-        LIMIT ?
-    """
-    params.append(limit)
+    end_widened = _widen_end(end_date)
 
     conn = get_connection(db_path)
     try:
-        rows = conn.execute(sql, params).fetchall()
+        rows = conn.execute(_sql("top_tracks"), (start_date, end_widened, limit)).fetchall()
         result = [dict(r) for r in rows]
         logger.debug("get_top_tracks: returned {} tracks", len(result))
         return result
@@ -168,8 +134,6 @@ def get_top_tracks(
     finally:
         conn.close()
 
-
-_SKIP_THRESHOLD_MS = 30_000
 
 # Day of Week Map
 _DOW_MAP = {
@@ -227,12 +191,17 @@ def _detect_tz_offset(conn) -> int:
         "FROM listening_history WHERE conn_country IS NOT NULL "
         "GROUP BY conn_country ORDER BY cnt DESC LIMIT 1"
     ).fetchone()
-    if not row: 
+    if not row:
         # if no records have a conn_country, default to UTC with no offset
         logger.debug("No conn_country data found; defaulting to UTC with offset 0")
-        return 0 
+        return 0
     offset = _COUNTRY_UTC_OFFSET.get(row["conn_country"], 0)
     return offset
+
+
+def _tz_modifier(offset: int) -> str:
+    """Return a SQLite datetime modifier string, e.g. '+8 hours' or '-5 hours'."""
+    return f"+{offset} hours" if offset >= 0 else f"{offset} hours"
 
 
 def get_listening_summary(
@@ -261,27 +230,11 @@ def get_listening_summary(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    where_clauses, date_params = _date_window(start_date, end_date)
-    params: list = [_SKIP_THRESHOLD_MS] + date_params
+    end_widened = _widen_end(end_date)
 
-    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
-    sql = f"""
-        SELECT
-            COUNT(*) AS total_plays,
-            COUNT(DISTINCT track_id) AS unique_tracks,
-            COUNT(DISTINCT artist_name) AS unique_artists,
-            MIN(played_at) AS earliest_played_at,
-            MAX(played_at) AS latest_played_at,
-            SUM(ms_played) / 60000 AS total_mins_played,
-            CAST(AVG(ms_played) / 60000 AS INTEGER) AS avg_mins_per_play,
-            SUM(CASE WHEN ms_played < ? THEN 1 ELSE 0 END) * 1.0
-                / NULLIF(COUNT(*), 0) AS skip_rate
-        FROM listening_history
-        {where_sql}
-    """
     conn = get_connection(db_path)
     try:
-        row = conn.execute(sql, params).fetchone()
+        row = conn.execute(_sql("listening_summary"), (start_date, end_widened)).fetchone()
         result = dict(row)
         logger.debug("get_listening_summary: total_plays={}", result.get("total_plays"))
         return result
@@ -292,30 +245,22 @@ def get_listening_summary(
         conn.close()
 
 
-def get_recent_plays(db_path: str, limit: int = 10, show_track_id: bool = False) -> list[dict]:
+def get_recent_plays(db_path: str, limit: int = 10) -> list[dict]:
     """Most recent plays ordered by played_at descending.
 
     Args:
         db_path: Path to history.db.
         limit: Number of rows to return.
-        show_track_id: If True, include track_id (Spotify URI) in each result row.
 
     Returns:
-        List of {"track_name", "artist_name", "album_name", "played_at", "ms_played"}
-        plus "track_id": str when show_track_id is True.
+        List of {"track_name", "artist_name", "album_name", "played_at",
+        "ms_played", "track_id"}.
     """
     _ensure_history_db(db_path)
 
-    id_col = ", track_id" if show_track_id else ""
-    sql = f"""
-        SELECT track_name, artist_name, album_name, played_at, ms_played{id_col}
-        FROM listening_history
-        ORDER BY played_at DESC
-        LIMIT ?
-    """
     conn = get_connection(db_path)
     try:
-        rows = conn.execute(sql, (limit,)).fetchall()
+        rows = conn.execute(_sql("recent_plays"), (None, None, limit)).fetchall()
         result = [dict(r) for r in rows]
         logger.debug("get_recent_plays: returned {} rows", len(result))
         return result
@@ -356,62 +301,33 @@ def get_listening_patterns(
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
     logger.debug("get_listening_patterns: start={} end={}", start_date, end_date)
-    where_clauses, params = _date_window(start_date, end_date)
-
-    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    end_widened = _widen_end(end_date)
 
     conn = get_connection(db_path)
     try:
         offset = _detect_tz_offset(conn)
-        # Build a SQLite datetime modifier string, e.g. "+8 hours" or "-5 hours".
-        # Records without conn_country (newer API syncs) are excluded from country
-        # detection but still appear in the pattern queries unchanged.
-        tz_mod = f"+{offset} hours" if offset >= 0 else f"{offset} hours"
-        local_ts = f"datetime(played_at, '{tz_mod}')"
+        tz_mod = _tz_modifier(offset)
+        params = (start_date, end_widened, tz_mod)
 
-        row = conn.execute(
-            f"SELECT CAST(strftime('%H', {local_ts}) AS INTEGER) AS hour, COUNT(*) AS cnt "
-            f"FROM listening_history {where_sql} GROUP BY hour ORDER BY cnt DESC LIMIT 1",
-            params,
-        ).fetchone()
+        row = conn.execute(_sql("patterns_peak_hour"), params).fetchone()
         peak_hour = row["hour"] if row else None
 
-        row = conn.execute(
-            f"SELECT strftime('%w', {local_ts}) AS dow, COUNT(*) AS cnt "
-            f"FROM listening_history {where_sql} GROUP BY dow ORDER BY cnt DESC LIMIT 1",
-            params,
-        ).fetchone()
+        row = conn.execute(_sql("patterns_peak_dow"), params).fetchone()
         peak_day_of_week = _DOW_MAP.get(row["dow"]) if row else None
 
-        row = conn.execute(
-            f"SELECT date({local_ts}) AS d, COUNT(*) AS cnt "
-            f"FROM listening_history {where_sql} GROUP BY d ORDER BY cnt DESC LIMIT 1",
-            params,
-        ).fetchone()
+        row = conn.execute(_sql("patterns_top_date"), params).fetchone()
         most_active_date = row["d"] if row else None
 
         most_active_date_play_count = None
         most_active_date_total_mins = None
         if most_active_date:
-            # Combine the date-equality condition with the existing date-range filter so
-            # the detail stats are scoped to the same window used to pick the date.
-            detail_clauses = [f"date({local_ts}) = ?"] + where_clauses
-            detail_where = "WHERE " + " AND ".join(detail_clauses)
-            detail_params = [most_active_date] + params
-            row = conn.execute(
-                f"SELECT COUNT(*) AS play_count, SUM(ms_played) / 60000 AS total_mins "
-                f"FROM listening_history {detail_where}",
-                detail_params,
-            ).fetchone()
+            detail_params = (start_date, end_widened, tz_mod, most_active_date)
+            row = conn.execute(_sql("patterns_date_detail"), detail_params).fetchone()
             if row:
                 most_active_date_play_count = row["play_count"]
                 most_active_date_total_mins = row["total_mins"]
 
-        row = conn.execute(
-            f"SELECT COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT date({local_ts})), 0) AS avg "
-            f"FROM listening_history {where_sql}",
-            params,
-        ).fetchone()
+        row = conn.execute(_sql("patterns_avg_per_day"), params).fetchone()
         avg_plays_per_day = row["avg"] if row else None
 
         result = {
@@ -459,9 +375,7 @@ def get_data_range(db_path: str) -> Optional[tuple[str, str]]:
 
     conn = get_connection(db_path)
     try:
-        row = conn.execute(
-            "SELECT MIN(played_at) AS earliest, MAX(played_at) AS latest FROM listening_history"
-        ).fetchone()
+        row = conn.execute(_sql("data_range")).fetchone()
         earliest = row["earliest"] if row else None
         latest = row["latest"] if row else None
         logger.debug("get_data_range: earliest={}, latest={}", earliest, latest)
@@ -474,17 +388,17 @@ def _grouped_trend(
     db_path: str,
     start_date: Optional[str],
     end_date: Optional[str],
-    group_expr: str,
+    sql_name: str,
     label_key: str,
 ) -> list[dict]:
-    """Sum ms_played and count plays grouped by a strftime bucket on local time.
+    """Sum ms_played and count plays grouped by a bucket expression on local time.
 
     Args:
         db_path: Path to history.db.
         start_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
         end_date: ISO date string "YYYY-MM-DD" (inclusive, optional).
-        group_expr: A SQL expression template with a "{ts}" placeholder for the
-            local-timestamp expression, e.g. "date({ts})".
+        sql_name: Name of the .sql file (in db/sql/) whose bucket column is
+            aliased "bucket".
         label_key: Dict key under which the bucket label is returned.
 
     Returns:
@@ -493,25 +407,13 @@ def _grouped_trend(
     """
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
-    date_clauses, params = _date_window(start_date, end_date)
-    where_sql = ("WHERE " + " AND ".join(date_clauses)) if date_clauses else ""
+    end_widened = _widen_end(end_date)
 
     conn = get_connection(db_path)
     try:
         offset = _detect_tz_offset(conn)
-        tz_mod = f"+{offset} hours" if offset >= 0 else f"{offset} hours"
-        local_ts = f"datetime(played_at, '{tz_mod}')"
-        bucket_expr = group_expr.format(ts=local_ts)
-        sql = f"""
-            SELECT {bucket_expr} AS bucket,
-                   SUM(ms_played) / 60000 AS total_mins,
-                   COUNT(*) AS play_count
-            FROM listening_history
-            {where_sql}
-            GROUP BY bucket
-            ORDER BY bucket
-        """
-        rows = conn.execute(sql, params).fetchall()
+        tz_mod = _tz_modifier(offset)
+        rows = conn.execute(_sql(sql_name), (start_date, end_widened, tz_mod)).fetchall()
         result = [
             {label_key: r["bucket"], "total_mins": r["total_mins"] or 0,
              "play_count": r["play_count"]}
@@ -536,7 +438,7 @@ def get_daily_trend(
         List of {"date": "YYYY-MM-DD", "total_mins": int, "play_count": int},
         ordered by date ascending.
     """
-    return _grouped_trend(db_path, start_date, end_date, "date({ts})", "date")
+    return _grouped_trend(db_path, start_date, end_date, "trend_daily", "date")
 
 
 def get_weekly_trend(
@@ -553,11 +455,7 @@ def get_weekly_trend(
         ordered by week ascending.
     """
 
-    return _grouped_trend(
-        db_path, start_date, end_date,
-        "date({ts}, '-' || ((strftime('%w', {ts}) + 6) % 7) || ' days')",
-        "week_label",
-    )
+    return _grouped_trend(db_path, start_date, end_date, "trend_weekly", "week_label")
 
 
 def get_monthly_trend(
@@ -571,9 +469,7 @@ def get_monthly_trend(
         List of {"month_label": "YYYY-MM", "total_mins": int, "play_count": int},
         ordered by month ascending.
     """
-    return _grouped_trend(
-        db_path, start_date, end_date, "strftime('%Y-%m', {ts})", "month_label"
-    )
+    return _grouped_trend(db_path, start_date, end_date, "trend_monthly", "month_label")
 
 
 def get_daily_activity_pattern(
@@ -599,30 +495,13 @@ def get_daily_activity_pattern(
     _validate_date_range(start_date, end_date)
     _ensure_history_db(db_path)
     logger.debug("get_daily_activity_pattern: start={} end={}", start_date, end_date)
-    date_clauses, params = _date_window(start_date, end_date)
-    where_sql = ("WHERE " + " AND ".join(date_clauses)) if date_clauses else ""
+    end_widened = _widen_end(end_date)
 
     conn = get_connection(db_path)
     try:
         offset = _detect_tz_offset(conn)
-        tz_mod = f"+{offset} hours" if offset >= 0 else f"{offset} hours"
-        local_ts = f"datetime(played_at, '{tz_mod}')"
-        hour_expr = f"CAST(strftime('%H', {local_ts}) AS INTEGER)"
-        sql = f"""
-            SELECT
-                strftime('%w', {local_ts}) AS dow,
-                CASE
-                    WHEN {hour_expr} BETWEEN 0 AND 6 THEN '00:00-06:59'
-                    WHEN {hour_expr} BETWEEN 7 AND 12 THEN '07:00-12:59'
-                    WHEN {hour_expr} BETWEEN 13 AND 18 THEN '13:00-18:59'
-                    ELSE '19:00-23:59'
-                END AS segment,
-                SUM(ms_played) / 60000 AS total_mins
-            FROM listening_history
-            {where_sql}
-            GROUP BY dow, segment
-        """
-        rows = conn.execute(sql, params).fetchall()
+        tz_mod = _tz_modifier(offset)
+        rows = conn.execute(_sql("activity_pattern"), (start_date, end_widened, tz_mod)).fetchall()
         result = []
         for r in rows:
             dow = r["dow"]  # '0'..'6', 0 = Sunday

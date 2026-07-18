@@ -57,7 +57,7 @@ REPORT_PROMPT_TEMPLATE = dedent("""
     - Single period only → render a single-period summary, skip trend comparisons.
     - User asks for genre breakdown → there is no genre field; infer from artist names and note
       the caveat.
-    - User wants a recap playlist → use `get_top_tracks(show_track_id=True)` then `create_playlist`.
+    - User wants a recap playlist → use `get_top_tracks` (results include `track_id` URIs) then `create_playlist`.
 
     ## After delivering
     Offer follow-ups: month-level zoom, time-of-day breakdown, or recap playlist generation.

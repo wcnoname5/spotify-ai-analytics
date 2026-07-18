@@ -6,6 +6,7 @@ upserts them into the local ``listening_history`` cache. The sync cursor is
 simply ``MAX(played_at)`` of the cache itself, so there is no separate
 bookkeeping table and nothing that can drift out of step with the data.
 """
+from importlib.resources import files
 from pathlib import Path
 from typing import Union
 
@@ -15,6 +16,11 @@ from .migrations import get_connection, init_history_db
 from .worker_client import WorkerClient
 
 _EPOCH_ISO = "1970-01-01T00:00:00Z"
+
+
+def _sql(name: str) -> str:
+    """Load a query body from db/sql/<name>.sql."""
+    return files("spotify_core.db.sql").joinpath(f"{name}.sql").read_text()
 
 _COLUMNS = (
     "id", "track_id", "track_name", "artist_name", "album_name",
@@ -39,19 +45,14 @@ def run_local_sync(db_path: Union[str, Path], worker: WorkerClient) -> dict:
     conn = get_connection(db_path)
     try:
         with conn:
-            cursor = conn.execute(
-                "SELECT MAX(played_at) AS c FROM listening_history"
-            ).fetchone()["c"] or _EPOCH_ISO
+            cursor = conn.execute(_sql("max_played_at")).fetchone()["c"] or _EPOCH_ISO
             rows = worker.get_tracks_since(cursor)
 
+            insert_sql = _sql("insert_track")
             inserted = 0
             for row in rows:
                 cur = conn.execute(
-                    "INSERT OR IGNORE INTO listening_history "
-                    "(id, track_id, track_name, artist_name, album_name, "
-                    " played_at, ms_played, source, "
-                    " platform, conn_country, reason_start, reason_end, shuffle, skipped) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    insert_sql,
                     tuple(row.get(col) for col in _COLUMNS),
                 )
                 if cur.rowcount > 0:
