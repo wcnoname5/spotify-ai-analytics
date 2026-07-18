@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import PlotChart from "./components/PlotChart.vue";
+import ReportPage from "./ReportPage.vue";
 import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
 import { syncOnStartup } from "./lib/sync";
@@ -31,6 +32,7 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: "all", label: "All time" },
 ];
 
+const page = ref<"dashboard" | "report">("dashboard");
 const range = ref<RangeKey | "custom">("30");
 const customStart = ref(""); // YYYY-MM-DD, "" = unset
 const customEnd = ref("");
@@ -248,8 +250,15 @@ const trendTraces = computed(() => [
 </script>
 
 <template>
-  <h1>Spotify Listening Dashboard</h1>
+  <h1>Spotify Listening Analysis</h1>
 
+  <nav class="filters">
+    <button class="range-btn" :class="{ current: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
+    <button class="range-btn" :class="{ current: page === 'report' }" @click="page = 'report'">Report</button>
+  </nav>
+  <hr class="nav-divider" />
+
+  <div v-show="page === 'dashboard'">
   <div class="filters">
     <button
       v-for="r in RANGES"
@@ -260,13 +269,15 @@ const trendTraces = computed(() => [
     >
       {{ r.label }}
     </button>
-    <button class="range-btn" :class="{ current: range === 'custom' }" @click="range = 'custom'">
-      Custom
-    </button>
-    <input type="date" v-model="customStart" :min="minDate || undefined" :max="customEnd || maxDate" />
-    <span>–</span>
-    <input type="date" v-model="customEnd" :min="customStart || minDate || undefined" :max="maxDate" />
     <span class="period">Period: {{ period }}</span>
+    <div class="custom-range">
+      <button class="range-btn" :class="{ current: range === 'custom' }" @click="range = 'custom'">
+        Custom
+      </button>
+      <input type="date" v-model="customStart" :min="minDate || undefined" :max="customEnd || maxDate" />
+      <span>–</span>
+      <input type="date" v-model="customEnd" :min="customStart || minDate || undefined" :max="maxDate" />
+    </div>
   </div>
 
   <p v-if="usingSample && !loadFailedNotice" class="banner">
@@ -349,12 +360,6 @@ const trendTraces = computed(() => [
       <p v-else>No data in this period.</p>
     </div>
 
-    <div class="card">
-      <h3>Generate Report</h3>
-      <!-- Wired later: Tauri command -> spawn-per-call Python report engine (spec §4.5/§5) -->
-      <button class="range-btn" disabled>Generate weekly report (coming soon)</button>
-    </div>
-
     <details class="card">
       <summary>Recently Played</summary>
       <div class="table-scroll">
@@ -375,6 +380,9 @@ const trendTraces = computed(() => [
       </div>
     </details>
   </div>
+  </div>
+
+  <ReportPage v-show="page === 'report'" />
 
   <footer>Last played {{ lastUpdated }}</footer>
 </template>

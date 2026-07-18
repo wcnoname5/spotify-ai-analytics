@@ -55,7 +55,9 @@ def make_report_nodes(tools: list):
             usages.append(extract_usage(response))
             tool_calls = getattr(response, "tool_calls", None)
             if not tool_calls:
-                draft = response.content
+                # .text, not .content: Gemini 3.x returns a list of content
+                # blocks; .text joins the text parts on every model.
+                draft = response.text
                 break
             logger.debug("drafter_node: iteration {}, {} tool call(s)",
                          i+1, len(tool_calls))
@@ -74,8 +76,8 @@ def make_report_nodes(tools: list):
         else:
             logger.warning("drafter_node: hit tool-iteration cap")
             draft = next(
-                (m.content for m in reversed(messages)
-                 if isinstance(m, AIMessage) and m.content),
+                (m.text for m in reversed(messages)
+                 if isinstance(m, AIMessage) and m.text),
                 state["draft"],
             )
 

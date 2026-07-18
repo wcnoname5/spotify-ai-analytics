@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # Model Configuration
     use_gemini: bool = Field(default=True, alias="USE_GEMINI")
-    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field(default="gemini-3.5-flash", alias="GEMINI_MODEL")
     openai_model: str = Field(default="gpt-4", alias="OPENAI_MODEL")
     temperature: float = Field(default=0.7, alias="TEMPERATURE")
 

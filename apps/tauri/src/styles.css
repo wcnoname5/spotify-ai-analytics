@@ -13,6 +13,11 @@
   --up: #006300;
   --down: #d03b3b;
 }
+.nav-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.5rem 0 1rem;
+}
 @media (prefers-color-scheme: dark) {
   :root {
     --page: #0d0d0d;
@@ -63,6 +68,12 @@ h3 {
   gap: 0.5rem;
   flex-wrap: wrap;
   margin-bottom: 1rem;
+}
+.custom-range {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 0.8rem;
 }
 .range-btn {
   font: inherit;
@@ -216,4 +227,47 @@ footer {
   margin-top: 2rem;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.filters:has(.field) {
+  align-items: flex-end; /* selects + button share the bottom row, captions float above */
+}
+.filters .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.filters .field > span {
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding-left: 0.4rem;
+}
+.filters select {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.filters select:hover {
+  border-color: var(--muted);
+}
+
+.report-html {
+  line-height: 1.6;
+}
+.report-html h1,
+.report-html h2,
+.report-html h3,
+.report-html h4 {
+  margin: 1.1em 0 0.4em;
+}
+.report-html code {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 0.3em;
 }
