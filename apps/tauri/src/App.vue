@@ -50,8 +50,6 @@ const tracks = ref<TopTrack[]>([]);
 const recent = ref<RecentPlay[]>([]);
 const daily = ref<TrendPoint[]>([]);
 const hours = ref<PlaysByHour[]>([]);
-const hourMetric = ref<"plays" | "mins">("plays");
-const trendMetric = ref<"plays" | "mins">("mins");
 const trendGranularity = ref<Granularity>("day");
 
 // Theme (drives Plotly chrome; CSS handles the rest)
@@ -215,15 +213,19 @@ const seriesColor = computed(() => (dark.value ? "#3987e5" : "#2a78d6"));
 
 const hourTraces = computed(() => {
   const y = new Array(24).fill(0);
-  for (const h of hours.value) y[h.hour] = hourMetric.value === "plays" ? h.play_count : h.total_mins;
+  const mins = new Array(24).fill(0);
+  for (const h of hours.value) {
+    y[h.hour] = h.play_count;
+    mins[h.hour] = h.total_mins ?? 0;
+  }
   return [
     {
       type: "bar" as const,
       x: [...Array(24).keys()],
       y,
+      customdata: mins,
       marker: { color: seriesColor.value },
-      hovertemplate:
-        hourMetric.value === "plays" ? "%{y} plays<extra></extra>" : "%{y} min<extra></extra>",
+      hovertemplate: "%{y} plays · %{customdata} min<extra></extra>",
     },
   ];
 });
@@ -237,10 +239,10 @@ const trendTraces = computed(() => [
     type: "scatter" as const,
     mode: "lines" as const,
     x: daily.value.map((d) => d.bucket),
-    y: daily.value.map((d) => (trendMetric.value === "plays" ? d.play_count : d.total_mins)),
+    y: daily.value.map((d) => d.total_mins),
+    customdata: daily.value.map((d) => d.play_count),
     line: { color: seriesColor.value, width: 2 },
-    hovertemplate:
-      trendMetric.value === "plays" ? "%{y} plays<extra></extra>" : "%{y} min<extra></extra>",
+    hovertemplate: "%{y} min · %{customdata} plays<extra></extra>",
   },
 ]);
 </script>
@@ -257,6 +259,9 @@ const trendTraces = computed(() => [
       @click="setPreset(r.key)"
     >
       {{ r.label }}
+    </button>
+    <button class="range-btn" :class="{ current: range === 'custom' }" @click="range = 'custom'">
+      Custom
     </button>
     <input type="date" v-model="customStart" :min="minDate || undefined" :max="customEnd || maxDate" />
     <span>–</span>
@@ -327,13 +332,7 @@ const trendTraces = computed(() => [
     </div>
 
     <div class="card">
-      <div class="card-head">
-        <h3>Daily Activity Pattern</h3>
-        <div>
-          <button class="range-btn" :class="{ current: hourMetric === 'plays' }" @click="hourMetric = 'plays'">Plays</button>
-          <button class="range-btn" :class="{ current: hourMetric === 'mins' }" @click="hourMetric = 'mins'">Listening time</button>
-        </div>
-      </div>
+      <h3>Daily Activity Pattern</h3>
       <PlotChart v-if="hasData" :traces="hourTraces" :layout="hourLayout" :dark="dark" />
       <p v-else>No data in this period.</p>
     </div>
@@ -342,8 +341,6 @@ const trendTraces = computed(() => [
       <div class="card-head">
         <h3>Listening Trend</h3>
         <div>
-          <button class="range-btn" :class="{ current: trendMetric === 'plays' }" @click="trendMetric = 'plays'">Plays</button>
-          <button class="range-btn" :class="{ current: trendMetric === 'mins' }" @click="trendMetric = 'mins'">Listening time</button>
           <button v-for="g in (['day', 'week', 'month'] as const)" :key="g" class="range-btn"
             :class="{ current: trendGranularity === g }" @click="trendGranularity = g">{{ g }}</button>
         </div>

@@ -84,9 +84,9 @@ h3 {
 .filters input[type="date"] {
   font: inherit;
   font-size: 0.85rem;
-  padding: 0.3rem 0.5rem;
+  padding: 0.2rem 0.5rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--surface);
   color: var(--ink-2);
 }
