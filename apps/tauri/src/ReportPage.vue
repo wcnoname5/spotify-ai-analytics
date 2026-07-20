@@ -104,7 +104,7 @@ async function openReport(meta: ReportMeta) {
   const text = await getReportText(meta.id);
   if (text === null) return;
   report.value = text;
-  caption.value = `${meta.style} · ${meta.model} · ${meta.start_date} → ${meta.end_date}`;
+  caption.value = `分析時間: ${meta.start_date} → ${meta.end_date}\n模型: ${meta.model}\n**分析風格**: ${meta.style}`;
   lastRun.value = {
     start: meta.start_date,
     end: meta.end_date,
@@ -150,9 +150,8 @@ async function openReport(meta: ReportMeta) {
           <option v-for="m in MODELS[provider]" :key="m" :value="m">{{ m }}</option>
         </select>
       </label>
-    </div>
-    <div class="action">
-      <button class="range-btn" :disabled="!isTauri || running" @click="generate">
+
+      <button class="btn" :disabled="!isTauri || running" @click="generate">
         {{ running ? "Generating…" : "Generate" }}
       </button>
     </div>
@@ -160,17 +159,21 @@ async function openReport(meta: ReportMeta) {
     <p v-if="error" class="banner">Report failed: <br> <code>{{ error }}</code></p>
     <template v-if="report">
       <p class="period">{{ caption }}</p>
+      <hr class="nav-divider" />
+
       <div class="report-html" v-html="reportHtml"></div>
       <div class="action">
-        <button class="range-btn" :disabled="saved" @click="saveToDb">
+        <button class="btn" :disabled="saved" @click="saveToDb">
           {{ saved ? "Saved" : "Save to DB" }}
         </button>
-        <button class="range-btn" @click="exportMd">Export .md</button>
+        <button class="btn" @click="exportMd">Export</button>
       </div>
+      <hr class="nav-divider" />
     </template>
     <template v-if="pastReports.length">
       <h3>Past reports</h3>
       <ul class="past-reports">
+        <!-- TODO: plain list is ugly in the future is should be a grid or card layout -->
         <li v-for="r in pastReports" :key="r.id">
           <a href="#" @click.prevent="openReport(r)">
             {{ r.start_date }} → {{ r.end_date }} · {{ r.style }} · {{ r.model }}
@@ -182,6 +185,9 @@ async function openReport(meta: ReportMeta) {
 </template>
 
 <style scoped>
+.caption {
+  white-space: pre-line;
+}
 .past-reports {
   list-style: none;
   padding: 0;
