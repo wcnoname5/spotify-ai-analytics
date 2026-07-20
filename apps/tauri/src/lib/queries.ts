@@ -9,7 +9,12 @@ import trendWeeklySql from "@sql/trend_weekly.sql?raw";
 import trendMonthlySql from "@sql/trend_monthly.sql?raw";
 import playsByHourSql from "@sql/plays_by_hour.sql?raw";
 import dataRangeSql from "@sql/data_range.sql?raw";
+import listReportsSql from "@sql/list_reports.sql?raw";
+import getReportSql from "@sql/get_report.sql?raw";
+import countReportsForPeriodSql from "@sql/count_reports_for_period.sql?raw";
+import insertReportSql from "@sql/insert_report.sql?raw";
 import { getDb } from "./db";
+import type { ReportRow } from "./sync";
 
 export interface Range {
   start: string | null;
@@ -117,4 +122,29 @@ export async function dataRange(): Promise<DataRange> {
   const db = await getDb();
   const rows = await db.select<DataRange[]>(dataRangeSql, []);
   return rows[0];
+}
+
+// Report-related queries
+export type ReportMeta = Omit<ReportRow, "report_text">;
+
+export async function listReports(): Promise<ReportMeta[]> {
+  return (await getDb()).select<ReportMeta[]>(listReportsSql);
+}
+
+export async function getReportText(id: string): Promise<string | null> {
+  const rows = await (await getDb()).select<{ report_text: string }[]>(getReportSql, [id]);
+  return rows[0]?.report_text ?? null;
+}
+
+export async function reportExistsForPeriod(start: string, end: string): Promise<boolean> {
+  const rows = await (await getDb()).select<{ c: number }[]>(countReportsForPeriodSql, [start, end]);
+  return (rows[0]?.c ?? 0) > 0;
+}
+
+export async function saveReportLocal(row: ReportRow): Promise<void> {
+  await (await getDb()).execute(insertReportSql, [
+    row.id, row.style, row.period_type, row.start_date, row.end_date,
+    row.provider, row.model, row.generated_at, row.revision_count,
+    row.report_text, 0,
+  ]);
 }

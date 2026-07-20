@@ -30,6 +30,7 @@ def test_run_local_sync_inserts_rows_and_advances_cursor(tmp_path):
     db_path = tmp_path / "history.db"
     worker = MagicMock()
     worker.get_tracks_since.return_value = [TRACK_ROW]
+    worker.get_reports_since.return_value = []
 
     result = run_local_sync(db_path, worker)
 
@@ -55,6 +56,7 @@ def test_run_local_sync_second_run_asks_from_max_played_at(tmp_path):
     db_path = tmp_path / "history.db"
     worker = MagicMock()
     worker.get_tracks_since.return_value = [TRACK_ROW]
+    worker.get_reports_since.return_value = []
 
     run_local_sync(db_path, worker)
     worker.get_tracks_since.return_value = []

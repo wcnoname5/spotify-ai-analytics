@@ -15,6 +15,7 @@ def test_cli_prints_report_to_stdout(monkeypatch, capsys):
 
         class R:
             text = "# Weekly Roast"
+            revision_count = 0
 
         return R()
 
@@ -22,7 +23,7 @@ def test_cli_prints_report_to_stdout(monkeypatch, capsys):
     monkeypatch.setattr(
         sys, "argv",
         ["report", "--style", "roast", "--start", "2026-07-06",
-         "--end", "2026-07-12", "--period-type", "weekly"],
+         "--end", "2026-07-12", "--period-type", "weekly", "--no-save"],
     )
     assert main() == 0
     assert capsys.readouterr().out.strip() == "# Weekly Roast"

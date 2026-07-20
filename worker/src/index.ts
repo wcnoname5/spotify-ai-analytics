@@ -10,6 +10,7 @@ import {
   handlePostCursor,
   handlePostTokens,
 } from "./tokens";
+import { handleGetReports, handlePostReport } from "./reports";
 import { runSync } from "./sync";
 
 export interface Env {
@@ -37,6 +38,12 @@ export default {
     if (pathname === "/api/tracks" && method === "POST") {
       return handlePostTracks(request, env);
     }
+    if (pathname === "/api/reports" && method === "GET") {
+      return handleGetReports(request, env);
+    }
+    if (pathname === "/api/reports" && method === "POST") {
+      return handlePostReport(request, env);
+    }
     if (pathname === "/api/tokens" && method === "GET") {
       return handleGetTokens(request, env);
     }
@@ -53,11 +60,9 @@ export default {
     return new Response("Not Found", { status: 404 });
   },
 
-  // Hourly Spotify -> D1 sync (replaces the GH Actions cron). Awaited (not
-  // waitUntil) so a failure marks the invocation failed in Cron Events.
+  // Hourly Spotify -> D1 sync. Awaited (not waitUntil) so a failure marks the invocation failed in Cron Events.
   async scheduled(_controller, env, _ctx): Promise<void> {
     const result = await runSync(env);
-    // logs row counts.
     console.log(
       `cron sync: inserted=${result.inserted} skipped_parse_error=${result.skippedParseError} cursor=${result.cursorMs}`
     );

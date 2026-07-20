@@ -1,10 +1,12 @@
-"""Pull-only incremental sync: refresh the local SQLite cache from D1.
+"""Incremental sync between the local SQLite cache and D1.
 
-D1 (via the Worker) is the single source of truth. This module never writes
-to D1 — it only reads new rows through ``WorkerClient.get_tracks_since`` and
-upserts them into the local ``listening_history`` cache. The sync cursor is
-simply ``MAX(played_at)`` of the cache itself, so there is no separate
-bookkeeping table and nothing that can drift out of step with the data.
+For listening history, D1 (via the Worker) remains the single source of
+truth: this module only reads new rows through ``WorkerClient.get_tracks_since``
+and upserts them into the local ``listening_history`` cache, cursored on
+``MAX(played_at)``. Reports are the exception — they are written locally
+first (see ``report_store.py``) and synced in both directions: unsynced
+local rows are pushed to D1, and newer D1 rows are pulled down, cursored on
+``MAX(generated_at)``.
 """
 from importlib.resources import files
 from pathlib import Path
@@ -60,11 +62,20 @@ def run_local_sync(db_path: Union[str, Path], worker: WorkerClient) -> dict:
     finally:
         conn.close()
 
+    # Deferred import: report_store imports _EPOCH_ISO/_sql from this module,
+    # so importing it at module top would create a circular import.
+    from .report_store import pull_reports, push_unsynced
+
+    reports_pushed = push_unsynced(db_path, worker)
+    reports_pulled = pull_reports(db_path, worker)
+
     result = {
         "fetched": len(rows),
         "inserted": inserted,
         "skipped_duplicated": len(rows) - inserted,
         "cursor": max((row["played_at"] for row in rows), default=cursor),
+        "reports_pushed": reports_pushed,
+        "reports_pulled": reports_pulled,
     }
     logger.info("Local sync: {}", result)
     return result

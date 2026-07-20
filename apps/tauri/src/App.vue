@@ -4,7 +4,7 @@ import PlotChart from "./components/PlotChart.vue";
 import ReportPage from "./ReportPage.vue";
 import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
-import { syncOnStartup } from "./lib/sync";
+import { syncOnStartup, syncReports } from "./lib/sync";
 import {
   trend,
   dataRange,
@@ -160,6 +160,7 @@ onMounted(async () => {
     } else {
       console.log(`Startup sync: inserted ${result.inserted} new play(s).`);
     }
+    syncReports().catch(console.error);
   }
   await load();
 });
@@ -253,8 +254,8 @@ const trendTraces = computed(() => [
   <h1>Spotify Listening Analysis</h1>
 
   <nav class="filters">
-    <button class="range-btn" :class="{ current: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
-    <button class="range-btn" :class="{ current: page === 'report' }" @click="page = 'report'">Report</button>
+    <button class="btn nav-btn" :class="{ current: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
+    <button class="btn nav-btn" :class="{ current: page === 'report' }" @click="page = 'report'">Report</button>
   </nav>
   <hr class="nav-divider" />
 
@@ -263,15 +264,15 @@ const trendTraces = computed(() => [
     <button
       v-for="r in RANGES"
       :key="r.key"
-      class="range-btn"
+      class="btn"
       :class="{ current: range === r.key }"
       @click="setPreset(r.key)"
     >
       {{ r.label }}
     </button>
     <span class="period">Period: {{ period }}</span>
-    <div class="custom-range">
-      <button class="range-btn" :class="{ current: range === 'custom' }" @click="range = 'custom'">
+    <div class="custom-range filters">
+      <button class="btn" :class="{ current: range === 'custom' }" @click="range = 'custom'">
         Custom
       </button>
       <input type="date" v-model="customStart" :min="minDate || undefined" :max="customEnd || maxDate" />
@@ -352,7 +353,7 @@ const trendTraces = computed(() => [
       <div class="card-head">
         <h3>Listening Trend</h3>
         <div>
-          <button v-for="g in (['day', 'week', 'month'] as const)" :key="g" class="range-btn"
+          <button v-for="g in (['day', 'week', 'month'] as const)" :key="g" class="btn"
             :class="{ current: trendGranularity === g }" @click="trendGranularity = g">{{ g }}</button>
         </div>
       </div>

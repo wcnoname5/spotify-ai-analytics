@@ -1,6 +1,11 @@
-// Startup incremental sync: Worker (D1) -> local SQLite pull-only mirror.
+// Startup incremental sync: Worker (D1) <-> local SQLite mirror. Tracks are pull-only;
+// reports are locally-written (Save to DB) and pushed to D1 here, then pulled back.
 import maxPlayedAtSql from "@sql/max_played_at.sql?raw";
 import insertTrackSql from "@sql/insert_track.sql?raw";
+import insertReportSql from "@sql/insert_report.sql?raw";
+import unsyncedReportsSql from "@sql/unsynced_reports.sql?raw";
+import markReportSyncedSql from "@sql/mark_report_synced.sql?raw";
+import maxReportGeneratedAtSql from "@sql/max_report_generated_at.sql?raw";
 // Rust-side fetch: webview fetch enforces CORS, the Worker sends no CORS headers.
 import { fetch } from "@tauri-apps/plugin-http";
 import { getDb } from "./db";
@@ -58,5 +63,54 @@ export async function syncOnStartup(): Promise<SyncResult> {
   } catch (e) {
     console.error("syncOnStartup failed:", e);
     return { offline: true, reason: "error" };
+  }
+}
+
+export interface ReportRow {
+  id: string; style: string; period_type: string;
+  start_date: string; end_date: string; provider: string; model: string;
+  generated_at: string; revision_count: number; report_text: string;
+}
+
+/** Push local synced=0 report rows, then pull D1 rows behind the generated_at cursor. */
+export async function syncReports(): Promise<{ pushed: number; pulled: number } | { offline: true }> {
+  if (!__WORKER_URL__) return { offline: true };
+  try {
+    const db = await getDb();
+    const auth = { Authorization: `Bearer ${__WORKER_AUTH_TOKEN__}` };
+
+    const unsynced = await db.select<ReportRow[]>(unsyncedReportsSql);
+    let pushed = 0;
+    for (const r of unsynced) {
+      const res = await fetch(`${__WORKER_URL__}/api/reports`, {
+        method: "POST",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify(r),
+      });
+      if (!res.ok) break; // fail-soft: rows stay synced=0, retried next startup
+      await db.execute(markReportSyncedSql, [r.id]);
+      pushed++;
+    }
+
+    const cursorRows = await db.select<{ c: string | null }[]>(maxReportGeneratedAtSql);
+    const cursor = cursorRows[0]?.c ?? EPOCH;
+    const res = await fetch(
+      `${__WORKER_URL__}/api/reports?since=${encodeURIComponent(cursor)}`,
+      { headers: auth }
+    );
+    if (!res.ok) return { pushed, pulled: 0 };
+    const body = (await res.json()) as { reports: ReportRow[] };
+    let pulled = 0;
+    for (const r of body.reports ?? []) {
+      const result = await db.execute(insertReportSql, [
+        r.id, r.style, r.period_type, r.start_date, r.end_date,
+        r.provider, r.model, r.generated_at, r.revision_count, r.report_text, 1,
+      ]);
+      pulled += result.rowsAffected;
+    }
+    return { pushed, pulled };
+  } catch (e) {
+    console.error("syncReports failed:", e);
+    return { offline: true };
   }
 }
