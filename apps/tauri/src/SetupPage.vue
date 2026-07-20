@@ -51,12 +51,18 @@ const form = reactive({
   WORKER_AUTH_TOKEN: "",
 });
 
+// keygen is not here: it needs no decision from the user, so it runs
+// automatically (see refresh) rather than being a step they must remember.
+type ManualStep = Exclude<SetupStep, "keygen">;
 type StepState = { running: boolean; ok: boolean | null; output: string };
-const steps = reactive<Record<SetupStep, StepState>>({
-  keygen: { running: false, ok: null, output: "" },
+const steps = reactive<Record<ManualStep, StepState>>({
   oauth: { running: false, ok: null, output: "" },
   import: { running: false, ok: null, output: "" },
 });
+
+// Only ever attempted once per session, so a failing keygen cannot loop.
+const keygenTried = ref(false);
+const keygenError = ref("");
 
 const CHECK_LABELS: Record<string, string> = {
   client_id: "Spotify Client ID",
@@ -82,7 +88,22 @@ async function refresh() {
     configured.value = cfg.configured;
     if (cfg.configured.langfuse) tracing.value = "langfuse";
     else if (cfg.configured.langsmith) tracing.value = "langsmith";
-    doctor.value = await runDoctor();
+
+    let report = await runDoctor();
+    // Generating the Fernet key takes no input and OAuth refuses to run without
+    // it, so create it on sight instead of asking the user to press a button
+    // whose only correct answer is "yes". ensure_fernet_key never overwrites an
+    // existing key, so this cannot rotate one out from under stored tokens.
+    if (!report.checks?.fernet_key && !keygenTried.value) {
+      keygenTried.value = true;
+      try {
+        await runSetupStep("keygen");
+        report = await runDoctor();
+      } catch (e) {
+        keygenError.value = String(e);
+      }
+    }
+    doctor.value = report;
   } catch (e) {
     console.error("setup refresh failed:", e);
   } finally {
@@ -122,7 +143,7 @@ async function save() {
   await refresh();
 }
 
-async function runStep(step: SetupStep) {
+async function runStep(step: ManualStep) {
   const state = steps[step];
   state.running = true;
   state.ok = null;
@@ -193,14 +214,14 @@ async function runStep(step: SetupStep) {
         <label>Client ID <input v-model="form.SPOTIFY_CLIENT_ID" placeholder="unchanged" /></label>
       </div>
 
-      <div v-if="need(checks.fernet_key) || need(checks.tokens_valid) || need(checks.history_has_data)" class="card">
+      <div v-if="need(checks.tokens_valid) || need(checks.history_has_data) || keygenError" class="card">
         <h3>Actions</h3>
 
         <div v-if="need(checks.tokens_valid)" class="step">
           <button class="btn" :disabled="steps.oauth.running" @click="runStep('oauth')">
             {{ steps.oauth.running ? "Waiting for browser…" : "Authorize Spotify" }}
           </button>
-          <span class="hint">Opens your browser. Needs the Client ID and encryption key first.</span>
+          <span class="hint">Opens your browser. Needs the Client ID set first.</span>
         </div>
         
         <div v-if="need(checks.history_has_data)" class="step">
@@ -210,15 +231,7 @@ async function runStep(step: SetupStep) {
           <span class="hint">Pick the folder of <code>Streaming_History_Audio_*.json</code> files.</span>
         </div>
 
-        <!-- Unlike the other two steps, keygen is idempotent: once a key exists,
-             re-running it does nothing. So it is a button only while missing;
-             afterwards the useful thing to show is the backup warning. -->
-        <div v-if="!checks.fernet_key" class="step">
-          <button class="btn" :disabled="steps.keygen.running" @click="runStep('keygen')">
-            {{ steps.keygen.running ? "Working…" : "Generate encryption key" }}
-          </button>
-          <span class="hint">Created once, then never changed — a new key would orphan saved tokens.</span>
-        </div>
+        <p v-if="keygenError" class="warn">Could not create the encryption key: {{ keygenError }}</p>
         <p v-else-if="showAll" class="hint">
           <span class="ok">✓</span> Encryption key set. Back up <code>{{ envFile }}</code> —
           losing this key makes every stored token permanently unreadable.
