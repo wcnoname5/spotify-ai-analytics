@@ -43,26 +43,30 @@ def main() -> int:
         from spotify_core.db.worker_client import WorkerClient
 
         db_path = str(args.db or settings.history_db_path)
-        save_report_local(db_path, {
-            "id": str(uuid.uuid4()),
-            "style": args.style,
-            "period_type": args.period_type,
-            "start_date": args.start,
-            "end_date": args.end,
-            "provider": args.provider,
-            "model": args.model or settings.gemini_model,
-            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "revision_count": result.revision_count,
-            "report_text": result.text,
-        })
-        worker_url = os.environ.get("WORKER_URL")
-        worker_token = os.environ.get("WORKER_AUTH_TOKEN")
-        if worker_url and worker_token:
-            try:
-                with WorkerClient(worker_url, worker_token) as worker:
-                    push_unsynced(db_path, worker)
-            except Exception as exc:  # fail-soft: row stays synced=0, retried next sync
-                print(f"warning: report push failed ({exc})", file=sys.stderr)
+        try:
+            save_report_local(db_path, {
+                "id": str(uuid.uuid4()),
+                "style": args.style,
+                "period_type": args.period_type,
+                "start_date": args.start,
+                "end_date": args.end,
+                "provider": args.provider,
+                "model": args.model or settings.gemini_model,
+                "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "revision_count": result.revision_count,
+                "report_text": result.text,
+            })
+        except Exception as exc:  # fail-soft: no local row means nothing to push
+            print(f"warning: report save failed ({exc})", file=sys.stderr)
+        else:
+            worker_url = os.environ.get("WORKER_URL")
+            worker_token = os.environ.get("WORKER_AUTH_TOKEN")
+            if worker_url and worker_token:
+                try:
+                    with WorkerClient(worker_url, worker_token) as worker:
+                        push_unsynced(db_path, worker)
+                except Exception as exc:  # fail-soft: row stays synced=0, retried next sync
+                    print(f"warning: report push failed ({exc})", file=sys.stderr)
 
     return 0
 

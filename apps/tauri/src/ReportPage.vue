@@ -29,7 +29,14 @@ const error = ref("");
 const saved = ref(false);
 const pastReports = ref<ReportMeta[]>([]);
 // params of the currently displayed report (outlive the selects)
-const lastRun = ref<{ start: string; end: string; periodType: string } | null>(null);
+const lastRun = ref<{
+  start: string;
+  end: string;
+  periodType: string;
+  style: "listening_review" | "roast";
+  provider: Provider;
+  model: string;
+} | null>(null);
 
 onMounted(async () => {
   if (isTauri) pastReports.value = await listReports();
@@ -57,7 +64,7 @@ async function generate() {
       provider: provider.value, model: model.value,
     });
     caption.value = `${style.value} · ${model.value} · ${start} → ${end}`;
-    lastRun.value = { start, end, periodType };
+    lastRun.value = { start, end, periodType, style: style.value, provider: provider.value, model: model.value };
     saved.value = false;
   } catch (e) {
     error.value = String(e);
@@ -70,12 +77,12 @@ async function saveToDb() {
   if (!lastRun.value || !report.value) return;
   await saveReportLocal({
     id: crypto.randomUUID(),
-    style: style.value,
+    style: lastRun.value.style,
     period_type: lastRun.value.periodType,
     start_date: lastRun.value.start,
     end_date: lastRun.value.end,
-    provider: provider.value,
-    model: model.value,
+    provider: lastRun.value.provider,
+    model: lastRun.value.model,
     generated_at: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
     revision_count: 0, // ponytail: CLI prints markdown only; thread real count through when it matters
     report_text: report.value,
@@ -89,7 +96,7 @@ async function exportMd() {
   if (!lastRun.value || !report.value) return;
   await invoke("export_report_md", {
     content: report.value,
-    suggestedName: `report-${style.value}-${lastRun.value.start}.md`,
+    suggestedName: `report-${lastRun.value.style}-${lastRun.value.start}.md`,
   });
 }
 
@@ -98,7 +105,14 @@ async function openReport(meta: ReportMeta) {
   if (text === null) return;
   report.value = text;
   caption.value = `${meta.style} · ${meta.model} · ${meta.start_date} → ${meta.end_date}`;
-  lastRun.value = { start: meta.start_date, end: meta.end_date, periodType: meta.period_type };
+  lastRun.value = {
+    start: meta.start_date,
+    end: meta.end_date,
+    periodType: meta.period_type,
+    style: meta.style as "listening_review" | "roast",
+    provider: meta.provider as Provider,
+    model: meta.model,
+  };
   saved.value = true; // already persisted
 }
 </script>
