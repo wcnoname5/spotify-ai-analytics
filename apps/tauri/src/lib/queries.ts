@@ -124,6 +124,7 @@ export async function dataRange(): Promise<DataRange> {
   return rows[0];
 }
 
+// Report-related queries
 export type ReportMeta = Omit<ReportRow, "report_text">;
 
 export async function listReports(): Promise<ReportMeta[]> {

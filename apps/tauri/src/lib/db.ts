@@ -1,7 +1,6 @@
-// Local SQLite cache access via tauri-plugin-sql (sqlx). Listening history is a
-// pull-only mirror of D1 — never write here except through sync.ts's INSERT OR
-// IGNORE. Reports are the exception: they're written locally first (synced=0)
-// via queries.ts's saveReportLocal, then pushed to D1 afterwards.
+// Local SQLite cache access via tauri-plugin-sql (sqlx).
+// most tables are pull-only mirror of D1, never write here except through sync.ts's INSERT OR IGNORE.
+// reports is an exception, it is written locally first (synced=0) via queries.ts's saveReportLocal, then pushed to D1 afterwards.
 import Database from "@tauri-apps/plugin-sql";
 import schemaSql from "@sql/schema.sql?raw";
 
