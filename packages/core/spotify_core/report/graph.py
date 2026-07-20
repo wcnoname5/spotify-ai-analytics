@@ -3,11 +3,31 @@ generate_report orchestration entry point the UI calls."""
 from loguru import logger
 from langchain_core.language_models import BaseChatModel
 from langgraph.graph import END, StateGraph
+import langsmith as ls
+
+from spotify_core.config import settings
 
 from .nodes import make_report_nodes
 from .observability import get_trace_url, langfuse_session
 from .state import ReportResult, ReportState
 from .tools import make_report_tools
+
+
+def _langsmith_tracing_kwargs() -> dict:
+    if not settings.langsmith_configured:
+        return {"enabled": False}
+    try:
+        return {
+            "enabled": True,
+            "client": ls.Client(
+                api_url=settings.langsmith_endpoint,
+                api_key=settings.langsmith_api_key,
+            ),
+            "project_name": settings.langsmith_project,
+        }
+    except Exception:
+        logger.exception("langsmith tracing: failed to configure client")
+        return {"enabled": False}
 
 
 def build_report_graph(tools: list):
@@ -62,13 +82,14 @@ def generate_report(
         "tool_log": [],
         "final_report": "",
     }
-    with langfuse_session(style=style, period_type=period_type) as callbacks:
-        config = {
-            "configurable": {"model": model},
-            "callbacks": callbacks,
-            "run_name": f"report-{style}_{start_date}-{end_date}",
-        }
-        final = graph.invoke(initial, config=config)
+    with ls.tracing_context(**_langsmith_tracing_kwargs()):
+        with langfuse_session(style=style, period_type=period_type) as callbacks:
+            config = {
+                "configurable": {"model": model},
+                "callbacks": callbacks,
+                "run_name": f"report-{style}_{start_date}-{end_date}",
+            }
+            final = graph.invoke(initial, config=config)
     trace_url = get_trace_url(callbacks)
     result = ReportResult(
         text=final["final_report"] or final["draft"],

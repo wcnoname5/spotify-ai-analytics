@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     langfuse_secret_key: Optional[str] = Field(default=None, alias="LANGFUSE_SECRET_KEY")
     langfuse_base_url: Optional[str] = Field(default=None, alias="LANGFUSE_BASE_URL")
 
+    # LangSmith (flag + API key required; endpoint/project use SDK defaults if unset)
+    langsmith_tracing: bool = Field(default=False, alias="LANGSMITH_TRACING")
+    langsmith_endpoint: Optional[str] = Field(default=None, alias="LANGSMITH_ENDPOINT")
+    langsmith_api_key: Optional[str] = Field(default=None, alias="LANGSMITH_API_KEY")
+    langsmith_project: Optional[str] = Field(default=None, alias="LANGSMITH_PROJECT")
+
     @field_validator(
         "spotify_data_path",
         "history_db_path",
@@ -74,6 +80,10 @@ class Settings(BaseSettings):
     @property
     def langfuse_configured(self) -> bool:
         return bool(self.langfuse_public_key and self.langfuse_secret_key and self.langfuse_base_url)
+
+    @property
+    def langsmith_configured(self) -> bool:
+        return bool(self.langsmith_tracing and self.langsmith_api_key)
 
     @property
     def fernet_key_bytes(self) -> bytes:
