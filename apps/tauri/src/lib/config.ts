@@ -70,3 +70,15 @@ export interface DoctorReport {
 export async function runDoctor(): Promise<DoctorReport> {
   return JSON.parse(await invoke<string>("doctor")) as DoctorReport;
 }
+
+export type SetupStep = "oauth" | "keygen" | "import";
+
+/** Run a whitelisted setup step. Buffered: resolves when the step finishes. */
+export async function runSetupStep(step: SetupStep, arg?: string): Promise<string> {
+  return invoke<string>("run_setup_step", { step, arg: arg ?? null });
+}
+
+/** Folder picker for the Spotify history export. Null when cancelled. */
+export async function pickHistoryFolder(): Promise<string | null> {
+  return invoke<string | null>("pick_history_folder");
+}

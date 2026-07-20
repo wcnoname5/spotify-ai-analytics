@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import PlotChart from "./components/PlotChart.vue";
 import ReportPage from "./ReportPage.vue";
+import SetupPage from "./SetupPage.vue";
+import { runDoctor } from "./lib/config";
 import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
 import { syncOnStartup, syncReports } from "./lib/sync";
@@ -32,7 +34,19 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: "all", label: "All time" },
 ];
 
-const page = ref<"dashboard" | "report">("dashboard");
+const page = ref<"dashboard" | "report" | "setup">("dashboard");
+
+// First run: an unconfigured environment lands on Setup rather than an empty
+// dashboard. Fail-soft — if doctor can't run, just show the dashboard.
+onMounted(async () => {
+  if (!isTauri) return;
+  try {
+    const report = await runDoctor();
+    if (!report.checks?.client_id) page.value = "setup";
+  } catch (e) {
+    console.error("first-run check failed:", e);
+  }
+});
 const range = ref<RangeKey | "custom">("30");
 const customStart = ref(""); // YYYY-MM-DD, "" = unset
 const customEnd = ref("");
@@ -256,6 +270,7 @@ const trendTraces = computed(() => [
   <nav class="filters">
     <button class="btn nav-btn" :class="{ current: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
     <button class="btn nav-btn" :class="{ current: page === 'report' }" @click="page = 'report'">Report</button>
+    <button class="btn nav-btn" :class="{ current: page === 'setup' }" @click="page = 'setup'">Setup</button>
   </nav>
   <hr class="nav-divider" />
 
@@ -384,6 +399,7 @@ const trendTraces = computed(() => [
   </div>
 
   <ReportPage v-show="page === 'report'" />
+  <SetupPage v-show="page === 'setup'" />
 
   <footer>Last played {{ lastUpdated }}</footer>
 </template>

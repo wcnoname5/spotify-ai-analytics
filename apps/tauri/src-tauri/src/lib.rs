@@ -60,6 +60,45 @@ async fn set_config(pairs: Vec<String>) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Run one setup step. Steps are whitelisted rather than taking a command from
+/// the frontend, so this stays a fixed surface and not an arbitrary spawn.
+///
+/// Buffered like `generate_report`: neither step has meaningful intermediate
+/// progress, so the UI shows running/done/failed and expands output on failure.
+#[tauri::command]
+async fn run_setup_step(step: String, arg: Option<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let args: Vec<String> = match step.as_str() {
+            // run_oauth() only prints, never reads stdin — safe to spawn headless.
+            // It opens the browser itself and serves the 127.0.0.1:8888 callback.
+            "oauth" => vec!["reauth".into()],
+            "keygen" => vec!["config".into(), "keygen".into()],
+            "import" => vec![
+                "import-history".into(),
+                "--from".into(),
+                arg.ok_or("import step requires a path")?,
+            ],
+            other => return Err(format!("unknown setup step: {other}")),
+        };
+        run_cli(&args, false)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Folder picker for the history import. Spotify exports are a directory of
+/// `Streaming_History_Audio_*.json`, so this picks the folder, not one file.
+#[tauri::command]
+async fn pick_history_folder() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        Ok(rfd::FileDialog::new()
+            .pick_folder()
+            .map(|p| p.to_string_lossy().into_owned()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Environment readiness report as a JSON string. Exit code deliberately ignored.
 #[tauri::command]
 async fn doctor() -> Result<String, String> {
@@ -151,7 +190,9 @@ pub fn run() {
             confirm_dialog,
             get_config,
             set_config,
-            doctor
+            doctor,
+            run_setup_step,
+            pick_history_folder
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

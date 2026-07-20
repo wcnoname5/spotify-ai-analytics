@@ -254,6 +254,22 @@ def config_get() -> None:
     )
 
 
+@config_app.command("keygen")
+def config_keygen() -> None:
+    """Ensure a Fernet TOKEN_ENCRYPT_KEY exists, generating one if absent.
+
+    Never overwrites an existing key — regenerating orphans every stored token.
+    Reports whether a key was created so the GUI can say so; the key itself is
+    not printed, since it would land in the caller's captured stdout.
+    """
+    from spotify_core import env_file, paths
+    from spotify_mcp.wizard import credentials as _credentials
+
+    existed = bool(env_file.read_key(paths.env_file(), "TOKEN_ENCRYPT_KEY"))
+    _credentials.ensure_fernet_key(console)
+    print(json.dumps({"created": not existed}))
+
+
 @config_app.command("set")
 def config_set(
     pairs: Annotated[list[str], typer.Argument(help="One or more KEY=VALUE pairs.")],
