@@ -10,6 +10,7 @@ import {
   handlePostCursor,
   handlePostTokens,
 } from "./tokens";
+import { handleGetReports, handlePostReport } from "./reports";
 import { runSync } from "./sync";
 
 export interface Env {
@@ -36,6 +37,12 @@ export default {
     }
     if (pathname === "/api/tracks" && method === "POST") {
       return handlePostTracks(request, env);
+    }
+    if (pathname === "/api/reports" && method === "GET") {
+      return handleGetReports(request, env);
+    }
+    if (pathname === "/api/reports" && method === "POST") {
+      return handlePostReport(request, env);
     }
     if (pathname === "/api/tokens" && method === "GET") {
       return handleGetTokens(request, env);
