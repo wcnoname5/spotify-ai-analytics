@@ -20,8 +20,8 @@ Save generated reports so user/LLM can query past records. Decision: **no R2, no
 - Fallback if avoiding cloud work: separate local `reports.db` (NOT inside history.db — it must stay a rebuildable mirror), upgrade path = add the push/pull later
 
 ### 2. One-time setup → Tauri GUI (absorbs the old packaging-hardening items)
-Spawned-Python front-end over the existing wizard steps, not a rewrite. Draft spec: `docs/superpowers/specs/2026-07-18-tauri-setup-gui-design.md`.
-- [ ] Phase 0 prereq: build-time Vite `define` config → runtime Rust `get_config`/`set_config` (`.env` or OS keychain); removes the token-in-bundle debt
+Spawned-Python front-end over the existing wizard steps, not a rewrite. Spec (approved): `docs/superpowers/specs/2026-07-20-tauri-setup-gui-design.md` — implementation scope Phase 0–2; Phase 3 (cloud) specified but deferred.
+- [ ] Phase 0 prereq: build-time Vite `define` → runtime `get_config`/`set_config` (reads in Rust, writes via `spotify-mcp config set` → `env_file.upsert`); removes the token-in-bundle debt. Path resolution already solved by `paths.py`
 - [ ] **Design rule for step 3:** every promptless entry is a `spotify-mcp` subcommand (`doctor --json`, `oauth`, `import-history --from`, ...) so packaging later bundles ONE exe 
 - [ ] Setup page: doctor-driven step list, client-ID + LLM/Langfuse/LangSmith forms, Fernet keygen; then OAuth + history import; cloud setup stays script-first (GUI = prereq check + paste WORKER_URL/token)
     - *Note:* LangSmith feature is newly added, test tracing is fine w/ langsmith and add its API key to .`env.example` (for developing) before go on
