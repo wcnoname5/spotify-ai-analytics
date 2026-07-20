@@ -3,6 +3,7 @@
 // reports is an exception, it is written locally first (synced=0) via queries.ts's saveReportLocal, then pushed to D1 afterwards.
 import Database from "@tauri-apps/plugin-sql";
 import schemaSql from "@sql/schema.sql?raw";
+import { getConfig } from "./config";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
 
@@ -12,7 +13,8 @@ let dbPromise: Promise<Database> | null = null;
 export function getDb(): Promise<Database> {
   if (!dbPromise) {
     dbPromise = (async () => {
-      const db = await Database.load("sqlite:" + __HISTORY_DB_PATH__);
+      const { history_db_path } = await getConfig();
+      const db = await Database.load("sqlite:" + history_db_path.replace(/\\/g, "/"));
       // schema.sql statements are idempotent (CREATE TABLE/INDEX IF NOT EXISTS).
       // Strip `--` comment tails before splitting on `;`
       const withoutComments = schemaSql

@@ -9,6 +9,7 @@ import maxReportGeneratedAtSql from "@sql/max_report_generated_at.sql?raw";
 // Rust-side fetch: webview fetch enforces CORS, the Worker sends no CORS headers.
 import { fetch } from "@tauri-apps/plugin-http";
 import { getDb } from "./db";
+import { getConfig } from "./config";
 import type { TrackRow } from "./api";
 
 const EPOCH = "1970-01-01T00:00:00Z";
@@ -18,15 +19,16 @@ export type SyncResult =
   | { offline: true; reason: "unconfigured" | "error" };
 
 export async function syncOnStartup(): Promise<SyncResult> {
-  if (!__WORKER_URL__) return { offline: true, reason: "unconfigured" };
+  const { worker_url, worker_auth_token } = await getConfig();
+  if (!worker_url) return { offline: true, reason: "unconfigured" };
 
   try {
     const db = await getDb();
     const cursorRows = await db.select<{ c: string | null }[]>(maxPlayedAtSql);
     const cursor = cursorRows[0]?.c ?? EPOCH;
 
-    const res = await fetch(`${__WORKER_URL__}/api/tracks?since=${encodeURIComponent(cursor)}`, {
-      headers: { Authorization: `Bearer ${__WORKER_AUTH_TOKEN__}` },
+    const res = await fetch(`${worker_url}/api/tracks?since=${encodeURIComponent(cursor)}`, {
+      headers: { Authorization: `Bearer ${worker_auth_token}` },
     });
     if (!res.ok) {
       console.error(`syncOnStartup: worker responded ${res.status}`);
@@ -74,15 +76,16 @@ export interface ReportRow {
 
 /** Push local synced=0 report rows, then pull D1 rows behind the generated_at cursor. */
 export async function syncReports(): Promise<{ pushed: number; pulled: number } | { offline: true }> {
-  if (!__WORKER_URL__) return { offline: true };
+  const { worker_url, worker_auth_token } = await getConfig();
+  if (!worker_url) return { offline: true };
   try {
     const db = await getDb();
-    const auth = { Authorization: `Bearer ${__WORKER_AUTH_TOKEN__}` };
+    const auth = { Authorization: `Bearer ${worker_auth_token}` };
 
     const unsynced = await db.select<ReportRow[]>(unsyncedReportsSql);
     let pushed = 0;
     for (const r of unsynced) {
-      const res = await fetch(`${__WORKER_URL__}/api/reports`, {
+      const res = await fetch(`${worker_url}/api/reports`, {
         method: "POST",
         headers: { ...auth, "Content-Type": "application/json" },
         body: JSON.stringify(r),
@@ -95,7 +98,7 @@ export async function syncReports(): Promise<{ pushed: number; pulled: number } 
     const cursorRows = await db.select<{ c: string | null }[]>(maxReportGeneratedAtSql);
     const cursor = cursorRows[0]?.c ?? EPOCH;
     const res = await fetch(
-      `${__WORKER_URL__}/api/reports?since=${encodeURIComponent(cursor)}`,
+      `${worker_url}/api/reports?since=${encodeURIComponent(cursor)}`,
       { headers: auth }
     );
     if (!res.ok) return { pushed, pulled: 0 };

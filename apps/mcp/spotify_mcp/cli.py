@@ -97,10 +97,21 @@ def import_history(
 
 
 @app.command()
-def doctor() -> None:
-    """Check environment readiness and print a JSON report."""
+def doctor(
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Print bare JSON (no colour) for machine callers.")
+    ] = False,
+) -> None:
+    """Check environment readiness and print a JSON report.
+
+    Exits 1 when not ready. During setup that is the *normal* state, so machine
+    callers (the Tauri Setup page) must read stdout and ignore the exit code.
+    """
     report = _state.collect_report()
-    console.print_json(json.dumps(report))
+    if json_out:
+        print(json.dumps(report))
+    else:
+        console.print_json(json.dumps(report))
     is_ready: bool = bool(report.get("ready", False))
     raise typer.Exit(code=0 if is_ready else 1)
 
@@ -184,15 +195,80 @@ def sync(
 
 
 @app.command()
-def path() -> None:
+def path(
+    json_out: Annotated[
+        bool, typer.Option("--json", help="Print bare JSON only, omitting the warning lines.")
+    ] = False,
+) -> None:
     """Show the resolved config/data locations, how each was chosen, and any conflicts."""
     from spotify_core import paths
 
     from spotify_mcp.wizard import state as _st
 
+    if json_out:
+        # Warnings are rich-markup and would corrupt the JSON for machine callers.
+        print(json.dumps(paths.describe()))
+        return
     console.print_json(json.dumps(paths.describe()))
     for w in _st.path_warnings():
         console.print(f"[yellow]warning: {w}[/yellow]")
+
+
+config_app = typer.Typer(help="Read and write settings in the resolved .env file.")
+app.add_typer(config_app, name="config")
+
+
+@config_app.command("get")
+def config_get() -> None:
+    """Print the effective runtime config the desktop app needs, as JSON.
+
+    The app used to get these as build-time Vite `define` constants. They are
+    resolved here rather than parsed from .env by the caller because the
+    effective value is not a plain file read: HISTORY_DB_PATH falls back to
+    paths.history_db() and resolves relative values against the data dir
+    (see config.Settings). Keeping that precedence in one place is the point.
+    """
+    import os
+
+    from spotify_core import env_file, paths
+    from spotify_core.config import Settings
+
+    # Fresh instance, not the module singleton: a `config set` earlier in this
+    # session must be reflected without the caller restarting the CLI.
+    settings = Settings()
+    target = paths.env_file()
+
+    def _raw(key: str) -> str:
+        return (os.environ.get(key) or env_file.read_key(target, key) or "").strip()
+
+    print(
+        json.dumps(
+            {
+                "env_file": str(target),
+                "dev": settings.dev,
+                "history_db_path": str(settings.history_db_path),
+                "worker_url": _raw("WORKER_URL"),
+                "worker_auth_token": _raw("WORKER_AUTH_TOKEN"),
+            }
+        )
+    )
+
+
+@config_app.command("set")
+def config_set(
+    pairs: Annotated[list[str], typer.Argument(help="One or more KEY=VALUE pairs.")],
+) -> None:
+    """Upsert KEY=VALUE pairs into the resolved .env, leaving sibling keys untouched."""
+    from spotify_core import env_file, paths
+
+    target = paths.env_file()
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        key = key.strip()
+        if not sep or not key:
+            raise typer.BadParameter(f"expected KEY=VALUE, got {pair!r}")
+        env_file.upsert(target, key, value)
+    print(json.dumps({"env_file": str(target), "written": len(pairs)}))
 
 @app.command()
 def serve() -> None:
