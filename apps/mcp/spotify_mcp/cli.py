@@ -249,6 +249,15 @@ def config_get() -> None:
                 "history_db_path": str(settings.history_db_path),
                 "worker_url": _raw("WORKER_URL"),
                 "worker_auth_token": _raw("WORKER_AUTH_TOKEN"),
+                # Which optional settings already have a value, so the Setup page
+                # can show only what is missing. Booleans, never the secrets.
+                "configured": {
+                    "gemini": bool(settings.gemini_api_key),
+                    "openai": bool(settings.openai_api_key),
+                    "langfuse": settings.langfuse_configured,
+                    "langsmith": bool(settings.langsmith_api_key),
+                    "worker": bool(_raw("WORKER_URL") and _raw("WORKER_AUTH_TOKEN")),
+                },
             }
         )
     )

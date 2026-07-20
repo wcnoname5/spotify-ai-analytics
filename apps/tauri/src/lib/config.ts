@@ -12,12 +12,22 @@ import { invoke } from "@tauri-apps/api/core";
 // and the cycle would be resolved at module-init time.
 const inTauri = () => "__TAURI_INTERNALS__" in window;
 
+/** Which optional settings already have a value. Booleans only, never secrets. */
+export interface ConfiguredFlags {
+  gemini: boolean;
+  openai: boolean;
+  langfuse: boolean;
+  langsmith: boolean;
+  worker: boolean;
+}
+
 export interface AppConfig {
   env_file: string;
   dev: boolean;
   history_db_path: string;
   worker_url: string;
   worker_auth_token: string;
+  configured: ConfiguredFlags;
 }
 
 const BROWSER_FALLBACK: AppConfig = {
@@ -26,6 +36,7 @@ const BROWSER_FALLBACK: AppConfig = {
   history_db_path: "",
   worker_url: "",
   worker_auth_token: "",
+  configured: { gemini: false, openai: false, langfuse: false, langsmith: false, worker: false },
 };
 
 let configPromise: Promise<AppConfig> | null = null;
