@@ -4,7 +4,7 @@ import PlotChart from "./components/PlotChart.vue";
 import ReportPage from "./ReportPage.vue";
 import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
-import { syncOnStartup } from "./lib/sync";
+import { syncOnStartup, syncReports } from "./lib/sync";
 import {
   trend,
   dataRange,
@@ -160,6 +160,7 @@ onMounted(async () => {
     } else {
       console.log(`Startup sync: inserted ${result.inserted} new play(s).`);
     }
+    syncReports().catch(console.error);
   }
   await load();
 });

@@ -1,9 +1,9 @@
-export type ReportPeriod = "weekly" | "monthly" | "seasonal";
+export type ReportPeriod = "weekly" | "monthly" | "quarterly";
 
 const fmt = (dt: Date) =>
   `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 
-/** Last fully completed period (local time). Week starts Monday; seasonal = calendar quarter. */
+/** Last fully completed period (local time). Week starts Monday; quarterly = calendar quarter. */
 export function periodRange(
   period: ReportPeriod,
   now = new Date()
@@ -23,7 +23,7 @@ export function periodRange(
   return {
     start: fmt(new Date(y, (q - 1) * 3, 1)),
     end: fmt(new Date(y, q * 3, 0)),
-    periodType: "custom",
+    periodType: "quarterly",
   };
 }
 
@@ -33,8 +33,8 @@ if (typeof window === "undefined") {
   const eq = (a: object, b: object) => JSON.stringify(a) === JSON.stringify(b) || (() => { throw new Error(`${JSON.stringify(a)} != ${JSON.stringify(b)}`); })();
   eq(periodRange("weekly", now), { start: "2026-07-06", end: "2026-07-12", periodType: "weekly" });
   eq(periodRange("monthly", now), { start: "2026-06-01", end: "2026-06-30", periodType: "monthly" });
-  eq(periodRange("seasonal", now), { start: "2026-04-01", end: "2026-06-30", periodType: "custom" });
-  eq(periodRange("seasonal", new Date(2026, 1, 10)), { start: "2025-10-01", end: "2025-12-31", periodType: "custom" }); // Q4 prev year
+  eq(periodRange("quarterly", now), { start: "2026-04-01", end: "2026-06-30", periodType: "quarterly" });
+  eq(periodRange("quarterly", new Date(2026, 1, 10)), { start: "2025-10-01", end: "2025-12-31", periodType: "quarterly" }); // Q4 prev year
   eq(periodRange("weekly", new Date(2026, 6, 13)), { start: "2026-07-06", end: "2026-07-12", periodType: "weekly" }); // Monday
   console.log("period.ts self-check OK");
 }
