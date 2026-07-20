@@ -1,7 +1,7 @@
 # Report History Storage — Design
 
 **Date:** 2026-07-18
-**Status:** Approved for planning (branch `report-db`)
+**Status:** Done (commit `649bc1`), under PR review
 **Scope:** Persist generated AI reports with queryable metadata; retrieve them in the Tauri frontend and via MCP. Roadmap item 1 toward v0.1.
 
 ## Decisions (settled with user)
