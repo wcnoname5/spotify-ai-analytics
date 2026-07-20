@@ -117,3 +117,15 @@ class WorkerClient:
         """Return the total row count in listening_history."""
         body = self._request("GET", "/api/tracks/count").json()
         return body["count"]
+
+    # ------------------------------------------------------------------
+    # Reports
+    # ------------------------------------------------------------------
+
+    def post_report(self, row: dict) -> int:
+        """Insert one report row (idempotent by id); return rows inserted (0 or 1)."""
+        return self._request("POST", "/api/reports", json=row).json()["inserted"]
+
+    def get_reports_since(self, since_iso: str) -> list[dict]:
+        """Return report rows with generated_at strictly after since_iso."""
+        return self._request("GET", "/api/reports", params={"since": since_iso}).json()["reports"]
