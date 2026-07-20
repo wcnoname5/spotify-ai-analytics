@@ -10,12 +10,13 @@ Date: 2026-07-18
 
 ## Roadmap to first pre-release
 
-### 1. Report history: storage + retrieval
+### 1. Report history: storage + retrieval — DONE (PR #15, branch `report-db`)
 Save generated reports so user/LLM can query past records. Decision: **no R2, no .txt files** — text is KB-scale, lives in a table.
-- [ ] `reports` table in D1 via `schema.sql` (style, period_type, start_date, end_date, provider, model, generated_at, revision_count, report_text)
-- [ ] Worker: plain CRUD `POST /api/reports` + `GET /api/reports?since=` (same cursor shape as `/api/tracks`; thaws the Worker freeze for CRUD only — aggregation stays banned)
-- [ ] App saves after successful generation; local `history.db` mirrors via the existing pull-sync pattern (keeps the cache disposable)
-- [ ] Past-reports UI (list + view) and MCP read access from the local mirror
+- [x] `reports` table in D1 via `schema.sql` (style, period_type, start_date, end_date, provider, model, generated_at, revision_count, report_text)
+- [x] Worker: plain CRUD `POST /api/reports` + `GET /api/reports?since=` (same cursor shape as `/api/tracks`; thaws the Worker freeze for CRUD only — aggregation stays banned)
+- [x] App saves after successful generation; local `history.db` mirrors via the existing pull-sync pattern (keeps the cache disposable)
+- [x] Past-reports UI (list + view) and MCP read access from the local mirror
+- Riding: Tauri-saved rows carry `revision_count=0`; MCP report tools untested against a real server; same-second cursor edge (single-machine assumption)
 - Fallback if avoiding cloud work: separate local `reports.db` (NOT inside history.db — it must stay a rebuildable mirror), upgrade path = add the push/pull later
 
 ### 2. One-time setup → Tauri GUI (absorbs the old packaging-hardening items)
