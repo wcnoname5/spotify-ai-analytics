@@ -21,11 +21,20 @@ Save generated reports so user/LLM can query past records. Decision: **no R2, no
 
 ### 2. One-time setup → Tauri GUI (absorbs the old packaging-hardening items)
 Spawned-Python front-end over the existing wizard steps, not a rewrite. Spec (approved): `docs/superpowers/specs/2026-07-20-tauri-setup-gui-design.md` — implementation scope Phase 0–2; Phase 3 (cloud) specified but deferred.
-- [ ] Phase 0 prereq: build-time Vite `define` → runtime `get_config`/`set_config` (reads in Rust, writes via `spotify-mcp config set` → `env_file.upsert`); removes the token-in-bundle debt. Path resolution already solved by `paths.py`
-- [ ] **Design rule for step 3:** every promptless entry is a `spotify-mcp` subcommand (`doctor --json`, `oauth`, `import-history --from`, ...) so packaging later bundles ONE exe 
-- [ ] Setup page: doctor-driven step list, client-ID + LLM/Langfuse/LangSmith forms, Fernet keygen; then OAuth + history import; cloud setup stays script-first (GUI = prereq check + paste WORKER_URL/token)
-    - *Note:* LangSmith feature is newly added, test tracing is fine w/ langsmith and add its API key to .`env.example` (for developing) before go on
-- [ ] solve the legacy twin  `.env` (repo rott vs. `platformdirs` resolved path) problem. (keep one is okay)
+- [x] Phase 0: build-time Vite `define` → runtime config. Both reads and writes go through Python (`config get` / `config set`) — the effective `HISTORY_DB_PATH` needs `config.Settings` precedence + relative-path resolution, so a Rust-side `.env` parse would have been wrong. Token no longer in the bundle (verified absent)
+- [x] **Design rule for step 3:** every promptless entry is a `spotify-mcp` subcommand, so packaging bundles ONE exe. Net new surface was only `path --json`, `doctor --json`, `config get/set/keygen` — `reauth` and `import-history --from` were already promptless
+- [x] Phase 1+2 Setup page: shows only what's missing (`Show all settings` to edit anything), doctor-driven status, forms, OAuth + history import. Fernet key auto-generates when absent — it needs no user decision. Langfuse/LangSmith are one-of-two, not both
+    - *Note:* LangSmith keys were already in `.env.example`; picking it also writes `LANGSMITH_TRACING=true`, without which the key traces nothing
+- [x] Twin `.env`: already solved by `paths.py` (explicit override → `DEV=true` → platformdirs). The stale duplicate `TOKEN_ENCRYPT_KEY` was deleted 2026-07-20
+- [ ] **Not yet verified on a running app:** `openUrl` capability (`opener:default` may need `opener:allow-open-url`), and the OAuth / import buttons end-to-end
+- Fresh-environment testing without touching your `.env`:
+  `SPOTIFY_MCP_CONFIG_DIR=/tmp/fresh SPOTIFY_MCP_DATA_DIR=/tmp/fresh/data npm run tauri dev`
+
+**Phase 3 (wrangler orchestration in the GUI) — when to do it.** Currently the GUI does the cheap half: prereq check, open docs, paste `WORKER_URL` + token; `scripts/setup_cloud.sh` does the deploy. Do the full version only when *both* hold:
+1. **Packaging shipped** (section 3). Until then every user has a repo checkout and `uv`, so they can run `setup_cloud.sh` directly — a GUI wrapper saves them nothing.
+2. **Pasting the token is the observed blocker** for a real non-developer user. If people get through cloud setup fine, this is the most work for the least-used screen (once per user, per lifetime).
+
+If neither holds by v0.1, ship the paste screen and revisit post-release. Cost note: it cannot be tested without a real Cloudflare account and an actual deploy, so it also carries the worst verification story of anything on this roadmap.
 
 ### 3. PyInstaller packaging (downloadable app)
 Bundle the single `spotify-mcp` CLI (report + setup subcommands) as the Tauri sidecar; `REPORT_CMD` is the one-line swap.
