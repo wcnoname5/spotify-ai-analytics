@@ -294,6 +294,49 @@ def register(mcp: FastMCP) -> None:
             return {"error": str(exc)}
 
     @mcp.tool(
+        name="list_reports",
+        annotations={
+            "title": "List Saved AI Reports",
+            "readOnlyHint": True, "destructiveHint": False,
+            "idempotentHint": True, "openWorldHint": False,
+        },
+    )
+    def list_reports() -> list[dict]:
+        """List saved AI report metadata (no text), newest first.
+
+        Returns: [{"id", "style", "period_type", "start_date", "end_date",
+                   "provider", "model", "generated_at", "revision_count"}, ...]
+        """
+        try:
+            from spotify_core.db.report_store import list_reports as _list
+            return _list(DB_PATH)
+        except Exception as exc:
+            logger.error("[Tool] list_reports failed: {}", exc)
+            return [{"error": str(exc)}]
+
+    @mcp.tool(
+        name="get_report",
+        annotations={
+            "title": "Get a Saved AI Report",
+            "readOnlyHint": True, "destructiveHint": False,
+            "idempotentHint": True, "openWorldHint": False,
+        },
+    )
+    def get_report(report_id: str) -> dict:
+        """Return one saved AI report (including its markdown text) by id.
+
+        Args:
+            report_id: The report uuid from list_reports.
+        """
+        try:
+            from spotify_core.db.report_store import get_report as _get
+            row = _get(DB_PATH, report_id)
+            return row if row else {"error": f"no report with id {report_id}"}
+        except Exception as exc:
+            logger.error("[Tool] get_report failed: {}", exc)
+            return {"error": str(exc)}
+
+    @mcp.tool(
         name="get_listening_patterns",
         annotations={
             "title": "Get Temporal Listening Patterns",
