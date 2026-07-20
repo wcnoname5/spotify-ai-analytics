@@ -196,20 +196,13 @@ async function runStep(step: SetupStep) {
       <div v-if="need(checks.fernet_key) || need(checks.tokens_valid) || need(checks.history_has_data)" class="card">
         <h3>Actions</h3>
 
-        <div v-if="need(checks.fernet_key)" class="step">
-          <button class="btn" :disabled="steps.keygen.running" @click="runStep('keygen')">
-            {{ steps.keygen.running ? "Working…" : "Generate encryption key" }}
-          </button>
-          <span class="hint">Created once. Never regenerated — that would orphan saved tokens.</span>
-        </div>
-
         <div v-if="need(checks.tokens_valid)" class="step">
           <button class="btn" :disabled="steps.oauth.running" @click="runStep('oauth')">
             {{ steps.oauth.running ? "Waiting for browser…" : "Authorize Spotify" }}
           </button>
           <span class="hint">Opens your browser. Needs the Client ID and encryption key first.</span>
         </div>
-
+        
         <div v-if="need(checks.history_has_data)" class="step">
           <button class="btn" :disabled="steps.import.running" @click="runStep('import')">
             {{ steps.import.running ? "Importing…" : "Import history…" }}
@@ -217,6 +210,20 @@ async function runStep(step: SetupStep) {
           <span class="hint">Pick the folder of <code>Streaming_History_Audio_*.json</code> files.</span>
         </div>
 
+        <!-- Unlike the other two steps, keygen is idempotent: once a key exists,
+             re-running it does nothing. So it is a button only while missing;
+             afterwards the useful thing to show is the backup warning. -->
+        <div v-if="!checks.fernet_key" class="step">
+          <button class="btn" :disabled="steps.keygen.running" @click="runStep('keygen')">
+            {{ steps.keygen.running ? "Working…" : "Generate encryption key" }}
+          </button>
+          <span class="hint">Created once, then never changed — a new key would orphan saved tokens.</span>
+        </div>
+        <p v-else-if="showAll" class="hint">
+          <span class="ok">✓</span> Encryption key set. Back up <code>{{ envFile }}</code> —
+          losing this key makes every stored token permanently unreadable.
+        </p>
+        
         <template v-for="(state, name) in steps" :key="name">
           <details v-if="state.ok === false" class="failure" open>
             <summary>{{ name }} failed</summary>
@@ -224,14 +231,14 @@ async function runStep(step: SetupStep) {
           </details>
         </template>
       </div>
-
+      <!-- TODO: 加上href (AI Studio & OpenAI) -->
       <div v-if="!hasLlm || showAll" class="card">
-        <h3>LLM <span class="hint">(one is enough)</span></h3>
-        <label>Google API key <input v-model="form.GEMINI_API_KEY" type="password" :placeholder="configured.gemini ? 'set — leave blank to keep' : ''" /></label>
+        <h3>LLM Provider<span class="hint"></span></h3>
+        <label>Gemini API key <input v-model="form.GEMINI_API_KEY" type="password" :placeholder="configured.gemini ? 'set — leave blank to keep' : ''" /></label>
         <label>OpenAI API key <input v-model="form.OPENAI_API_KEY" type="password" :placeholder="configured.openai ? 'set — leave blank to keep' : ''" /></label>
       </div>
 
-      <!-- Langfuse and LangSmith are alternatives, so only the chosen one is asked for. -->
+      <!-- Optional tracing: Langfuse or LangSmith  -->
       <div v-if="!hasTracing || showAll" class="card">
         <h3>Tracing <span class="hint">(optional)</span></h3>
         <div class="step">
