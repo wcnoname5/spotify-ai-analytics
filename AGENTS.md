@@ -4,7 +4,7 @@ Personal Spotify analytics app. Target architecture (see `spotify-project-spec.m
 
 - **Cloudflare D1** is the single source of truth (listening history + encrypted Spotify tokens)
 - **Cloudflare Worker** (TypeScript, `worker/`) is the *only* thing that talks to D1 — Bearer-token gated
-- **Worker cron** (hourly `scheduled()` handler in `worker/src/sync.ts`) pulls recent plays from the Spotify API into D1 directly; the old GitHub Actions workflow remains as a `workflow_dispatch` manual fallback only
+- **Worker cron** (hourly `scheduled()` handler in `worker/src/sync.ts`) pulls recent plays from the Spotify API into D1 directly
 - **Local SQLite** is a pull-only sync cache of D1 (never written to independently); MCP and report generation read it
 
 ---
@@ -52,7 +52,6 @@ Check `.env.example`, tunables with defaults live in `spotify_core/config.py`.
 uv sync                                # install all Python dependencies
 uv run pytest                          # run tests
 uv run python apps/mcp/server.py      # run MCP server directly
-uv run python scripts/sync.py         # manual-fallback sync: Spotify API -> D1 (needs WORKER_* env); hourly cron runs in the Worker
 uv run python scripts/local_sync.py   # refresh local SQLite cache from D1
 cd worker && npm run typecheck         # Worker typecheck (no unit tests by choice)
 cd worker && npx wrangler deploy       # deploy the Worker

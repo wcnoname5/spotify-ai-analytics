@@ -2,13 +2,12 @@
 # One-time Cloudflare setup for the D1-backed deployment (docs/DEPLOY.md).
 # Creates the prod D1 database, applies the Worker's migrations, deploys the
 # Worker (whose hourly cron starts syncing immediately), sets the Worker
-# secrets, and (if gh is available) writes the GitHub Actions secrets the
-# manual-fallback sync.yml needs.
+# secrets, and seeds D1.
 #
 # Usage:
 #   bash scripts/setup_cloud.sh [worker-auth-token]
 #
-# Requires: node/npx (wrangler), gh (GitHub CLI).
+# Requires: node/npx (wrangler).
 
 set -euo pipefail
 
@@ -33,7 +32,7 @@ WRANGLER="npx --yes wrangler@4"
 WORKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../worker" && pwd)"
 
 # ---------------------------------------------------------------------------
-# [0/5] .env: ensure SPOTIFY_CLIENT_ID (prompt) and TOKEN_ENCRYPT_KEY (generate).
+# [0/4] .env: ensure SPOTIFY_CLIENT_ID (prompt) and TOKEN_ENCRYPT_KEY (generate).
 # Existing values are never overwritten
 # ---------------------------------------------------------------------------
 ENV_FILE=""
@@ -51,7 +50,7 @@ env_set() { # upsert KEY=value in $ENV_FILE (overwrites an existing line)
   fi
 }
 
-echo "==> [0/5] Checking $ENV_FILE"
+echo "==> [0/4] Checking $ENV_FILE"
 if [[ -z "$(env_get SPOTIFY_CLIENT_ID)" ]]; then
   read -r -p "    Paste your Spotify Client ID (developer.spotify.com dashboard): " CLIENT_ID
   [[ -z "$CLIENT_ID" ]] && { echo "    Client ID is required."; exit 1; }
@@ -65,14 +64,14 @@ if [[ -z "$(env_get TOKEN_ENCRYPT_KEY)" ]]; then
   echo "    losing the key makes stored tokens unrecoverable."
 fi
 
-echo "==> [1/5] Cloudflare login (opens a browser the first time)"
+echo "==> [1/4] Cloudflare login (opens a browser the first time)"
 (cd "$WORKER_DIR" && $WRANGLER whoami) || (cd "$WORKER_DIR" && $WRANGLER login)
 
-echo "==> [2/5] D1 database: $PROD_DB"
+echo "==> [2/4] D1 database: $PROD_DB"
 (cd "$WORKER_DIR" && $WRANGLER d1 create "$PROD_DB") \
   || echo "    $PROD_DB exists already — fine, continuing"
 
-echo "==> [2b/5] Patching worker/wrangler.toml with the real database_id"
+echo "==> [2b/4] Patching worker/wrangler.toml with the real database_id"
 [[ -f "$WORKER_DIR/wrangler.toml" ]] || cp "$WORKER_DIR/wrangler.toml.example" "$WORKER_DIR/wrangler.toml"
 D1_LIST_JSON="$(cd "$WORKER_DIR" && $WRANGLER d1 list --json)"
 $PYTHON - "$WORKER_DIR/wrangler.toml" "$PROD_DB" <<PYEOF
@@ -98,7 +97,7 @@ open(toml_path, "w", encoding="utf-8").write(text)
 print(f"    {prod_name} -> {prod_id}")
 PYEOF
 
-echo "==> [3/5] Apply migrations + deploy the Worker (the hourly cron goes live here)"
+echo "==> [3/4] Apply migrations + deploy the Worker (the hourly cron goes live here)"
 (cd "$WORKER_DIR" && $WRANGLER d1 migrations apply "$PROD_DB" --remote)
 DEPLOY_OUT="$(cd "$WORKER_DIR" && $WRANGLER deploy)"
 echo "$DEPLOY_OUT"
@@ -106,11 +105,10 @@ WORKER_URL="$(echo "$DEPLOY_OUT" | grep -oE 'https://[^ ]+\.workers\.dev' | head
 
 if [[ -z "$WORKER_URL" ]]; then
   echo "    warning: could not parse the Worker URL from the deploy output —"
-  echo "    set WORKER_URL manually (GitHub -> repo Settings ->"
-  echo "    Secrets and variables -> Actions)."
+  echo "    set WORKER_URL manually in $ENV_FILE."
 fi
 
-echo "==> [3b/5] Worker secrets (never printed): AUTH_TOKEN + the cron's Spotify credentials"
+echo "==> [3b/4] Worker secrets (never printed): AUTH_TOKEN + the cron's Spotify credentials"
 printf '%s' "$WORKER_AUTH_TOKEN" | (cd "$WORKER_DIR" && $WRANGLER secret put AUTH_TOKEN)
 # Without these two the deployed cron fails every hour (SPOTIFY_USER_ID is
 # optional — the Worker defaults it to "default").
@@ -118,39 +116,12 @@ printf '%s' "$(env_get SPOTIFY_CLIENT_ID)" | (cd "$WORKER_DIR" && $WRANGLER secr
 printf '%s' "$(env_get TOKEN_ENCRYPT_KEY)" | (cd "$WORKER_DIR" && $WRANGLER secret put TOKEN_ENCRYPT_KEY)
 
 # Write WORKER_* to .env, OVERWRITING stale values: each run without args
-# rotates the Bearer token on the Worker and in GitHub secrets, so a
-# leftover old value in .env would 401 every local script.
+# rotates the Bearer token on the Worker, so a leftover old value in .env
+# would 401 every local script.
 [[ -n "$WORKER_URL" ]] && env_set WORKER_URL "$WORKER_URL"
 env_set WORKER_AUTH_TOKEN "$WORKER_AUTH_TOKEN"
 
-# ---------------------------------------------------------------------------
-# GitHub Actions secrets — via gh, if available.
-# ---------------------------------------------------------------------------
-MISSING_SECRETS=()
-if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-  echo "==> [4/5] Setting GitHub Actions secrets via gh (values are never printed)"
-  gh secret set WORKER_AUTH_TOKEN --body "$WORKER_AUTH_TOKEN"
-
-  if [[ -n "$WORKER_URL" ]]; then
-    gh secret set WORKER_URL --body "$WORKER_URL"
-  else
-    MISSING_SECRETS+=("WORKER_URL")
-  fi
-
-  for name in SPOTIFY_CLIENT_ID TOKEN_ENCRYPT_KEY; do
-    val="$(env_get "$name")"
-    if [[ -n "$val" ]]; then
-      gh secret set "$name" --body "$val"
-    else
-      MISSING_SECRETS+=("$name")
-    fi
-  done
-  GH_DONE=1
-else
-  GH_DONE=0
-fi
-
-echo "==> [5/5] Seeding D1 (tokens + history) — skips whatever D1 already has"
+echo "==> [4/4] Seeding D1 (tokens + history) — skips whatever D1 already has"
 sleep 5
 # A freshly-set `wrangler secret put` can take a few seconds to propagate to
 # every edge node, so an immediate request may 401 — retry a few times.
@@ -177,25 +148,6 @@ fi
 echo
 echo "============================================================"
 echo "Setup done: D1 database \"$PROD_DB\", Worker deployed — hourly cron is live."
-
-if [[ "$GH_DONE" != "1" ]]; then
-  cat <<EOF
-
-! GitHub secrets NOT set — gh is missing or not logged in. Run 'gh auth login'
-  and rerun this script.
-EOF
-elif [[ ${#MISSING_SECRETS[@]} -gt 0 ]]; then
-  cat <<EOF
-
-! Could not auto-fill these secrets — set them yourself (gh prompts for the
-  value, nothing is echoed):
-EOF
-  for name in "${MISSING_SECRETS[@]}"; do
-    echo "     gh secret set $name"
-  done
-else
-  echo "All GitHub Actions secrets are set."
-fi
 
 cat <<'EOF'
 

@@ -1,5 +1,4 @@
-// Hourly cron sync: Spotify recently-played -> D1, replacing the GH Actions
-// Python path (scripts/sync.py -> spotify_core.db.pipeline.sync_api_to_worker).
+// Hourly cron sync: Spotify recently-played -> D1.
 import { fernetDecrypt, fernetEncrypt } from "./fernet";
 import { INSERT_SQL } from "./tracks";
 

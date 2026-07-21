@@ -3,14 +3,13 @@
 The hourly Spotify sync runs inside the Cloudflare Worker itself (a
 `scheduled()` cron handler) writing straight into D1. Your PC never needs to
 be on. Everything fits in the Workers/D1 free tier for a single-user history
-table. GitHub Actions remains only as a manual fallback.
+table.
 
 ```
 Cloudflare Worker (worker/)
   ├─ cron scheduled() hourly at :07 -> Spotify API -> D1  (primary, worker/src/sync.ts)
-  └─ HTTP API (Bearer token)        -> D1                 (used by local scripts + fallback)
+  └─ HTTP API (Bearer token)        -> D1                 (used by local scripts)
 Cloudflare D1 (spotify-analytics) = single source of truth: listening history + encrypted tokens
-GitHub Actions sync.yml           = manual fallback only (workflow_dispatch -> scripts/sync.py -> Worker HTTP)
 ```
 
 The local flow (wizard, MCP server) pulls a read-only sync cache of D1 into
@@ -21,9 +20,7 @@ local SQLite; it never writes to D1 directly.
 ### 0. Prerequisites (once per machine)
 
 - Node.js >= 18: the setup script and Worker deploy use `npx wrangler`
-- [GitHub CLI](https://cli.github.com/), logged in (`gh auth login`): the
-  script uses it to write the repo secrets the manual-fallback workflow needs
-- A Cloudflare account (free tier) and this repo pushed/forked to your GitHub
+- A Cloudflare account (free tier)
 - Run `uv run spotify-mcp setup` finishing local OAuth (prompts for your
   Spotify Client ID, generates the token-encryption key, runs the OAuth flow,
   and optionally imports a Spotify JSON history export)
@@ -43,9 +40,7 @@ The first run opens a browser once for `wrangler login`. The script does **every
 3. applies `worker/migrations/` and deploys the Worker — **this activates the
    hourly cron** (`7 * * * *`)
 4. sets the Worker secrets: a generated Bearer `AUTH_TOKEN`, plus
-   `SPOTIFY_CLIENT_ID` / `TOKEN_ENCRYPT_KEY` for the cron; the GitHub Actions
-   secrets (`WORKER_URL`, `WORKER_AUTH_TOKEN`, `SPOTIFY_CLIENT_ID`,
-   `TOKEN_ENCRYPT_KEY`) are only needed by the fallback workflow
+   `SPOTIFY_CLIENT_ID` / `TOKEN_ENCRYPT_KEY` for the cron
 5. seeds D1 from your local data — the encrypted OAuth token row *and* all
    local listening history (wizard OAuth + JSON import). Each part is skipped
    when D1 is already up to date
@@ -81,8 +76,6 @@ Spotify's refresh-token rotation.
 - Worker deploys are manual and local: after changing `worker/`, run
   `cd worker && npx wrangler deploy`, or just rerun the setup script.
   Deploying is also how the cron schedule/code updates.
-- Manual fallback sync: GitHub -> Actions -> **sync** -> Run workflow (same
-  data path as the old hourly Actions cron; needs the GH secrets from setup).
 - Nothing to maintain locally — the local SQLite cache is a pull-only mirror
   of D1, refreshed on demand; it's never written to independently.
 - No automated backup: if you want a manual snapshot, `cd worker &&
@@ -92,5 +85,4 @@ Spotify's refresh-token rotation.
 
 Fork the repo, then do the One-time setup above with your own Spotify app and
 Cloudflare account — the setup script works unchanged, and the cron is live as
-soon as the Worker deploys. Enabling workflows in the Actions tab (disabled by
-default on forks) is only needed for the manual-fallback `sync.yml`.
+soon as the Worker deploys.
