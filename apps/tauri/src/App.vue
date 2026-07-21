@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import PlotChart from "./components/PlotChart.vue";
 import ReportPage from "./ReportPage.vue";
-import SetupPage from "./SetupPage.vue";
 import { runDoctor } from "./lib/config";
 import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
@@ -34,15 +34,18 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: "all", label: "All time" },
 ];
 
-const page = ref<"dashboard" | "report" | "setup">("dashboard");
+const page = ref<"dashboard" | "report">("dashboard");
 
-// First run: an unconfigured environment lands on Setup rather than an empty
-// dashboard. Fail-soft — if doctor can't run, just show the dashboard.
+/** Setup now lives in its own window (Rust get-or-creates it). */
+const openSetup = () => invoke("open_setup_window").catch(console.error);
+
+// First run: an unconfigured environment pops the Setup window over the (still
+// empty) dashboard. Fail-soft — if doctor can't run, just show the dashboard.
 onMounted(async () => {
   if (!isTauri) return;
   try {
     const report = await runDoctor();
-    if (!report.checks?.client_id) page.value = "setup";
+    if (!report.checks?.client_id) openSetup();
   } catch (e) {
     console.error("first-run check failed:", e);
   }
@@ -265,12 +268,14 @@ const trendTraces = computed(() => [
 </script>
 
 <template>
-  <h1>Spotify Listening Analysis</h1>
+  <header class="app-head">
+    <h1>Spotify Listening Analysis</h1>
+    <button v-if="isTauri" class="btn gear" title="Setup" aria-label="Setup" @click="openSetup">⚙</button>
+  </header>
 
   <nav class="filters">
     <button class="btn nav-btn" :class="{ current: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
     <button class="btn nav-btn" :class="{ current: page === 'report' }" @click="page = 'report'">Report</button>
-    <button class="btn nav-btn" :class="{ current: page === 'setup' }" @click="page = 'setup'">Setup</button>
   </nav>
   <hr class="nav-divider" />
 
@@ -399,7 +404,11 @@ const trendTraces = computed(() => [
   </div>
 
   <ReportPage v-show="page === 'report'" />
-  <SetupPage v-show="page === 'setup'" />
 
   <footer>Last played {{ lastUpdated }}</footer>
 </template>
+
+<style scoped>
+.app-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.gear { font-size: 1.15rem; line-height: 1; padding: 0.3rem 0.55rem; }
+</style>

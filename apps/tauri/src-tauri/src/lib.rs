@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 // ponytail: dev-only runner; a packaged PyInstaller sidecar swaps this vector + cwd.
 const REPORT_CMD: &[&str] = &["uv", "run", "python", "-m", "spotify_core.report"];
@@ -181,6 +182,25 @@ async fn confirm_dialog(title: String, message: String) -> Result<bool, String> 
     .map_err(|e| e.to_string())?
 }
 
+/// Show the Preferences (Setup) window, building it on first open. It loads the
+/// same bundle at `index.html#setup`, which `main.ts` mounts as SetupPage. Closing
+/// the window destroys it, so reopening just rebuilds — hence get-or-create here
+/// rather than a pre-declared hidden window that can't come back.
+#[tauri::command]
+async fn open_setup_window(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("setup") {
+        win.show().map_err(|e| e.to_string())?;
+        win.set_focus().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(&app, "setup", WebviewUrl::App("index.html#setup".into()))
+        .title("Preferences")
+        .inner_size(720.0, 560.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -195,7 +215,8 @@ pub fn run() {
             set_config,
             doctor,
             run_setup_step,
-            pick_history_folder
+            pick_history_folder,
+            open_setup_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
