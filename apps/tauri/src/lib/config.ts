@@ -82,7 +82,7 @@ export async function runDoctor(): Promise<DoctorReport> {
   return JSON.parse(await invoke<string>("doctor")) as DoctorReport;
 }
 
-export type SetupStep = "oauth" | "keygen" | "import";
+export type SetupStep = "oauth" | "keygen" | "import" | "sync";
 
 /** Run a whitelisted setup step. Buffered: resolves when the step finishes. */
 export async function runSetupStep(step: SetupStep, arg?: string): Promise<string> {

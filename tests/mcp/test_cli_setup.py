@@ -77,3 +77,67 @@ def test_setup_resumes_when_already_configured(tmp_path, monkeypatch):
 
     assert result.exit_code == 0
     assert called == ["llm_keys", "langfuse_keys", "claude_desktop"]
+
+
+def _table_exists(db_path, table: str) -> bool:
+    import sqlite3
+    from contextlib import closing
+    from pathlib import Path
+
+    db_path = Path(db_path)
+    if not db_path.exists():
+        return False
+    with closing(sqlite3.connect(db_path)) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+    return row is not None
+
+
+def test_import_from_path_initializes_history_db(tmp_path, monkeypatch):
+    """The promptless `--from` entry skips the wizard's init step, so it must
+    create the schema itself — otherwise the Tauri Setup page's import button
+    hits `no such table: listening_history` on a fresh install."""
+    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+
+    from rich.console import Console
+    from spotify_core import paths
+    from spotify_mcp.wizard.history_import import import_history
+
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+
+    # An empty folder is enough: import_json_to_db returns early when it finds no
+    # Streaming*.json, so this exercises the init call and nothing else.
+    import_history(Console(), import_path=export_dir)
+
+    assert _table_exists(paths.history_db(), "listening_history")
+
+
+def test_reauth_initializes_tokens_db_before_browser(tmp_path, monkeypatch):
+    """Same gap on the OAuth entry, and worse there: a missing table would
+    otherwise surface only after the user had already authorized."""
+    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SPOTIFY_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("TOKEN_ENCRYPT_KEY", "x" * 44)
+
+    from rich.console import Console
+    from spotify_core import paths
+    import spotify_mcp.wizard.oauth_step as os_
+
+    seen: dict = {}
+
+    def _fake_flow(**kwargs):
+        seen["ready"] = _table_exists(paths.tokens_db(), "spotify_tokens")
+        raise RuntimeError("stop before the real token exchange")
+
+    monkeypatch.setattr(os_._auth, "run_pkce_flow", _fake_flow)
+
+    try:
+        os_.run_oauth(console=Console(), force=True)
+    except RuntimeError:
+        pass
+
+    assert seen.get("ready") is True, "tokens.db must be initialized before the browser round-trip"

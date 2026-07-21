@@ -145,12 +145,16 @@ def sync(
 
     from spotify_core import env_file as _env_file
     from spotify_core import paths
+    from spotify_core.db.migrations import init_history_db
     from spotify_core.logging import setup_logging
     # spotify_mcp.config imports spotify_core.config.settings, which reads the
     # platform .env via pydantic-settings; get_client_id/get_fernet_key delegate to it.
     from spotify_mcp.config import DB_PATH, TOKENS_DB, get_client_id, get_fernet_key
 
     paths.ensure_dirs()
+    # Promptless entry (the Tauri Setup page) never runs the wizard's init step,
+    # so this path must create the schema itself. Idempotent.
+    init_history_db(paths.history_db())
 
     # Setup logging
     level = "DEBUG" if verbose else os.getenv("LOG_LEVEL", "INFO").upper()

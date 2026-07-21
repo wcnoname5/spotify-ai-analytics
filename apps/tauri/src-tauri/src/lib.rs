@@ -73,6 +73,9 @@ async fn run_setup_step(step: String, arg: Option<String>) -> Result<String, Str
             // It opens the browser itself and serves the 127.0.0.1:8888 callback.
             "oauth" => vec!["reauth".into()],
             "keygen" => vec!["config".into(), "keygen".into()],
+            // Fallback for users whose Spotify export has not arrived yet:
+            // pulls the last ~50 plays so the dashboard is not empty.
+            "sync" => vec!["sync".into()],
             "import" => vec![
                 "import-history".into(),
                 "--from".into(),

@@ -3,9 +3,10 @@
 // Every action spawns only a `spotify-mcp` subcommand: the same step functions the
 // interactive CLI wizard drives.
 //
-// The page shows only what is missing. A fully configured install sees a short
-// "all set" panel, and everything else stays behind "Show all settings" so the
-// common case isn't a wall of blank password boxes.
+// Two modes, one template. First run is a wizard: one card at a time, in the same
+// order the CLI walks, so nobody has to work out what to press next. `showAll`
+// flips to the whole page at once, which is the right shape for coming back later
+// to rotate a key.
 import { computed, onMounted, reactive, ref } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { isTauri } from "./lib/db";
@@ -58,6 +59,7 @@ type StepState = { running: boolean; ok: boolean | null; output: string };
 const steps = reactive<Record<ManualStep, StepState>>({
   oauth: { running: false, ok: null, output: "" },
   import: { running: false, ok: null, output: "" },
+  sync: { running: false, ok: null, output: "" },
 });
 
 // Only ever attempted once per session, so a failing keygen cannot loop.
@@ -73,11 +75,55 @@ const CHECK_LABELS: Record<string, string> = {
 };
 
 const checks = computed(() => doctor.value?.checks ?? {});
-/** A section is shown when its prerequisite is missing, or when showing everything. */
-const need = (ok: boolean | undefined) => showAll.value || !ok;
 const hasLlm = computed(() => configured.value.gemini || configured.value.openai);
 const hasTracing = computed(() => configured.value.langfuse || configured.value.langsmith);
 const allReady = computed(() => doctor.value?.ready === true && hasLlm.value);
+
+// Mirrors the order of run_wizard() in apps/mcp/spotify_mcp/wizard/__init__.py.
+// Deliberately a literal rather than something shared with Python: the two
+// front-ends have different step sets (no spotify_app/claude_desktop here, no
+// cloud-paste there), so a shared list would need filtering on both sides to be
+// usable. What *is* shared is `doctor --json`'s checks, which drive stepDone.
+const ORDER = ["client_id", "oauth", "history", "llm", "tracing", "worker"] as const;
+type WizardStep = (typeof ORDER)[number];
+
+const STEP_LABELS: Record<WizardStep, string> = {
+  client_id: "Spotify Client ID",
+  oauth: "Authorize Spotify",
+  history: "Listening history",
+  llm: "LLM provider",
+  tracing: "Tracing",
+  worker: "Cloud sync",
+};
+
+// fernet_key and dbs_initialized are not steps: the key is generated on sight
+// (see refresh) and each spawned subcommand now creates its own schema.
+const stepDone: Record<WizardStep, () => boolean> = {
+  client_id: () => !!checks.value.client_id,
+  oauth: () => !!checks.value.tokens_valid,
+  history: () => !!checks.value.history_has_data,
+  llm: () => hasLlm.value,
+  tracing: () => hasTracing.value,
+  worker: () => configured.value.worker,
+};
+
+// ponytail: session-scoped. Restarting re-offers whatever was skipped, which is
+// the behaviour we want -- skipping means "not now", not "never ask again".
+const skipped = reactive(new Set<WizardStep>());
+
+const current = computed<WizardStep | null>(
+  () => ORDER.find((s) => !stepDone[s]() && !skipped.has(s)) ?? null,
+);
+const stepNumber = computed(() =>
+  current.value ? ORDER.indexOf(current.value) + 1 : ORDER.length,
+);
+
+/** Wizard mode reveals one step; `showAll` is the whole page for later edits. */
+const need = (step: WizardStep) => showAll.value || current.value === step;
+
+function skipStep() {
+  if (current.value) skipped.add(current.value);
+}
 
 async function refresh() {
   loading.value = true;
@@ -180,10 +226,20 @@ async function runStep(step: ManualStep) {
     <p v-else-if="loading" class="hint">Checking your environment…</p>
 
     <template v-else>
-      <div v-if="allReady && !showAll" class="card">
-        <h3><span class="ok">✓</span> Everything is set up</h3>
-        <p class="hint">Nothing needs your attention. Use “Show all settings” to make changes.</p>
+      <!-- Wizard progress. Hidden in showAll, where there is no "current" step. -->
+      <p v-if="!showAll && current" class="progress">
+        Step {{ stepNumber }} of {{ ORDER.length }} · {{ STEP_LABELS[current] }}
+      </p>
+
+      <div v-if="!current && !showAll" class="card">
+        <h3><span class="ok">✓</span> Setup complete</h3>
+        <p class="hint">
+          {{ allReady ? "Everything is ready." : "Everything essential is done; skipped items are still available under “Show all settings”." }}
+          Restart the app to apply what you saved.
+        </p>
       </div>
+
+      <p v-if="keygenError" class="warn">Could not create the encryption key: {{ keygenError }}</p>
 
       <!-- Outstanding items only; a passing check drops off the list. -->
       <div v-if="!allReady || showAll" class="card">
@@ -203,7 +259,7 @@ async function runStep(step: ManualStep) {
         <p v-for="w in doctor?.warnings ?? []" :key="w" class="warn">{{ w }}</p>
       </div>
 
-      <div v-if="need(checks.client_id)" class="card">
+      <div v-if="need('client_id')" class="card">
         <h3>Spotify</h3>
         <p class="hint">
           Create an app on the dashboard, then paste its Client ID. Use
@@ -212,47 +268,60 @@ async function runStep(step: ManualStep) {
         </p>
         <button class="btn" @click="openUrl(DASHBOARD_URL)">Open Spotify dashboard</button>
         <label>Client ID <input v-model="form.SPOTIFY_CLIENT_ID" placeholder="unchanged" /></label>
+        <div v-if="!showAll" class="step">
+          <button class="btn current" @click="save">Save and continue</button>
+        </div>
       </div>
 
-      <div v-if="need(checks.tokens_valid) || need(checks.history_has_data) || keygenError" class="card">
-        <h3>Actions</h3>
-
-        <div v-if="need(checks.tokens_valid)" class="step">
-          <button class="btn" :disabled="steps.oauth.running" @click="runStep('oauth')">
+      <div v-if="need('oauth')" class="card">
+        <h3>Authorize Spotify</h3>
+        <div class="step">
+          <button class="btn current" :disabled="steps.oauth.running" @click="runStep('oauth')">
             {{ steps.oauth.running ? "Waiting for browser…" : "Authorize Spotify" }}
           </button>
-          <span class="hint">Opens your browser. Needs the Client ID set first.</span>
+          <span class="hint">Opens your browser. Needs the Client ID saved first.</span>
         </div>
-        
-        <div v-if="need(checks.history_has_data)" class="step">
-          <button class="btn" :disabled="steps.import.running" @click="runStep('import')">
+      </div>
+
+      <div v-if="need('history')" class="card">
+        <h3>Listening history</h3>
+        <div class="step">
+          <button class="btn current" :disabled="steps.import.running" @click="runStep('import')">
             {{ steps.import.running ? "Importing…" : "Import history…" }}
           </button>
           <span class="hint">Pick the folder of <code>Streaming_History_Audio_*.json</code> files.</span>
         </div>
-
-        <p v-if="keygenError" class="warn">Could not create the encryption key: {{ keygenError }}</p>
-        <p v-else-if="showAll" class="hint">
-          <span class="ok">✓</span> Encryption key set. Back up <code>{{ envFile }}</code> —
-          losing this key makes every stored token permanently unreadable.
-        </p>
-        
-        <template v-for="(state, name) in steps" :key="name">
-          <details v-if="state.ok === false" class="failure" open>
-            <summary>{{ name }} failed</summary>
-            <pre>{{ state.output }}</pre>
-          </details>
-        </template>
+        <!-- Spotify takes days to send the export, so a first-time user usually
+             has nothing to import yet. The API's last ~50 plays fill the gap. -->
+        <p class="hint">Export hasn’t arrived yet? Spotify can take a few days to send it.</p>
+        <div class="step">
+          <button class="btn" :disabled="steps.sync.running" @click="runStep('sync')">
+            {{ steps.sync.running ? "Fetching…" : "Fetch my last 50 plays" }}
+          </button>
+          <button v-if="!showAll" class="btn" @click="skipStep">Skip for now</button>
+        </div>
       </div>
+
+      <template v-for="(state, name) in steps" :key="name">
+        <details v-if="state.ok === false" class="failure" open>
+          <summary>{{ name }} failed</summary>
+          <pre>{{ state.output }}</pre>
+        </details>
+      </template>
+
       <!-- TODO: 加上href (AI Studio & OpenAI) -->
-      <div v-if="!hasLlm || showAll" class="card">
+      <div v-if="need('llm')" class="card">
         <h3>LLM Provider<span class="hint"></span></h3>
         <label>Gemini API key <input v-model="form.GEMINI_API_KEY" type="password" :placeholder="configured.gemini ? 'set — leave blank to keep' : ''" /></label>
         <label>OpenAI API key <input v-model="form.OPENAI_API_KEY" type="password" :placeholder="configured.openai ? 'set — leave blank to keep' : ''" /></label>
+        <div v-if="!showAll" class="step">
+          <button class="btn current" @click="save">Save and continue</button>
+          <span class="hint">Needed for AI reports.</span>
+        </div>
       </div>
 
       <!-- Optional tracing: Langfuse or LangSmith  -->
-      <div v-if="!hasTracing || showAll" class="card">
+      <div v-if="need('tracing')" class="card">
         <h3>Tracing <span class="hint">(optional)</span></h3>
         <div class="step">
           <label class="inline"><input type="radio" value="none" v-model="tracing" /> None</label>
@@ -270,22 +339,36 @@ async function runStep(step: ManualStep) {
           <label>API key <input v-model="form.LANGSMITH_API_KEY" type="password" :placeholder="configured.langsmith ? 'set — leave blank to keep' : ''" /></label>
           <label>Project <input v-model="form.LANGSMITH_PROJECT" placeholder="spotify-ai-analytics" /></label>
         </template>
+        <div v-if="!showAll" class="step">
+          <button class="btn current" @click="save">Save and continue</button>
+          <button class="btn" @click="skipStep">Skip</button>
+        </div>
       </div>
 
       <!-- Phase 3 landing point: paste the values, scripts/setup_cloud.sh does the deploy. -->
-      <div v-if="!configured.worker || showAll" class="card">
-        <h3>Cloud sync</h3>
+      <div v-if="need('worker')" class="card">
+        <h3>Cloud sync <span class="hint">(optional)</span></h3>
         <p class="hint">
           Deploy the Worker with <code>scripts/setup_cloud.sh</code>, then paste its URL and token here.
         </p>
         <label>Worker URL <input v-model="form.WORKER_URL" placeholder="https://….workers.dev" /></label>
         <label>Worker token <input v-model="form.WORKER_AUTH_TOKEN" type="password" :placeholder="configured.worker ? 'set — leave blank to keep' : ''" /></label>
+        <div v-if="!showAll" class="step">
+          <button class="btn current" @click="save">Save and continue</button>
+          <button class="btn" @click="skipStep">Skip</button>
+        </div>
       </div>
 
-      <div class="save-row">
+      <p v-if="showAll" class="hint">
+        <span class="ok">✓</span> Encryption key set. Back up <code>{{ envFile }}</code> —
+        losing this key makes every stored token permanently unreadable.
+      </p>
+
+      <!-- One global save only in showAll; the wizard saves per step. -->
+      <div v-if="showAll" class="save-row">
         <button class="btn current" @click="save">Save settings</button>
-        <span v-if="savedNotice" class="hint">Saved to {{ envFile }} — restart the app to apply.</span>
       </div>
+      <p v-if="savedNotice" class="hint">Saved to {{ envFile }}: restart the app to apply.</p>
     </template>
   </section>
 </template>
@@ -305,4 +388,5 @@ input[type="radio"] { width: auto; }
 .warn { font-size: 0.8rem; color: #d08770; }
 .failure pre { white-space: pre-wrap; font-size: 0.75rem; max-height: 14rem; overflow: auto; }
 .save-row { display: flex; align-items: center; gap: 0.8rem; }
+.progress { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.02em; }
 </style>
