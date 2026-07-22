@@ -61,6 +61,35 @@ def test_seed_reports_worker_failure_as_a_return_code(monkeypatch):
     assert cloud.seed(worker_url="https://example.workers.dev", worker_token="t") == 1
 
 
+def test_pull_without_a_worker_is_a_return_code(monkeypatch, tmp_path):
+    """No Worker configured is a normal local-only state, not a crash.
+
+    `serve` calls this on startup, so raising here would stop the MCP server
+    from booting for anyone who never set up cloud sync.
+    """
+    monkeypatch.setattr(cloud.paths, "env_file", lambda: tmp_path / ".env")
+
+    assert cloud.pull(quiet=True) == 1
+
+
+def test_pull_reports_worker_failure_as_a_return_code(monkeypatch):
+    """Same contract as seed: an unreachable Worker must not escape as an exception."""
+    import spotify_core.db.worker_client as wc
+
+    class Boom:
+        def __init__(self, *a, **kw): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(wc, "WorkerClient", Boom)
+    monkeypatch.setattr(
+        "spotify_core.db.local_sync.run_local_sync",
+        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("connection refused")),
+    )
+
+    assert cloud.pull(worker_url="https://example.workers.dev", worker_token="t", quiet=True) == 1
+
+
 def test_render_config_leaves_the_repo_toml_alone():
     """A test deploy must not leave state a later prod deploy would pick up."""
     real = cloud.worker_dir() / "wrangler.toml"

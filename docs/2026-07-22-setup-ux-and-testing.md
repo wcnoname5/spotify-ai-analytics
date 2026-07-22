@@ -87,7 +87,7 @@ below in case OAuth turns flaky on someone else's machine.
 |------|------------------|-----------|
 | Overwrite prod local `.env` / DBs | Running against your real config dir | Set `SPOTIFY_MCP_CONFIG_DIR` + `SPOTIFY_MCP_DATA_DIR` to a scratch dir → separate `.env`, `history.db`, `tokens.db` |
 | Strand the **prod Spotify token** (`invalid_grant`) | Authorizing with the **prod `client_id`** in any env | Use a **second Spotify account's app** (different `client_id`) — different `(user, client_id)` lineage, cannot touch prod's refresh token |
-| Write to **prod D1** | A scratch `.env` whose `WORKER_URL`/token points at the prod Worker (seed/push) | Leave the Worker **unset** (Env A), or point at a **separate test Worker+D1** (Env B). The app's track sync is pull-only, but `seed_d1.py` pushes — never aim it at prod |
+| Write to **prod D1** | A scratch `.env` whose `WORKER_URL`/token points at the prod Worker (seed/push) | Leave the Worker **unset** (Env A), or point at a **separate test Worker+D1** (Env B). The app's track sync is pull-only, but `spotify-mcp cloud seed` (and `cloud deploy`'s last step) pushes — never aim it at prod |
 
 **Golden rule:** in a scratch env, never paste the **prod client_id** and never set `WORKER_URL`
 to the **prod Worker**. Those are the only two actions that reach prod.
@@ -172,6 +172,6 @@ machine. Cloudflare secrets are write-only, so `.env` holds the only readable co
 
 **§4 Biggest architectural simplification (noted, not proposed here).** A local-only design (the app
 refreshes its own token on launch, no Worker / no D1 token store) would delete the Worker, D1 token
-storage, `fernet.ts`, `seed_d1.py`, and the entire `invalid_grant` class — at the cost of no sync
+storage, `fernet.ts`, the seed path, and the entire `invalid_grant` class — at the cost of no sync
 while the app is closed (multi-day gaps lose plays, since Spotify returns only ~50/24h). A real
 fork, worth a separate decision.

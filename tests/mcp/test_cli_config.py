@@ -61,12 +61,18 @@ def test_config_set_keeps_values_containing_equals(tmp_path, monkeypatch):
     assert env_file.read_key(env, "TOKEN_ENCRYPT_KEY") == "YWJj=="
 
 
-def test_path_json_is_parseable(tmp_path, monkeypatch):
-    """--json must emit bare JSON: no rich colour codes, no trailing warnings."""
+def test_mcp_config_json_is_parseable(tmp_path, monkeypatch):
+    """--json output must be bare JSON: no rich colour codes, no trailing warnings.
+
+    (Was `path --json`, which was deleted -- `doctor --json` already carries
+    paths.describe() under "paths", covered below.)
+    """
     _env_at(tmp_path, monkeypatch)
-    result = runner.invoke(app, ["path", "--json"])
+    result = runner.invoke(app, ["mcp-config"])
     assert result.exit_code == 0, result.output
-    assert "env_file" in json.loads(result.stdout)
+    entry = json.loads(result.stdout)
+    assert "config_path" in entry
+    assert "spotify-mcp" in entry["entry"]["mcpServers"]
 
 
 def test_doctor_json_is_parseable_even_when_not_ready(tmp_path, monkeypatch):
@@ -79,4 +85,8 @@ def test_doctor_json_is_parseable_even_when_not_ready(tmp_path, monkeypatch):
     monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
     result = runner.invoke(app, ["doctor", "--json"])
     assert result.exit_code in (0, 1)
-    assert "ready" in json.loads(result.stdout)
+    report = json.loads(result.stdout)
+    assert "ready" in report
+    # doctor is now the only machine-readable source of the resolved paths
+    # (the `path` command it duplicated is gone).
+    assert "env_file" in report["paths"]

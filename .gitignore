@@ -234,3 +234,6 @@ logs/
 # superpowers subagent-driven-development scratch
 .superpowers/
 worker/wrangler-*.toml
+
+# scratch setup env for UX testing (holds a real .env + cache DBs)
+fresh/

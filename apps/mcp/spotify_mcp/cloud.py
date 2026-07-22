@@ -245,6 +245,38 @@ def deploy(name: str = DEFAULT_NAME, api_token: str = "", rotate: bool = False) 
     return 0
 
 
+def pull(worker_url: str = "", worker_token: str = "", quiet: bool = False) -> int:
+    """Refresh the local SQLite cache from D1. The mirror image of `seed`.
+
+    The cache is what the MCP server and report generation read, and until this
+    existed as a subcommand the only thing that refreshed it was opening the
+    Tauri app (`lib/sync.ts` syncOnStartup) or a script that packaging does not
+    ship. Idempotent: INSERT OR IGNORE from MAX(played_at).
+    """
+    if not quiet:
+        _tolerant_console()
+    from spotify_core.config import settings
+    from spotify_core.db.local_sync import run_local_sync
+    from spotify_core.db.worker_client import WorkerClient
+
+    target = paths.env_file()
+    url = worker_url or env_file.read_key(target, "WORKER_URL") or ""
+    token = worker_token or env_file.read_key(target, "WORKER_AUTH_TOKEN") or ""
+    if not url or not token:
+        print("WORKER_URL / WORKER_AUTH_TOKEN not set — nothing to pull from.", file=sys.stderr)
+        return 1
+
+    try:
+        with WorkerClient(url, token) as worker:
+            result = run_local_sync(settings.history_db_path, worker)
+    except Exception as exc:
+        print(f"pull failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    if not quiet:
+        print(f"local sync result: {result}")
+    return 0
+
+
 def seed(worker_url: str = "", worker_token: str = "",
          force: bool = False, tokens_only: bool = False) -> int:
     """Push local tokens + history to D1. Rerun-safe; falls back to the .env values."""

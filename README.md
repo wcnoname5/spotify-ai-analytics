@@ -94,7 +94,7 @@ This enables two additional (optional) wizard steps:
 - **LLM provider key** — choose [Google](https://aistudio.google.com/app/api-keys) (recommended, free tier with AI Studio) or OpenAI.
 - **Langfuse keys** — optional observability for the AI report pipeline. Skip if you don't use Langfuse.
 
-You can always add or change these keys later in your `.env` file (run `spotify-mcp path` to find it).
+You can always add or change these keys later in your `.env` file (run `spotify-mcp doctor` to find it).
 
 ### Keeping history up to date
 
@@ -120,7 +120,8 @@ local flow.
 | `spotify-mcp doctor` | Check environment readiness (JSON report) |
 | `spotify-mcp import-history` | Import from Spotify's JSON data export |
 | `spotify-mcp reauth` | Re-run OAuth flow |
-| `spotify-mcp path` | Show config and data directory locations |
+| `spotify-mcp doctor` | Check readiness; also shows config/data directory locations |
+| `spotify-mcp cloud pull` | Refresh the local cache from D1 |
 | `spotify-mcp --help` | List all options and commands |
 | `spotify-mcp --version` | Show the installed version and exit |
 
@@ -246,7 +247,7 @@ uv sync --extra report
 - **LLM 供應商金鑰** — 選擇 [Google](https://aistudio.google.com/app/api-keys)（推薦，AI Studio 有免費方案）或 OpenAI。
 - **Langfuse 金鑰** — 為 AI 報告流程提供可觀測性，選用。若不使用 Langfuse 可略過。
 
-你隨時可以在 `.env` 檔案中新增或修改這些金鑰（執行 `spotify-mcp path` 可找到檔案位置）。
+你隨時可以在 `.env` 檔案中新增或修改這些金鑰（執行 `spotify-mcp doctor` 可找到檔案位置）。
 
 #### 保持紀錄最新
 
@@ -272,7 +273,8 @@ uv run spotify-mcp sync
 | `spotify-mcp doctor` | 檢查環境就緒狀態（輸出 JSON 報告） |
 | `spotify-mcp import-history` | 從 Spotify JSON 資料匯出檔匯入紀錄 |
 | `spotify-mcp reauth` | 重新執行 OAuth 流程 |
-| `spotify-mcp path` | 顯示設定檔與資料目錄位置 |
+| `spotify-mcp doctor` | 檢查環境是否就緒，同時顯示設定檔與資料目錄位置 |
+| `spotify-mcp cloud pull` | 從 D1 更新本地快取 |
 | `spotify-mcp --help` | 列出所有選項與指令 |
 | `spotify-mcp --version` | 顯示已安裝的版本並結束 |
 

@@ -24,7 +24,18 @@ def default_config_path() -> Path:
 
 
 def build_entry() -> dict:
-    """Build the MCP server entry using uvx so Claude Desktop users get automatic updates."""
+    """Build the MCP server entry Claude Desktop should spawn.
+
+    Claude Desktop launches MCP servers by absolute command path, so a packaged
+    build points straight at its own executable -- the desktop app is never in
+    the loop. From source we use uvx instead, so those users get updates.
+
+    Note this only works when frozen because `paths.is_dev()` ignores the cwd in
+    a frozen build: Claude Desktop spawns with an arbitrary working directory,
+    which would otherwise decide which .env the server reads.
+    """
+    if getattr(sys, "frozen", False):
+        return {"command": sys.executable, "args": ["serve"]}
     return {
         "command": "uvx",
         "args": ["--from", "spotify-analytics-mcp", "spotify-mcp", "serve"],

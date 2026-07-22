@@ -89,7 +89,7 @@ def resolution_source(env_var: str) -> str:
 def describe() -> dict:
     """Snapshot of the resolved paths and how each was chosen.
 
-    Consumed by `spotify-mcp doctor` / `spotify-mcp path` so users can see
+    Consumed by `spotify-mcp doctor` (under "paths") so users can see
     which .env and which DBs a given invocation is actually using.
     """
     return {

@@ -52,7 +52,7 @@ Check `.env.example`, tunables with defaults live in `spotify_core/config.py`.
 uv sync                                # install all Python dependencies
 uv run pytest                          # run tests
 uv run python apps/mcp/server.py      # run MCP server directly
-uv run python scripts/local_sync.py   # refresh local SQLite cache from D1
+uv run spotify-mcp cloud pull          # refresh local SQLite cache from D1
+uv run spotify-mcp cloud deploy        # create/update the Worker + D1 (needs node)
 cd worker && npm run typecheck         # Worker typecheck (no unit tests by choice)
-cd worker && npx wrangler deploy       # deploy the Worker
 ```

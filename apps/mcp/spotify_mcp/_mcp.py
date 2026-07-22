@@ -11,7 +11,6 @@ from contextlib import asynccontextmanager
 from fastmcp import FastMCP
 
 from spotify_mcp import db_crud, spotify_control
-from spotify_mcp.config import get_client_id, get_fernet_key
 from spotify_mcp.prompts import register_prompts
 
 @asynccontextmanager
@@ -24,6 +23,7 @@ async def lifespan(server: FastMCP):
         msg = "spotify-mcp not configured. Run: spotify-mcp setup"
 
         def _ascii_safe(s: str) -> str:
+            # TODO: remove this and drop all em-dash directly in all .py files to avoid the UnicodeDecodeError in Windows consoles (cp1252) when printing to stderr.
             # Replace Unicode dashes with ASCII hyphen so Windows consoles
             # (cp1252) don't produce un-decodable bytes in the stderr stream.
             return s.replace("—", "-").replace("–", "-")
@@ -35,6 +35,16 @@ async def lifespan(server: FastMCP):
             print(_ascii_safe(f"  - {action}"), file=sys.stderr, flush=True)
         logger.error("{}\n{}", safe_msg, "\n".join(f"  - {action}" for action in safe_actions))
         raise SystemExit(1)
+
+    # Pull D1 into the local cache before serving. c..f. `syncOnStartup()` in dashboard
+    # Fail-soft on purpose: no Worker configured, or no network, must
+    # still leave a usable server reading the cache it already has.
+    try:
+        from spotify_mcp import cloud
+
+        cloud.pull(quiet=True)
+    except Exception as exc:  # noqa: BLE001 - never let a refresh stop the server
+        logger.warning("Startup sync skipped ({}): serving cached data.", exc)
 
     logger.info("MCP server ready: all checks passed.")
     yield

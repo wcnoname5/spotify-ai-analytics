@@ -198,24 +198,26 @@ def sync(
         raise typer.Exit(code=1)
 
 
-@app.command()
-def path(
-    json_out: Annotated[
-        bool, typer.Option("--json", help="Print bare JSON only, omitting the warning lines.")
-    ] = False,
-) -> None:
-    """Show the resolved config/data locations, how each was chosen, and any conflicts."""
-    from spotify_core import paths
+# `path` used to live here. It printed paths.describe() plus path_warnings(),
+# both of which `doctor --json` already returns under "paths" and "warnings" --
+# and nothing (including the Tauri app) ever called it.
 
-    from spotify_mcp.wizard import state as _st
 
-    if json_out:
-        # Warnings are rich-markup and would corrupt the JSON for machine callers.
-        print(json.dumps(paths.describe()))
-        return
-    console.print_json(json.dumps(paths.describe()))
-    for w in _st.path_warnings():
-        console.print(f"[yellow]warning: {w}[/yellow]")
+@app.command("mcp-config")
+def mcp_config() -> None:
+    """Print the Claude Desktop MCP entry for this install, as JSON.
+
+    One source of truth for the config: the wizard writes it, and the desktop
+    app's MCP screen shows the same thing to copy. The `command` differs between
+    a source checkout (uvx) and a packaged build (its own exe), which is exactly
+    why neither caller should build this dict itself.
+    """
+    from spotify_mcp.wizard import claude_desktop as _cd
+
+    print(json.dumps({
+        "config_path": str(_cd.default_config_path()),
+        "entry": {"mcpServers": {"spotify-mcp": _cd.build_entry()}},
+    }))
 
 
 cloud_app = typer.Typer(help="Deploy and seed the Cloudflare Worker + D1 backend.")
@@ -255,6 +257,18 @@ def cloud_deploy(
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         code = 1
     raise typer.Exit(code=code)
+
+
+@cloud_app.command("pull")
+def cloud_pull() -> None:
+    """Refresh the local SQLite cache from D1. Reads WORKER_* from the resolved .env.
+
+    The cache is what MCP and report generation read; `serve` also does this on
+    startup, so this is for refreshing without launching anything.
+    """
+    from spotify_mcp import cloud
+
+    raise typer.Exit(code=cloud.pull())
 
 
 @cloud_app.command("seed")

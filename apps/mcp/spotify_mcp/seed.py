@@ -1,8 +1,8 @@
 """Push local SQLite data up to D1 through the Worker. Rerun-safe.
 
-Moved here from scripts/seed_d1.py so packaging bundles one exe (the same rule
-that put every setup step behind a `spotify-mcp` subcommand). The script stays
-as a thin wrapper over these functions.
+Moved here from scripts/seed_d1.py (since deleted) so packaging bundles one exe
+-- the same rule that put every setup step behind a `spotify-mcp` subcommand.
+Reached via `spotify-mcp cloud seed`, and from `cloud deploy`'s final step.
 
 Prints row counts only — never track names or tokens.
 """

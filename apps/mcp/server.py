@@ -1,6 +1,5 @@
 """Spotify AI Analytics MCP Server — development entry point.
 
-For PyPI-installed users the server is launched via `spotify-mcp serve`.
 This file exists as a convenience for checkout-mode development:
 
     uv run python apps/mcp/server.py
@@ -27,12 +26,9 @@ _log_file = setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
 logger.info("Logging to {}", _log_file)
 
 if not get_client_id():
-    logger.warning("SPOTIFY_CLIENT_ID is not set. Set it in .env or as an environment variable.")
+    raise RuntimeError("SPOTIFY_CLIENT_ID is not set. Set it in .env or as an environment variable.")
 if not get_fernet_key():
-    logger.warning(
-        "TOKEN_ENCRYPT_KEY is not set. "
-        'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
-    )
+    raise RuntimeError("TOKEN_ENCRYPT_KEY is not set. Set it in .env or as an environment variable.")
 
 from spotify_mcp._mcp import main, mcp  # noqa: E402 — must come after env/logging setup
 

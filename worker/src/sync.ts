@@ -119,7 +119,7 @@ export async function runSync(env: SyncEnv): Promise<SyncResult> {
   )
     .bind(userId)
     .first<{ access_token: string; refresh_token: string; expires_at: string }>();
-  if (!row) throw new Error(`No token row for user '${userId}' — run spotify-mcp reauth + seed_d1.py`);
+  if (!row) throw new Error(`No token row for user '${userId}' — run spotify-mcp reauth + spotify-mcp cloud seed`);
 
   let accessToken = await fernetDecrypt(row.access_token, env.TOKEN_ENCRYPT_KEY);
   let refreshToken = await fernetDecrypt(row.refresh_token, env.TOKEN_ENCRYPT_KEY);
