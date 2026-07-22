@@ -37,6 +37,13 @@ def run_oauth(console: Console, force: bool = False) -> None:
     if not fernet_key:
         raise RuntimeError("TOKEN_ENCRYPT_KEY not set — run earlier wizard steps first.")
 
+    # Same reason as the import step: `reauth` is a promptless entry that skips
+    # the wizard's init step. Do it before the browser round-trip, so a missing
+    # table fails now rather than after the user has already authorized.
+    from spotify_core.db.migrations import init_tokens_db
+
+    init_tokens_db(paths.tokens_db())
+
     console.print("[bold]Opening browser for Spotify login...[/bold]")
     token_data = _auth.run_pkce_flow(client_id=client_id, port=spotify_app.OAUTH_PORT)
     _token_store.save_tokens(paths.tokens_db(), settings.spotify_user_id, token_data, fernet_key.encode())

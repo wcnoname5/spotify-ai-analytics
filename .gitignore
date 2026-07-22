@@ -233,3 +233,4 @@ logs/
 
 # superpowers subagent-driven-development scratch
 .superpowers/
+worker/wrangler-*.toml

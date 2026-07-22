@@ -1,16 +1,15 @@
 import { resolve } from "node:path";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+// Config is no longer baked in at build time — the app reads it at runtime via
+// `spotify-mcp config get` (see src/lib/config.ts). That kept the auth token out
+// of the bundle and lets the Setup page change settings without a rebuild.
 // https://vite.dev/config/
-export default defineConfig(async ({ mode }) => {
-  // Repo root .env (one level above apps/tauri) — HISTORY_DB_PATH / WORKER_URL /
-  // WORKER_AUTH_TOKEN. loadEnv reads it without an `VITE_` prefix requirement.
-  const env = loadEnv(mode, resolve(__dirname, "../.."), "");
-
+export default defineConfig(async () => {
   return {
     plugins: [vue()],
 
@@ -46,13 +45,5 @@ export default defineConfig(async ({ mode }) => {
       },
     },
 
-    define: {
-      __HISTORY_DB_PATH__: JSON.stringify(
-        (env.HISTORY_DB_PATH || resolve(__dirname, "../../data/history.db")).replace(/\\/g, "/")
-      ),
-      __WORKER_URL__: JSON.stringify(env.WORKER_URL ?? ""),
-      // dev-only; keychain before packaging
-      __WORKER_AUTH_TOKEN__: JSON.stringify(env.WORKER_AUTH_TOKEN ?? ""),
-    },
   };
 });

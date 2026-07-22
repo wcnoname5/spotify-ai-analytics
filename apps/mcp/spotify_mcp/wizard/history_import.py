@@ -5,7 +5,6 @@ picker (tkinter filedialog). On headless systems where Tk can't open a
 window, falls back to scanning cwd. Power users can pass
 `spotify-mcp import-history --from <path>` to skip the prompt entirely.
 """
-import os
 from loguru import logger
 from pathlib import Path
 from typing import Literal, Optional
@@ -115,8 +114,11 @@ def _do_import(console: Console, files: list[Path]) -> None:
 def import_history(console: Console, import_path: Path | None = None) -> None:
     """Import history from a path, or open the folder picker when no path is provided."""
     if import_path is not None:
-        from spotify_core.db.pipeline import import_json_to_db
+        from spotify_core.db.pipeline import import_json_to_db, init_history_db
 
+        # Promptless entry (the Tauri Setup page) never runs the wizard's
+        # init step, so this path must initialize for itself. Idempotent.
+        init_history_db(str(paths.history_db()))
         result = import_json_to_db(str(import_path), str(paths.history_db()))
         console.print(
             f"[green]Imported {result['inserted']} rows from {import_path}.[/green]"
@@ -141,17 +143,9 @@ def import_history(console: Console, import_path: Path | None = None) -> None:
 
 def _do_sync_recent(console: Console) -> None:
     """Sync the last 50 plays via the Spotify API."""
-    from spotify_core.config import settings
     from spotify_core.db.pipeline import init_history_db
-    from spotify_core.spotify_client.client import SpotifyClient
 
     init_history_db(str(paths.history_db()))
-    client = SpotifyClient(
-        str(paths.tokens_db()),
-        settings.spotify_user_id,
-        os.environ.get("SPOTIFY_CLIENT_ID", ""),
-        os.environ.get("TOKEN_ENCRYPT_KEY", "").encode(),
-    )
     try:
         from spotify_core.db.pipeline import sync_api_to_db
         from spotify_mcp.config import (

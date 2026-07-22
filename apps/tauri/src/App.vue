@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import PlotChart from "./components/PlotChart.vue";
 import ReportPage from "./ReportPage.vue";
+import { getConfig } from "./lib/config";
 import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
 import { syncOnStartup, syncReports } from "./lib/sync";
@@ -33,12 +36,38 @@ const RANGES: { key: RangeKey; label: string }[] = [
 ];
 
 const page = ref<"dashboard" | "report">("dashboard");
+
+/** Setup now lives in its own window (Rust get-or-creates it). */
+const openSetup = () => invoke("open_setup_window").catch(console.error);
+
+/** Which .env this session resolved to — empty unless it is a non-default one. */
+const envBadge = ref("");
+
+// The main window starts hidden. An unconfigured environment shows only the
+// Setup window; a configured one reveals the dashboard. 
+// Fail-soft: on error show the dashboard, never leave the user with no window.
+onMounted(async () => {
+  if (!isTauri) return;
+  let configured = true;
+  try {
+    const cfg = await getConfig();
+    configured = cfg.configured.client_id;
+    if (cfg.dev) envBadge.value = `DEV · ${cfg.env_file}`;
+  } catch (e) {
+    console.error("first-run check failed:", e);
+  }
+  invoke("main_ready", { configured }).catch(console.error);
+  // Settings apply on restart and this window's config memo went stale while
+  // Setup was open; a reload is the whole refresh.
+  listen("setup-done", () => location.reload());
+});
 const range = ref<RangeKey | "custom">("30");
 const customStart = ref(""); // YYYY-MM-DD, "" = unset
 const customEnd = ref("");
 const minDate = ref(""); // earliest played_at date, set on mount (Tauri only)
 const today = new Date();
-const maxDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+const maxDate = ref(todayStr); // latest played_at date, set on mount (Tauri only)
 const loading = ref(false);
 const usingSample = ref(false);
 const offlineNotice = ref<"unconfigured" | "error" | null>(null);
@@ -154,6 +183,7 @@ onMounted(async () => {
   if (isTauri) {
     const dr = await dataRange();
     if (dr.earliest) minDate.value = dr.earliest.slice(0, 10);
+    if (dr.latest) maxDate.value = dr.latest.slice(0, 10);
     const result = await syncOnStartup();
     if ("offline" in result) {
       offlineNotice.value = result.reason;
@@ -174,6 +204,17 @@ watch([customStart, customEnd], () => {
 watch(trendGranularity, refreshTrend);
 
 const period = computed(() => {
+  if (range.value === "7" || range.value === "30" || range.value === "90") {
+    const { current } = toRanges(range.value);
+    return `${current.start!.slice(0, 10)} ~ ${current.end!.slice(0, 10)}`;
+  }
+  // Custom: falls back to the all data range (minDate/maxDate) when a side is unset.
+  if (range.value === "custom") {
+    const start = customStart.value || minDate.value || "?";
+    const end = customEnd.value || maxDate.value;
+    return `${start} ~ ${end}`;
+  }
+  // range.value === "all"
   if (!summary.value || summary.value.total_plays === 0) return "no data";
   const fmt = (iso: string) => iso.slice(0, 10);
   return `${fmt(summary.value.earliest_played_at!)} ~ ${fmt(summary.value.latest_played_at!)}`;
@@ -251,7 +292,11 @@ const trendTraces = computed(() => [
 </script>
 
 <template>
-  <h1>Spotify Listening Analysis</h1>
+  <header class="app-head">
+    <h1>Spotify Listening Analysis</h1>
+    <span v-if="envBadge" class="env-badge" :title="envBadge">{{ envBadge }}</span>
+    <button v-if="isTauri" class="btn gear" title="Setup" aria-label="Setup" @click="openSetup">⚙</button>
+  </header>
 
   <nav class="filters">
     <button class="btn nav-btn" :class="{ current: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
@@ -387,3 +432,14 @@ const trendTraces = computed(() => [
 
   <footer>Last played {{ lastUpdated }}</footer>
 </template>
+
+<style scoped>
+.app-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.gear { font-size: 1.15rem; line-height: 1; padding: 0.3rem 0.55rem; }
+/* Which .env this session resolved to — the twin-.env question, answered on screen. */
+.env-badge {
+  margin-right: auto; font-size: 0.7rem; font-family: monospace; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: 0.15rem 0.5rem;
+  max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+</style>

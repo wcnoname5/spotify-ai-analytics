@@ -11,7 +11,7 @@
 | 層級 | 技術 | 說明 |
 |---|---|---|
 | 遠端資料庫 | Cloudflare D1 | 聆聽紀錄 + Spotify token 儲存 |
-| 資料同步 (雲) | GitHub Actions (cron, 每小時) + Python | 呼叫 Spotify API，寫入 D1 |
+| 資料同步 (雲) | Cloudflare Worker (cron, 每小時) + Python | 呼叫 Spotify API，寫入 D1 |
 | API Gateway | Cloudflare Worker (TypeScript) | D1 唯一存取入口，需 Bearer token 驗證 |
 | 本地快取 DB | SQLite | App 啟動時從 Worker API 增量同步 |
 | 報告生成 | Python + LangChain | 讀本地 SQLite，產生報告/對話 |
@@ -58,7 +58,7 @@
 - **D1 Tables**：
   - `listening_history`：track、artist、played_at、duration 等
   - `spotify_tokens`：access/refresh token（加密儲存）
-- **GitHub Actions**：每小時觸發 Python script → 呼叫 Spotify API → upsert 進 D1
+- **Cloudflare Worker**：每小時觸發 Python script → 呼叫 Spotify API → upsert 進 D1
 - **Worker API**（TS）：
   - `GET /api/tracks?since=<timestamp>` — 增量拉取
   - `GET /api/tracks?from=&to=&filter=` — dashboard 用聚合查詢
