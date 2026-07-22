@@ -1,8 +1,7 @@
 # Tauri Setup GUI — Design
 
 **Date:** 2026-07-20
-**Status:** Approved — implementation scope Phase 0–2
-**Supersedes:** `2026-07-18-tauri-setup-gui-design.md` (draft; its three open questions are resolved here)
+**Status:** Done (see commit `0d84b9`)
 **Roadmap:** section 2, "One-time setup → Tauri GUI"
 
 ## Core principle
