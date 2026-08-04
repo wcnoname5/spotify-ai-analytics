@@ -1,5 +1,4 @@
--- Generated from packages/core/spotify_core/db/schema.py (ALL_DDL). Do not edit by hand.
--- Regenerate with: uv run python scripts/gen_d1_migration.py
+-- Hand-maintained since scripts/gen_d1_migration.py was retired. Keep in step with schema.sql.
 CREATE TABLE IF NOT EXISTS listening_history (
     id           TEXT PRIMARY KEY,
     track_id     TEXT NOT NULL,

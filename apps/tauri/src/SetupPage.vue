@@ -472,7 +472,8 @@ async function runStep(step: ManualStep) {
             </button>
           </div>
           <p class="hint">
-            Takes a few minutes. Needs <code>node</code> / <code>npx</code> on this machine for now.
+            Takes a few minutes. Creates a D1 database and a Worker in your own
+            Cloudflare account.
           </p>
         </template>
 

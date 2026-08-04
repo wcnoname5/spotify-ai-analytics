@@ -1,9 +1,9 @@
+mod cloudflare;
 mod config;
 mod oauth;
 
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 // ponytail: the last spawn in the app, and dev-only. The report is out of scope
@@ -15,12 +15,6 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 // it dispatched (oauth, import, sync) is now in the app or on the Worker, so the
 // list shrank to nothing rather than being replaced.
 const REPORT_CMD: &[&str] = &["uv", "run", "python", "-m", "spotify_core.report"];
-
-// The Cloudflare deploy is the other remaining spawn, and the one that has to
-// stop being a spawn for the app to be shippable at all: an external user needs
-// it to stand up their own D1 and Worker. It becomes direct Cloudflare REST calls
-// from Rust, which also drops the node/npx/wrangler requirement.
-const CLI_CMD: &[&str] = &["uv", "run", "spotify-mcp"];
 
 /// Repo root, resolved at *compile* time — so anything using this only works on
 /// the machine that built it. Reachable only from `generate_report` below, which
@@ -81,14 +75,17 @@ async fn await_oauth_callback(authorize_url: String, port: u16) -> Result<String
         .map_err(|e| e.to_string())?
 }
 
-/// Deploy the Cloudflare backend, streaming the log to the Setup page.
+/// Stand up the user's Cloudflare backend, streaming progress to the Setup page.
 ///
-/// The only spawn here that is not buffered: the deploy takes minutes (D1
-/// create, migrations, Worker upload, secret propagation), and a frozen button
-/// for that long reads as a hang. Lines go out as `cloud-log` events.
+/// Calls Cloudflare's REST API directly (see cloudflare.rs). It used to spawn
+/// `spotify-mcp cloud deploy`, which drove `npx wrangler` — fine from a checkout,
+/// impossible for the external users this step exists for, who have neither
+/// Python nor Node.
 ///
-/// The GUI deliberately knows nothing about wrangler — it calls one subcommand,
-/// so the wrangler → Cloudflare REST swap never reaches this file.
+/// Progress goes out as `cloud-log` events rather than a return value: the deploy
+/// takes minutes and a button frozen that long reads as a hang.
+///
+/// `api_token` is used and dropped; it is never written to the config file.
 #[tauri::command]
 async fn cloud_deploy(
     app: tauri::AppHandle,
@@ -97,50 +94,38 @@ async fn cloud_deploy(
     rotate: bool,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let mut args: Vec<String> = vec!["cloud".into(), "deploy".into(), "--name".into(), name];
-        if !api_token.is_empty() {
-            args.push("--api-token".into());
-            args.push(api_token);
+        if api_token.trim().is_empty() {
+            return Err("Paste a Cloudflare API token first.".to_string());
         }
-        if rotate {
-            args.push("--rotate".into());
-        }
-
-        let mut child = Command::new(CLI_CMD[0])
-            .args(&CLI_CMD[1..])
-            .args(&args)
-            .current_dir(repo_root())
-            .env("PYTHONUTF8", "1")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("failed to spawn `{}`: {e}", CLI_CMD[0]))?;
-
-        // stderr on its own thread: the deploy interleaves both, and reading
-        // them in sequence would deadlock once a pipe buffer fills.
-        let stderr = child.stderr.take().map(|err| {
-            let app = app.clone();
-            std::thread::spawn(move || {
-                for line in BufReader::new(err).lines().map_while(Result::ok) {
-                    let _ = app.emit("cloud-log", line);
-                }
-            })
-        });
-        if let Some(out) = child.stdout.take() {
-            for line in BufReader::new(out).lines().map_while(Result::ok) {
-                let _ = app.emit("cloud-log", line);
-            }
-        }
-        if let Some(handle) = stderr {
-            let _ = handle.join();
+        let cfg = config::deploy_inputs();
+        if cfg.client_id.is_empty() || cfg.fernet_key.is_empty() {
+            return Err(
+                "Finish the Spotify Client ID step first — the Worker needs it as a secret."
+                    .to_string(),
+            );
         }
 
-        let status = child.wait().map_err(|e| e.to_string())?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err("deploy failed — see the log above".to_string())
-        }
+        let log = move |line: String| {
+            let _ = app.emit("cloud-log", line);
+        };
+
+        let result = cloudflare::deploy(
+            api_token,
+            name.trim(),
+            &cfg.client_id,
+            &cfg.fernet_key,
+            // Reusing the existing token unless asked to rotate: a new one on
+            // every deploy silently 401s every other machine pointing here.
+            if rotate { None } else { Some(cfg.worker_auth_token) },
+            &log,
+        )?;
+
+        config::write(&[
+            format!("WORKER_URL={}", result.worker_url),
+            format!("WORKER_AUTH_TOKEN={}", result.auth_token),
+        ])?;
+        log(format!("Saved WORKER_URL to {}", config::config_path().display()));
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?

@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "bundle": "esbuild src/index.ts --bundle --format=esm --target=es2022 --outfile=dist/worker.js"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
+    "esbuild": "^0.25.0",
     "typescript": "^5.7.3",
     "wrangler": "^3.99.0"
   }

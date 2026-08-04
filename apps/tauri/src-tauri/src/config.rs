@@ -206,6 +206,22 @@ pub fn read() -> AppConfig {
     }
 }
 
+/// The three values a Cloudflare deploy needs from config, read in one pass.
+pub struct DeployInputs {
+    pub client_id: String,
+    pub fernet_key: String,
+    pub worker_auth_token: String,
+}
+
+pub fn deploy_inputs() -> DeployInputs {
+    let values = load_values();
+    DeployInputs {
+        client_id: get(&values, "SPOTIFY_CLIENT_ID"),
+        fernet_key: get(&values, "TOKEN_ENCRYPT_KEY"),
+        worker_auth_token: get(&values, "WORKER_AUTH_TOKEN"),
+    }
+}
+
 /// The raw `TOKEN_ENCRYPT_KEY`, or None when unset.
 ///
 /// The only getter that returns a secret. It exists because the frontend does
