@@ -1,6 +1,6 @@
 # Project Overview
 
-Personal Spotify analytics app. Target architecture (see `spotify-project-spec.md`):
+Personal Spotify analytics app. Target architecture (see `docs/spotify-project-spec.md`):
 
 - **Cloudflare D1** is the single source of truth (listening history + encrypted Spotify tokens)
 - **Cloudflare Worker** (TypeScript, `worker/`) is the *only* thing that talks to D1 — Bearer-token gated
@@ -17,7 +17,6 @@ packages/dataloader/  # spotify_dataloader: Polars + Pydantic ingestion
 apps/mcp/             # spotify_mcp: MCP server + Typer CLI
 apps/tauri/           # Tauri 2 desktop app (Vite + TS frontend, src-tauri/ Rust shell) — deps separate from worker/
 worker/               # Cloudflare Worker (TS) + D1 migrations
-scripts/              # cron sync, local sync, one-off migration scripts
 data/                 # Local SQLite DBs and JSON exports — never commit data/*.db
 tests/                # Pytest suite (tests/core, tests/mcp)
 ```

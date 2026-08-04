@@ -5,8 +5,6 @@ description = "A LangGraph-based AI agent for analyzing Spotify listening histor
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "dotenv>=0.9.9",
-    "google-generativeai>=0.8.6",
     "langchain>=0.3",
     "langchain-core==1.2.5",
     "langchain-google-genai>=4.1.2",
@@ -20,7 +18,7 @@ dependencies = [
     "polars>=1.36.1",
     "pydantic==2.12.5",
     "pydantic-settings==2.12.0",
-    "pytest>=9.0.2",
+    # `dotenv` (the shim package) removed: python-dotenv is what provides `import dotenv`.
     "python-dotenv==1.2.1",
     # workspace members — ensures uv sync at the root installs all transitive deps
     "spotify-analytics-core",
@@ -28,12 +26,11 @@ dependencies = [
     "spotify-analytics-mcp",
 ]
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[tool.setuptools.packages.find]
-where = []
+# The root is a workspace container, not a distributable package — it only exists
+# to pin shared deps and list members. `package = false` replaces the old
+# setuptools + `packages.find where = []` no-op-package hack.
+[tool.uv]
+package = false
 
 [dependency-groups]
 dev = [
