@@ -1,52 +1,32 @@
-"""Single source of truth for spotify-mcp config and data directory resolution.
+"""Config and data directory resolution for the Python side.
 
-Resolution priority (both config_dir and data_dir):
-    1. Explicit env var (SPOTIFY_MCP_CONFIG_DIR / SPOTIFY_MCP_DATA_DIR)
-    2. DEV=true (process env or cwd .env) → repo checkout: config_dir=cwd, data_dir=cwd/data
-    3. platformdirs default (user_config_dir / user_data_dir, app name "spotify-mcp")
+Thin wrapper over :mod:`spotify_core.config_file`, which owns the resolution
+rule and must stay in step with ``apps/tauri/src-tauri/src/config.rs``:
 
-Checkout-mode developers set DEV=true in the repo .env (or shell); the explicit
-SPOTIFY_MCP_* env vars still win when both are set.
+    $SPOTIFY_CONFIG set -> that file, data beside it in ./data
+    otherwise           -> platformdirs (where a packaged install lives)
+
+The previous version had a third mode: ``DEV=true`` read out of ``Path.cwd()/.env``,
+which made the answer depend on the directory a process was launched from. That
+is gone deliberately — it is the reason the same key could be live in two files
+at once. `SPOTIFY_DATA_DIR` remains as an escape hatch for CI.
 """
-import os
 from pathlib import Path
 
-import platformdirs
-
-_APP_NAME = "spotify-mcp"
-_TRUTHY = ("1", "true", "yes", "on")
-
-
-def is_dev() -> bool:
-    """True when DEV is set truthy in the process env or the cwd .env file."""
-    raw = os.environ.get("DEV")
-    if raw is None:
-        from spotify_core import env_file as _env_file
-
-        raw = _env_file.read_key(Path.cwd() / ".env", "DEV")
-    return str(raw).strip().lower() in _TRUTHY
+from spotify_core import config_file
 
 
 def config_dir() -> Path:
-    raw = os.environ.get("SPOTIFY_MCP_CONFIG_DIR")
-    if raw:
-        return Path(raw).expanduser().resolve()
-    if is_dev():
-        return Path.cwd().resolve()
-    return Path(platformdirs.user_config_dir(_APP_NAME)).resolve()
+    return config_file.path().parent
 
 
 def data_dir() -> Path:
-    raw = os.environ.get("SPOTIFY_MCP_DATA_DIR")
-    if raw:
-        return Path(raw).expanduser().resolve()
-    if is_dev():
-        return (Path.cwd() / "data").resolve()
-    return Path(platformdirs.user_data_dir(_APP_NAME)).resolve()
+    return config_file.data_dir()
 
 
-def env_file() -> Path:
-    return (config_dir() / ".env").resolve()
+def config_path() -> Path:
+    """The config.json this invocation reads."""
+    return config_file.path()
 
 
 def history_db() -> Path:
@@ -67,39 +47,46 @@ def ensure_dirs() -> None:
     data_dir().mkdir(parents=True, exist_ok=True)
 
 
+# --------------------------------------------------------------------------
+# Transitional shims. DO NOT add callers.
+#
+# `wizard/`, `cloud.py` and `wizard/state.py` still read and write a `.env`.
+# They are all deleted once the GUI owns setup (OAuth, history import, deploy),
+# and these three functions go with them. They exist only so the tree stays
+# green in between — the app itself no longer reaches any of this.
+#
+# While both formats exist, config.json is the one the app reads. A value the
+# wizard writes to .env is therefore invisible to the desktop app.
+# --------------------------------------------------------------------------
+
+def env_file() -> Path:
+    return (config_dir() / ".env").resolve()
+
+
+def is_dev() -> bool:
+    import os
+
+    return bool(os.environ.get("SPOTIFY_CONFIG", "").strip())
+
+
 def platform_env_file() -> Path:
-    """The platformdirs .env location, regardless of the active resolution mode."""
-    return (Path(platformdirs.user_config_dir(_APP_NAME)) / ".env").resolve()
+    import platformdirs
+
+    return (Path(platformdirs.user_config_dir("spotify-mcp")) / ".env").resolve()
 
 
 def cwd_env_file() -> Path:
-    """The checkout/cwd .env location, regardless of the active resolution mode."""
     return (Path.cwd() / ".env").resolve()
 
 
-def resolution_source(env_var: str) -> str:
-    """Which rule decided a directory: 'env' (explicit override), 'dev', or 'platformdirs'."""
-    if os.environ.get(env_var):
-        return "env"
-    if is_dev():
-        return "dev"
-    return "platformdirs"
-
-
 def describe() -> dict:
-    """Snapshot of the resolved paths and how each was chosen.
-
-    Consumed by `spotify-mcp doctor` (under "paths") so users can see
-    which .env and which DBs a given invocation is actually using.
-    """
+    """Snapshot of the resolved paths, so a user can see which files an
+    invocation is actually using."""
     return {
-        "dev": is_dev(),
+        "config_path": str(config_path()),
+        "config_exists": config_path().exists(),
         "config_dir": str(config_dir()),
-        "config_dir_source": resolution_source("SPOTIFY_MCP_CONFIG_DIR"),
         "data_dir": str(data_dir()),
-        "data_dir_source": resolution_source("SPOTIFY_MCP_DATA_DIR"),
-        "env_file": str(env_file()),
-        "env_file_exists": env_file().exists(),
         "history_db": str(history_db()),
         "history_db_exists": history_db().exists(),
         "tokens_db": str(tokens_db()),

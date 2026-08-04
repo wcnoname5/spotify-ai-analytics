@@ -1,3 +1,5 @@
+import os
+
 from loguru import logger
 from pathlib import Path
 from typing import Optional
@@ -5,21 +7,21 @@ from typing import Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from spotify_core import paths
+from spotify_core import config_file, paths
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        # With DEV=true (repo .env or shell) paths.env_file() resolves to the
-        # cwd .env; otherwise the platformdirs config dir. See paths.py.
-        env_file=str(paths.env_file()),
-        env_file_encoding="utf-8",
+        # No env_file: values come from config.json, copied into os.environ by
+        # config_file.load_into_env() below. The desktop app (config.rs) is the
+        # only writer; this side only reads.
         extra="ignore",
     )
 
-    # Dev mode: when true, config/.env and data paths point at the repo
-    # checkout (cwd) instead of the platformdirs production locations.
-    dev: bool = Field(default_factory=paths.is_dev, alias="DEV")
+    # True when running against a non-default config file, i.e. $SPOTIFY_CONFIG
+    # is set. Replaces the old DEV flag, which was read from `Path.cwd()/.env`
+    # and so made the answer depend on the launch directory.
+    dev: bool = Field(default_factory=lambda: bool(os.environ.get("SPOTIFY_CONFIG", "").strip()))
 
     # API Keys
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
@@ -90,6 +92,18 @@ class Settings(BaseSettings):
         return self.token_encrypt_key.encode() if self.token_encrypt_key else b""
 
 
+def load() -> "Settings":
+    """Build a Settings from the current config file.
+
+    Prefer this over the module-level `settings` when a value may have been
+    written since import — `settings` is resolved once, at import time, so a
+    long-lived process never sees a later edit.
+    """
+    config_file.load_into_env()
+    return Settings()
+
+
+config_file.load_into_env()
 settings = Settings()
 
 

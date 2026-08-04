@@ -10,8 +10,8 @@ from spotify_mcp.wizard import credentials
 
 @pytest.fixture
 def temp_cfg(tmp_path, monkeypatch):
-    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path))
-    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SPOTIFY_CONFIG", str(tmp_path / "config.json"))
+    monkeypatch.setenv("SPOTIFY_DATA_DIR", str(tmp_path / "data"))
     import importlib
 
     import spotify_core.paths as p

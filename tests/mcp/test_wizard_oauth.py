@@ -11,8 +11,8 @@ from spotify_mcp.wizard import oauth_step
 
 @pytest.fixture
 def temp_install(tmp_path, monkeypatch):
-    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
-    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SPOTIFY_CONFIG", str(tmp_path / "cfg" / "config.json"))
+    monkeypatch.setenv("SPOTIFY_DATA_DIR", str(tmp_path / "data"))
     (tmp_path / "cfg").mkdir()
     (tmp_path / "data").mkdir()
     monkeypatch.setenv("SPOTIFY_CLIENT_ID", "fake-client-id")

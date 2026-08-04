@@ -47,8 +47,8 @@ def test_doctor_outputs_json():
 
 def test_setup_resumes_when_already_configured(tmp_path, monkeypatch):
     """If state checks pass, the wizard should not re-run completed steps."""
-    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
-    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SPOTIFY_CONFIG", str(tmp_path / "cfg" / "config.json"))
+    monkeypatch.setenv("SPOTIFY_DATA_DIR", str(tmp_path / "data"))
 
     import spotify_mcp.wizard.state as state
 
@@ -104,8 +104,8 @@ def test_import_from_path_initializes_history_db(tmp_path, monkeypatch):
     """The promptless `--from` entry skips the wizard's init step, so it must
     create the schema itself — otherwise the Tauri Setup page's import button
     hits `no such table: listening_history` on a fresh install."""
-    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
-    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SPOTIFY_CONFIG", str(tmp_path / "cfg" / "config.json"))
+    monkeypatch.setenv("SPOTIFY_DATA_DIR", str(tmp_path / "data"))
 
     from rich.console import Console
     from spotify_core import paths
@@ -124,8 +124,8 @@ def test_import_from_path_initializes_history_db(tmp_path, monkeypatch):
 def test_reauth_initializes_tokens_db_before_browser(tmp_path, monkeypatch):
     """Same gap on the OAuth entry, and worse there: a missing table would
     otherwise surface only after the user had already authorized."""
-    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
-    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SPOTIFY_CONFIG", str(tmp_path / "cfg" / "config.json"))
+    monkeypatch.setenv("SPOTIFY_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("SPOTIFY_CLIENT_ID", "test-client-id")
     monkeypatch.setenv("TOKEN_ENCRYPT_KEY", "x" * 44)
 

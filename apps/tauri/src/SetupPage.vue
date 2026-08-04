@@ -15,6 +15,7 @@ import { isTauri } from "./lib/db";
 import {
   cloudDeploy,
   getConfig,
+  keygen,
   pickHistoryFolder,
   runDoctor,
   runSetupStep,
@@ -96,9 +97,9 @@ const form = reactive({
   WORKER_AUTH_TOKEN: "",
 });
 
-// keygen is not here: it needs no decision from the user, so it runs
-// automatically (see refresh) rather than being a step they must remember.
-type ManualStep = Exclude<SetupStep, "keygen">;
+// keygen is not a step: it needs no decision from the user, so it runs
+// automatically (see refresh) rather than being something they must remember.
+type ManualStep = SetupStep;
 type StepState = { running: boolean; ok: boolean | null; output: string };
 const steps = reactive<Record<ManualStep, StepState>>({
   oauth: { running: false, ok: null, output: "" },
@@ -113,7 +114,6 @@ const keygenError = ref("");
 const CHECK_LABELS: Record<string, string> = {
   client_id: "Spotify Client ID",
   fernet_key: "Encryption key",
-  dbs_initialized: "Databases initialized",
   tokens_valid: "Spotify authorized",
   history_has_data: "Listening history imported",
 };
@@ -143,8 +143,7 @@ const STEP_LABELS: Record<WizardStep, string> = {
   worker: "Cloud sync",
 };
 
-// fernet_key and dbs_initialized are not steps: the key is generated on sight
-// (see refresh) and each spawned subcommand now creates its own schema.
+// fernet_key is not a step: the key is generated on sight (see refresh).
 const stepDone: Record<WizardStep, () => boolean> = {
   client_id: () => !!checks.value.client_id,
   oauth: () => !!checks.value.tokens_valid,
@@ -192,7 +191,7 @@ async function refresh() {
     if (!report.checks?.fernet_key && !keygenTried.value) {
       keygenTried.value = true;
       try {
-        await runSetupStep("keygen");
+        await keygen();
         report = await runDoctor();
       } catch (e) {
         keygenError.value = String(e);

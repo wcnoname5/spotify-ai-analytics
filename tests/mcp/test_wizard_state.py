@@ -14,8 +14,8 @@ def temp_install(tmp_path, monkeypatch):
     data = tmp_path / "data"
     cfg.mkdir()
     data.mkdir()
-    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(cfg))
-    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(data))
+    monkeypatch.setenv("SPOTIFY_CONFIG", str(cfg / "config.json"))
+    monkeypatch.setenv("SPOTIFY_DATA_DIR", str(data))
     # Force a clean import so paths re-resolve
     import importlib
 

@@ -104,8 +104,12 @@ def doctor(
 ) -> None:
     """Check environment readiness and print a JSON report.
 
-    Exits 1 when not ready. During setup that is the *normal* state, so machine
-    callers (the Tauri Setup page) must read stdout and ignore the exit code.
+    Exits 1 when not ready.
+
+    The desktop app no longer calls this — it composes the same checks itself
+    (config-derived ones in `src-tauri/src/config.rs`, database-derived ones in
+    `lib/config.ts`), which saved a ~1.7s process spawn per open and works in a
+    packaged build. This stays as a terminal diagnostic for a source checkout.
     """
     report = _state.collect_report()
     if json_out:
@@ -283,89 +287,44 @@ def cloud_seed(
     raise typer.Exit(code=cloud.seed(force=force, tokens_only=tokens_only))
 
 
-config_app = typer.Typer(help="Read and write settings in the resolved .env file.")
-app.add_typer(config_app, name="config")
+@app.command("config")
+def config_show() -> None:
+    """Print the resolved config paths and which settings have a value, as JSON.
 
-
-@config_app.command("get")
-def config_get() -> None:
-    """Print the effective runtime config the desktop app needs, as JSON.
-
-    The app used to get these as build-time Vite `define` constants. They are
-    resolved here rather than parsed from .env by the caller because the
-    effective value is not a plain file read: HISTORY_DB_PATH falls back to
-    paths.history_db() and resolves relative values against the data dir
-    (see config.Settings). Keeping that precedence in one place is the point.
+    Read-only. `config get`, `config set` and `config keygen` used to live here;
+    the desktop app called them and paid ~1.7s per invocation for a file read.
+    The app now owns config entirely (`src-tauri/src/config.rs`), which is also
+    the only way it can work in a packaged build with no `uv` on the machine.
+    Writing from two places is what produced divergent config files before, so
+    this side deliberately only reads.
     """
-    import os
+    from spotify_core import config_file, paths
+    from spotify_core.config import load
 
-    from spotify_core import env_file, paths
-    from spotify_core.config import Settings
-
-    # Fresh instance, not the module singleton: a `config set` earlier in this
-    # session must be reflected without the caller restarting the CLI.
-    settings = Settings()
-    target = paths.env_file()
-
-    def _raw(key: str) -> str:
-        return (os.environ.get(key) or env_file.read_key(target, key) or "").strip()
-
+    settings = load()
     print(
         json.dumps(
             {
-                "env_file": str(target),
+                "config_path": str(paths.config_path()),
                 "dev": settings.dev,
                 "history_db_path": str(settings.history_db_path),
-                "worker_url": _raw("WORKER_URL"),
-                "worker_auth_token": _raw("WORKER_AUTH_TOKEN"),
-                # Which optional settings already have a value, so the Setup page
-                # can show only what is missing. Booleans, never the secrets.
+                # Booleans, never the secrets: this output is safe to paste.
                 "configured": {
-                    # client_id is the app's "is setup done at all" signal, so it
-                    # rides along here rather than costing a second `doctor` spawn.
-                    "client_id": bool(_raw("SPOTIFY_CLIENT_ID")),
+                    "client_id": bool(config_file.read_key("SPOTIFY_CLIENT_ID")),
+                    "fernet_key": bool(config_file.read_key("TOKEN_ENCRYPT_KEY")),
                     "gemini": bool(settings.gemini_api_key),
                     "openai": bool(settings.openai_api_key),
                     "langfuse": settings.langfuse_configured,
                     "langsmith": bool(settings.langsmith_api_key),
-                    "worker": bool(_raw("WORKER_URL") and _raw("WORKER_AUTH_TOKEN")),
+                    "worker": bool(
+                        config_file.read_key("WORKER_URL")
+                        and config_file.read_key("WORKER_AUTH_TOKEN")
+                    ),
                 },
             }
         )
     )
 
-
-@config_app.command("keygen")
-def config_keygen() -> None:
-    """Ensure a Fernet TOKEN_ENCRYPT_KEY exists, generating one if absent.
-
-    Never overwrites an existing key — regenerating orphans every stored token.
-    Reports whether a key was created so the GUI can say so; the key itself is
-    not printed, since it would land in the caller's captured stdout.
-    """
-    from spotify_core import env_file, paths
-    from spotify_mcp.wizard import credentials as _credentials
-
-    existed = bool(env_file.read_key(paths.env_file(), "TOKEN_ENCRYPT_KEY"))
-    _credentials.ensure_fernet_key(console)
-    print(json.dumps({"created": not existed}))
-
-
-@config_app.command("set")
-def config_set(
-    pairs: Annotated[list[str], typer.Argument(help="One or more KEY=VALUE pairs.")],
-) -> None:
-    """Upsert KEY=VALUE pairs into the resolved .env, leaving sibling keys untouched."""
-    from spotify_core import env_file, paths
-
-    target = paths.env_file()
-    for pair in pairs:
-        key, sep, value = pair.partition("=")
-        key = key.strip()
-        if not sep or not key:
-            raise typer.BadParameter(f"expected KEY=VALUE, got {pair!r}")
-        env_file.upsert(target, key, value)
-    print(json.dumps({"env_file": str(target), "written": len(pairs)}))
 
 @app.command()
 def serve() -> None:

@@ -1,26 +1,29 @@
+mod config;
+
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-// ponytail: dev-only runner; a packaged PyInstaller sidecar swaps this vector + cwd.
+// ponytail: dev-only runner; the report is out of scope for the first release
+// (`ReportPage` is hidden unless the app is running against a dev config), and
+// this is the last spawn left. It goes when the report backend is settled —
+// either a PyInstaller sidecar or LangGraph.js — and `repo_root()` goes with it.
 const REPORT_CMD: &[&str] = &["uv", "run", "python", "-m", "spotify_core.report"];
-// The single CLI entry point every setup step goes through, so packaging bundles one exe.
+
+// The remaining setup steps that still shell out to Python. Each one is a Phase 2
+// item; the list shrinks to nothing rather than being replaced.
 const CLI_CMD: &[&str] = &["uv", "run", "spotify-mcp"];
 
+/// Repo root, resolved at *compile* time — so anything using this only works on
+/// the machine that built it. That is why it may only be reached from the two
+/// dev-only spawns below, never from a path a packaged user can take.
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
 /// Run a `spotify-mcp` subcommand from the repo root and return its stdout.
-///
-/// cwd matters: `paths.is_dev()` reads the *cwd* .env, so running from anywhere
-/// else would silently resolve a different config dir than the CLI does.
-///
-/// `accept_failure` is for `doctor`, which exits 1 whenever the environment is
-/// not ready — the normal state mid-setup. Treating that as a spawn error would
-/// make every incomplete setup look like a crash.
-fn run_cli(args: &[String], accept_failure: bool) -> Result<String, String> {
+fn run_cli(args: &[String]) -> Result<String, String> {
     let out = Command::new(CLI_CMD[0])
         .args(&CLI_CMD[1..])
         .args(args)
@@ -28,7 +31,7 @@ fn run_cli(args: &[String], accept_failure: bool) -> Result<String, String> {
         .env("PYTHONUTF8", "1")
         .output()
         .map_err(|e| format!("failed to spawn `{}`: {e}", CLI_CMD[0]))?;
-    if out.status.success() || accept_failure {
+    if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
         let err = String::from_utf8_lossy(&out.stderr);
@@ -38,28 +41,29 @@ fn run_cli(args: &[String], accept_failure: bool) -> Result<String, String> {
 }
 
 /// Effective runtime config as a JSON string; the frontend parses it.
-/// Replaces the old build-time Vite `define` constants.
+///
+/// Reads the config file directly. This used to spawn `uv run spotify-mcp config
+/// get`, which cost ~1.7s on every call and could not work in a packaged build.
 #[tauri::command]
-async fn get_config() -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        run_cli(&["config".into(), "get".into()], false)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+fn get_config() -> Result<String, String> {
+    serde_json::to_string(&config::read()).map_err(|e| e.to_string())
 }
 
-/// Upsert `KEY=VALUE` pairs into the resolved .env. Writes go through Python
-/// (`env_file.upsert`) so the merge logic exists in exactly one place.
+/// Upsert `KEY=VALUE` pairs into the config file. Sibling keys — including ones
+/// this build does not know about — are left untouched.
 /// Callers must tell the user changes apply on restart.
 #[tauri::command]
-async fn set_config(pairs: Vec<String>) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut args = vec!["config".to_string(), "set".to_string()];
-        args.extend(pairs);
-        run_cli(&args, false)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+fn set_config(pairs: Vec<String>) -> Result<String, String> {
+    let env_file = config::write(&pairs)?;
+    Ok(serde_json::json!({ "env_file": env_file, "written": pairs.len() }).to_string())
+}
+
+/// Generate `TOKEN_ENCRYPT_KEY` if absent; never rotates an existing one.
+/// The key itself is not returned — it would land in the caller's log.
+#[tauri::command]
+fn keygen() -> Result<String, String> {
+    let created = config::ensure_fernet_key()?;
+    Ok(serde_json::json!({ "created": created }).to_string())
 }
 
 /// Run one setup step. Steps are whitelisted rather than taking a command from
@@ -74,7 +78,6 @@ async fn run_setup_step(step: String, arg: Option<String>) -> Result<String, Str
             // run_oauth() only prints, never reads stdin — safe to spawn headless.
             // It opens the browser itself and serves the 127.0.0.1:8888 callback.
             "oauth" => vec!["reauth".into()],
-            "keygen" => vec!["config".into(), "keygen".into()],
             // Fallback for users whose Spotify export has not arrived yet:
             // pulls the last ~50 plays so the dashboard is not empty.
             "sync" => vec!["sync".into()],
@@ -83,9 +86,11 @@ async fn run_setup_step(step: String, arg: Option<String>) -> Result<String, Str
                 "--from".into(),
                 arg.ok_or("import step requires a path")?,
             ],
+            // `keygen` used to be here. It is the `keygen` command now, in Rust:
+            // 32 bytes from the OS RNG never needed a Python process.
             other => return Err(format!("unknown setup step: {other}")),
         };
-        run_cli(&args, false)
+        run_cli(&args)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -169,15 +174,11 @@ async fn pick_history_folder() -> Result<Option<String>, String> {
     .map_err(|e| e.to_string())?
 }
 
-/// Environment readiness report as a JSON string. Exit code deliberately ignored.
-#[tauri::command]
-async fn doctor() -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        run_cli(&["doctor".into(), "--json".into()], true)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
+// `doctor` used to be a command here, spawning `spotify-mcp doctor --json`.
+// It is gone: the config-derived checks ride along in `get_config`'s `checks`
+// field (one file read instead of a second ~1.7s process), and the two
+// database-derived checks are composed in `lib/config.ts`, which already holds
+// an open SQLite handle for the dashboard.
 
 #[tauri::command]
 async fn generate_report(
@@ -334,7 +335,7 @@ pub fn run() {
             confirm_dialog,
             get_config,
             set_config,
-            doctor,
+            keygen,
             run_setup_step,
             pick_history_folder,
             open_setup_window,

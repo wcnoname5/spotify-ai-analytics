@@ -45,8 +45,8 @@ def test_dashboard_installed_true_when_all_present(monkeypatch):
 
 
 def test_wizard_skips_llm_steps_without_dashboard(tmp_path, monkeypatch):
-    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
-    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SPOTIFY_CONFIG", str(tmp_path / "cfg" / "config.json"))
+    monkeypatch.setenv("SPOTIFY_DATA_DIR", str(tmp_path / "data"))
     _mark_all_steps_done(monkeypatch)
     monkeypatch.setattr(wiz, "_dashboard_installed", lambda: False)
     called: list[str] = []
@@ -60,8 +60,8 @@ def test_wizard_skips_llm_steps_without_dashboard(tmp_path, monkeypatch):
 
 
 def test_wizard_runs_llm_steps_with_dashboard(tmp_path, monkeypatch):
-    monkeypatch.setenv("SPOTIFY_MCP_CONFIG_DIR", str(tmp_path / "cfg"))
-    monkeypatch.setenv("SPOTIFY_MCP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SPOTIFY_CONFIG", str(tmp_path / "cfg" / "config.json"))
+    monkeypatch.setenv("SPOTIFY_DATA_DIR", str(tmp_path / "data"))
     _mark_all_steps_done(monkeypatch)
     monkeypatch.setattr(wiz, "_dashboard_installed", lambda: True)
     called: list[str] = []
