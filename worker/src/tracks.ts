@@ -58,35 +58,79 @@ function isTrackRow(value: unknown): value is TrackRow {
 // comparing 'played_at' (ISO-8601 TEXT column)
 const ISO_RE = /^\d{4}-\d{2}-\d{2}T/;
 
-/** GET /api/tracks?since=<iso> or ?from=<iso>&to=<iso> -> { tracks: [...] } */
+/**
+ * Rows per page.
+ *
+ * This used to be unbounded. A user who imported a full Spotify export has
+ * ~100k rows in D1, and `.all()` materialises the whole result set in Worker
+ * memory (128 MB) before serialising it — so the first sync on a new machine
+ * either OOMed the Worker or took minutes. 5000 rows is a few MB of JSON.
+ */
+const PAGE_SIZE = 5000;
+
+/**
+ * GET /api/tracks?since=<iso>[&since_id=<id>] or ?from=<iso>&to=<iso>
+ *   -> { tracks: [...], next_since?: <iso>, next_id?: <id> }
+ *
+ * When `next_since` comes back there may be more; pass both cursor values to the
+ * next call. A short page is definitively the end, so no cursor goes back and
+ * the caller stops.
+ *
+ * The cursor is `(played_at, id)`, not `played_at` alone. Two plays can share a
+ * timestamp — the same second from two devices in a data export — and with a
+ * bare `played_at > cursor` any tie straddling a page boundary is skipped
+ * forever, because the next sync starts from the same cursor. `id` is the
+ * primary key, so the pair is unique and the resume point is exact.
+ *
+ * Without `since_id` the comparison is `>=`, not `>`: the first call of a sync
+ * uses the local `MAX(played_at)`, and a row in D1 tying with it would otherwise
+ * never be fetched. The overlap re-sends one boundary row, which INSERT OR
+ * IGNORE drops.
+ */
 export async function handleGetTracks(
   request: Request,
   env: Env
 ): Promise<Response> {
   const url = new URL(request.url);
   const since = url.searchParams.get("since");
+  const sinceId = url.searchParams.get("since_id");
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
 
   let statement;
   if (since !== null) {
     if (!ISO_RE.test(since)) return badRequest("Invalid 'since' (ISO-8601 expected)");
-    statement = env.DB.prepare(
-      "SELECT * FROM listening_history WHERE played_at > ? ORDER BY played_at ASC"
-    ).bind(since);
+    statement =
+      sinceId !== null
+        ? env.DB.prepare(
+            "SELECT * FROM listening_history " +
+              "WHERE played_at > ? OR (played_at = ? AND id > ?) " +
+              "ORDER BY played_at ASC, id ASC LIMIT ?"
+          ).bind(since, since, sinceId, PAGE_SIZE)
+        : env.DB.prepare(
+            "SELECT * FROM listening_history WHERE played_at >= ? " +
+              "ORDER BY played_at ASC, id ASC LIMIT ?"
+          ).bind(since, PAGE_SIZE);
   } else if (from !== null && to !== null) {
     if (!ISO_RE.test(from) || !ISO_RE.test(to)) {
       return badRequest("Invalid 'from'/'to' (ISO-8601 expected)");
     }
     statement = env.DB.prepare(
-      "SELECT * FROM listening_history WHERE played_at >= ? AND played_at <= ? ORDER BY played_at ASC"
-    ).bind(from, to);
+      "SELECT * FROM listening_history WHERE played_at >= ? AND played_at <= ? " +
+        "ORDER BY played_at ASC, id ASC LIMIT ?"
+    ).bind(from, to, PAGE_SIZE);
   } else {
     return badRequest("Provide 'since' or 'from'/'to' query params");
   }
 
-  const { results } = await statement.all();
-  return Response.json({ tracks: results });
+  const { results } = await statement.all<{ played_at: string; id: string }>();
+  const last = results.length === PAGE_SIZE ? results[results.length - 1] : undefined;
+
+  return Response.json({
+    tracks: results,
+    next_since: last?.played_at,
+    next_id: last?.id,
+  });
 }
 
 /** POST /api/tracks body { tracks: [row, ...] } -> { inserted: n } */

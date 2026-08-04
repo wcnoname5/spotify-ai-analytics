@@ -24,6 +24,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-http = "2.5.9"
+# Shipped in v1 even though there is nothing to update to yet: the signing public
+# key has to be inside an *already released* build for its successor to verify.
+# Leaving it out of the first release means every later update is a manual
+# reinstall, forever.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 rfd = "0.15"
 # Only for the Fernet key in config.rs. A full crypto crate would be a heavier
 # dependency for one call to the OS RNG.

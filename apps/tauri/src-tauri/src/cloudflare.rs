@@ -346,8 +346,14 @@ impl Deployer {
 /// an explicit list means adding a migration without wiring it up is a visible
 /// omission rather than a silent one.
 const MIGRATIONS: &[(&str, &str)] = &[
-    ("0001_init.sql", include_str!("../../../../worker/migrations/0001_init.sql")),
-    ("0002_reports.sql", include_str!("../../../../worker/migrations/0002_reports.sql")),
+    (
+        "0001_init.sql",
+        include_str!("../../../../packages/core/spotify_core/db/sql/migrations/0001_init.sql"),
+    ),
+    (
+        "0002_reports.sql",
+        include_str!("../../../../packages/core/spotify_core/db/sql/migrations/0002_reports.sql"),
+    ),
 ];
 
 pub struct DeployResult {

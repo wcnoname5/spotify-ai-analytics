@@ -18,6 +18,23 @@ export type SyncResult =
   | { inserted: number }
   | { offline: true; reason: "unconfigured" | "error" };
 
+/**
+ * Rows per INSERT.
+ *
+ * Inserting one row per `db.execute` meant one IPC round trip per play — tens of
+ * thousands of them after an export import, which took minutes. A multi-row
+ * VALUES cuts that by ~100x. Not larger: SQLite's default limit is 999 bound
+ * parameters, and each row binds 14.
+ */
+const INSERT_CHUNK = 60;
+
+/** One page of tracks from the Worker. */
+interface TrackPage {
+  tracks: TrackRow[];
+  next_since?: string;
+  next_id?: string;
+}
+
 export async function syncOnStartup(): Promise<SyncResult> {
   const { worker_url, worker_auth_token } = await getConfig();
   if (!worker_url) return { offline: true, reason: "unconfigured" };
@@ -25,24 +42,57 @@ export async function syncOnStartup(): Promise<SyncResult> {
   try {
     const db = await getDb();
     const cursorRows = await db.select<{ c: string | null }[]>(maxPlayedAtSql);
-    const cursor = cursorRows[0]?.c ?? EPOCH;
-
-    const res = await fetch(`${worker_url}/api/tracks?since=${encodeURIComponent(cursor)}`, {
-      headers: { Authorization: `Bearer ${worker_auth_token}` },
-    });
-    if (!res.ok) {
-      console.error(`syncOnStartup: worker responded ${res.status}`);
-      return { offline: true, reason: "error" };
-    }
-
-    const body = (await res.json()) as { tracks: TrackRow[] };
-    const tracks = body.tracks ?? [];
-
-    // No BEGIN/COMMIT: sqlx pooling can route COMMIT to a different connection.
-    // INSERT OR IGNORE is idempotent; a partial sync re-pulls from the same cursor.
+    let since = cursorRows[0]?.c ?? EPOCH;
+    let sinceId: string | undefined;
     let inserted = 0;
-    for (const t of tracks) {
-      const result = await db.execute(insertTrackSql, [
+
+    // Loop until the Worker stops handing back a cursor. It caps each page, so a
+    // first sync against a full imported history is many small responses rather
+    // than one that blows the Worker's 128 MB budget.
+    for (;;) {
+      const query = new URLSearchParams({ since });
+      if (sinceId !== undefined) query.set("since_id", sinceId);
+
+      const res = await fetch(`${worker_url}/api/tracks?${query}`, {
+        headers: { Authorization: `Bearer ${worker_auth_token}` },
+      });
+      if (!res.ok) {
+        console.error(`syncOnStartup: worker responded ${res.status}`);
+        // Whatever landed already is kept: the next run resumes from the new
+        // MAX(played_at) rather than starting over.
+        return inserted ? { inserted } : { offline: true, reason: "error" };
+      }
+
+      const page = (await res.json()) as TrackPage;
+      inserted += await insertTracks(db, page.tracks ?? []);
+
+      if (!page.next_since) return { inserted };
+      since = page.next_since;
+      sinceId = page.next_id;
+    }
+  } catch (e) {
+    console.error("syncOnStartup failed:", e);
+    return { offline: true, reason: "error" };
+  }
+}
+
+/**
+ * Insert a batch of tracks, chunked into multi-row INSERTs.
+ *
+ * No BEGIN/COMMIT: sqlx pooling can route COMMIT to a different connection.
+ * INSERT OR IGNORE is idempotent, so a partial sync just re-pulls from the same
+ * cursor next time.
+ */
+async function insertTracks(
+  db: Awaited<ReturnType<typeof getDb>>,
+  tracks: TrackRow[]
+): Promise<number> {
+  let inserted = 0;
+  for (let i = 0; i < tracks.length; i += INSERT_CHUNK) {
+    const chunk = tracks.slice(i, i + INSERT_CHUNK);
+    const values: unknown[] = [];
+    for (const t of chunk) {
+      values.push(
         t.id,
         t.track_id,
         t.track_name ?? null,
@@ -56,16 +106,35 @@ export async function syncOnStartup(): Promise<SyncResult> {
         t.reason_start ?? null,
         t.reason_end ?? null,
         t.shuffle ?? null,
-        t.skipped ?? null,
-      ]);
-      inserted += result.rowsAffected;
+        t.skipped ?? null
+      );
     }
-
-    return { inserted };
-  } catch (e) {
-    console.error("syncOnStartup failed:", e);
-    return { offline: true, reason: "error" };
+    const result = await db.execute(multiRowInsert(chunk.length), values);
+    inserted += result.rowsAffected;
   }
+  return inserted;
+}
+
+/**
+ * Widen the shared single-row INSERT to `count` rows.
+ *
+ * The column list and arity come from `insert_track.sql` rather than being
+ * written out again here: a column added to the shared file but not to a copy is
+ * silent data loss, not an error.
+ *
+ * The placeholders are regenerated as positional `?` rather than reused. The
+ * source uses numbered parameters (`?1 … ?14`), and repeating that clause would
+ * bind the same values to every row — inserting `count` copies of one play, with
+ * no error to notice.
+ */
+export function multiRowInsert(count: number, template = insertTrackSql): string {
+  const [head, tail] = template.split(/VALUES/i);
+  const arity = (tail?.match(/\?/g) ?? []).length;
+  if (!head || arity === 0) {
+    throw new Error("insert_track.sql no longer looks like `... VALUES (?, ...)`");
+  }
+  const row = `(${Array.from({ length: arity }, () => "?").join(", ")})`;
+  return `${head.trim()} VALUES ${Array.from({ length: count }, () => row).join(", ")}`;
 }
 
 export interface ReportRow {

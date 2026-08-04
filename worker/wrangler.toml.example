@@ -6,7 +6,9 @@ compatibility_date = "2025-01-09"
 binding = "DB"
 database_name = "spotify-analytics"
 database_id = "00000000-0000-0000-0000-000000000000"
-migrations_dir = "migrations"
+# Shared with the local cache and the app's own deploy path, so D1 and the local
+# SQLite cannot drift apart. Relative to this config file.
+migrations_dir = "../packages/core/spotify_core/db/sql/migrations"
 
 [triggers]
 # :07 keeps clear of the top-of-hour congestion window

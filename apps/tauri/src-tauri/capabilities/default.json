@@ -10,9 +10,15 @@
     "opener:default",
     "sql:default",
     "sql:allow-execute",
+    "updater:default",
+    "process:allow-restart",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "https://*.workers.dev" }]
+      "allow": [
+        { "url": "https://*.workers.dev" },
+        { "url": "https://accounts.spotify.com/*" },
+        { "url": "https://api.spotify.com/*" }
+      ]
     }
   ]
 }

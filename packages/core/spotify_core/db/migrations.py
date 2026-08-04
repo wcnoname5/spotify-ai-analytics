@@ -27,33 +27,18 @@ def init_db(db_path: Union[str, Path]) -> None:
 
     logger.info("Database initialized at {}", db_path)
 
-# These are fields only in streaming history exports, but not in the API data.
-_HISTORY_COLUMNS = {
-    "platform":     "TEXT",
-    "conn_country": "TEXT",
-    "reason_start": "TEXT",
-    "reason_end":   "TEXT",
-    "shuffle":      "INTEGER", # Bool, use INTEGER with 0/1 in SQLite.
-    "skipped":      "INTEGER", # Bool.
-}
-
-
-def _migrate_history_db(conn: sqlite3.Connection) -> None:
-    """Add any missing columns to listening_history (idempotent)."""
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(listening_history)")}
-    for col, col_type in _HISTORY_COLUMNS.items():
-        if col not in existing:
-            conn.execute(f"ALTER TABLE listening_history ADD COLUMN {col} {col_type}")
-            logger.info("Migration: added column {} {} to listening_history", col, col_type)
-
-
 def init_history_db(db_path: Union[str, Path]) -> None:
-    """Create history.db with listening_history, sync_state, and index.
-    Safe to call multiple times (idempotent).
+    """Create history.db by applying every migration. Idempotent.
 
-    Args:
-        db_path: Path to the SQLite database file. Parent directory will be
-                 created automatically if it does not exist.
+    The app's own runner (`apps/tauri/src/lib/migrations.ts`) tracks
+    `PRAGMA user_version` so it only applies what is new. This one re-applies the
+    whole set, which is equivalent while every statement is
+    `CREATE ... IF NOT EXISTS` — and stops being equivalent the moment a
+    migration contains an ALTER. Point this at the shared runner if that happens.
+
+    An ad-hoc `_migrate_history_db` used to live here, ALTERing in the six
+    export-only columns. They are in 0001's CREATE now, so a fresh database gets
+    them and there is nothing left to patch up.
     """
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,7 +48,6 @@ def init_history_db(db_path: Union[str, Path]) -> None:
         conn.execute("PRAGMA foreign_keys=ON")
         for ddl in HISTORY_DDL:
             conn.execute(ddl)
-        _migrate_history_db(conn)
         conn.commit()
 
     logger.info("History database initialized at {}", db_path)
