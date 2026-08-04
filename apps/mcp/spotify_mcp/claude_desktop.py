@@ -30,9 +30,10 @@ def build_entry() -> dict:
     build points straight at its own executable -- the desktop app is never in
     the loop. From source we use uvx instead, so those users get updates.
 
-    Note this only works when frozen because `paths.is_dev()` ignores the cwd in
-    a frozen build: Claude Desktop spawns with an arbitrary working directory,
-    which would otherwise decide which .env the server reads.
+    The working directory Claude Desktop spawns with does not matter either way:
+    config resolution is `$SPOTIFY_CONFIG` or the platform dir, and neither looks
+    at the cwd. It used to — a `DEV` key read from `Path.cwd()/.env` decided which
+    config a process used — which made this a real hazard rather than a note.
     """
     if getattr(sys, "frozen", False):
         return {"command": sys.executable, "args": ["serve"]}

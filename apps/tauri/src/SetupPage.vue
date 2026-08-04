@@ -1,12 +1,9 @@
 <script setup lang="ts">
-// One-time setup, as a front-end over the existing Python wizard steps.
-// Every action spawns only a `spotify-mcp` subcommand: the same step functions the
-// interactive CLI wizard drives.
+// One-time setup: OAuth is lib/oauth.ts, import is lib/historyImport.ts,
+//  sync is a Worker call, config and keygen are Rust.
 //
-// Two modes, one template. First run is a wizard: one card at a time, in the same
-// order the CLI walks, so nobody has to work out what to press next. `showAll`
-// flips to the whole page at once, which is the right shape for coming back later
-// to rotate a key.
+// Two modes, one template. First run is a wizard: one card at a time for first time setup.
+// `showAll` flips to the whole page at once, which is for coming back later to rotate a key.
 import { computed, nextTick, onMounted, reactive, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -18,13 +15,13 @@ import {
   keygen,
   pickHistoryFolder,
   runDoctor,
-  runSetupStep,
   setConfig,
   type ConfiguredFlags,
   type DoctorReport,
   type SetupStep,
 } from "./lib/config";
 import { authorizeSpotify } from "./lib/oauth";
+import { importHistory, syncRecentPlays } from "./lib/historyImport";
 
 const DASHBOARD_URL = "https://developer.spotify.com/dashboard";
 const CF_TOKEN_URL = "https://dash.cloudflare.com/profile/api-tokens";
@@ -127,15 +124,10 @@ const hasLlm = computed(() => configured.value.gemini || configured.value.openai
 const hasTracing = computed(() => configured.value.langfuse || configured.value.langsmith);
 const allReady = computed(() => doctor.value?.ready === true && hasLlm.value);
 
-// Mirrors the order of run_wizard() in apps/mcp/spotify_mcp/wizard/__init__.py.
-// Deliberately a literal rather than something shared with Python: the two
-// front-ends have different step sets (no spotify_app/claude_desktop here, no
-// cloud-paste there), so a shared list would need filtering on both sides to be
-// usable. What *is* shared is `doctor --json`'s checks, which drive stepDone.
-// Cloud sits ahead of llm/tracing: it is what makes an import durable (local
-// SQLite is a disposable mirror of D1), so it must be offered before the
-// optional AI half.
-const ORDER = ["client_id", "oauth", "history", "worker", "llm", "tracing"] as const;
+// Dependency chain: `worker` must precede `oauth` and `history`,
+// because D1 (requires worker) is now the onlu oath source.
+//  llm/tracing are optional, so they go last.
+const ORDER = ["client_id", "worker", "oauth", "history", "llm", "tracing"] as const;
 type WizardStep = (typeof ORDER)[number];
 
 const STEP_LABELS: Record<WizardStep, string> = {
@@ -271,14 +263,23 @@ async function runStep(step: ManualStep) {
       // port and the flow itself is TS. See lib/oauth.ts.
       const { userId } = await authorizeSpotify();
       state.output = `Authorized as ${userId}.`;
+    } else if (step === "import") {
+      const folder = await pickHistoryFolder();
+      if (!folder) return; // cancelled
+      // A full export is ~100k plays over dozens of files and takes minutes, so
+      // this reports per file instead of leaving the button looking stuck.
+      const result = await importHistory(folder, (p) => {
+        state.output = `${p.file} (${p.fileIndex}/${p.fileCount}) — ${p.inserted} plays imported`;
+      });
+      state.output =
+        `Imported ${result.inserted} plays from ${result.files} file(s).` +
+        (result.skipped ? ` Skipped ${result.skipped} non-track records (podcasts, audiobooks).` : "");
     } else {
-      let arg: string | undefined;
-      if (step === "import") {
-        const folder = await pickHistoryFolder();
-        if (!folder) return; // cancelled
-        arg = folder;
-      }
-      state.output = await runSetupStep(step as Exclude<ManualStep, "oauth">, arg);
+      // step === "sync": the Worker holds the tokens, so it does the fetching.
+      const { inserted } = await syncRecentPlays();
+      state.output = inserted
+        ? `Fetched ${inserted} recent plays.`
+        : "No new plays since the last sync.";
     }
     state.ok = true;
     await refresh();

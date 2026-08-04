@@ -19,7 +19,6 @@ classifiers = [
 dependencies = [
     "fastmcp>=2.0",
     "spotify-analytics-core>=0.1.0",
-    "spotify-analytics-dataloader>=0.1.0",
     "typer>=0.12",
     "rich>=13.7",
     "platformdirs>=4.0",
@@ -41,7 +40,6 @@ Issues = "https://github.com/wcnoname5/spotify-ai-analytics/issues"
 
 [tool.uv.sources]
 spotify-analytics-core = { workspace = true }
-spotify-analytics-dataloader = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

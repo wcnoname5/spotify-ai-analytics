@@ -1,0 +1,31 @@
+{
+  "_comment_where": "Copy to the path the app resolves, then edit. That path is $SPOTIFY_CONFIG when set, otherwise platformdirs' user_config_dir('spotify-mcp')/config.json. `spotify-mcp config` prints the resolved one. For a dev checkout use SPOTIFY_CONFIG=./dev.config.json — its data lands in ./data beside it, so a checkout cannot read or write the database a packaged install uses.",
+  "_comment_who_writes": "The desktop app owns this file (apps/tauri/src-tauri/src/config.rs). Python only reads it. Editing by hand is fine; two writers is what produced divergent config files before.",
+  "_comment_unknown_keys": "Unknown keys are preserved on write, so a newer build's settings survive an older build reading and rewriting the file.",
+
+  "_comment_spotify": "Both set from the app's Setup page. TOKEN_ENCRYPT_KEY is generated on first open and must never be regenerated — every token already encrypted with the old key becomes permanently unreadable. Back this file up.",
+  "SPOTIFY_CLIENT_ID": "",
+  "TOKEN_ENCRYPT_KEY": "",
+  "SPOTIFY_USER_ID": "default",
+
+  "_comment_worker": "Written by the Cloudflare deploy. WORKER_AUTH_TOKEN exists nowhere else — Cloudflare secrets are write-only — so this file is its only backup.",
+  "WORKER_URL": "",
+  "WORKER_AUTH_TOKEN": "",
+
+  "_comment_history_db": "Optional. Defaults to <data dir>/history.db. A relative value resolves against the data dir, not the cwd, so it does not depend on where the app was launched from.",
+  "HISTORY_DB_PATH": "",
+
+  "_comment_llm": "Optional, for AI reports. Only Gemini and OpenAI are wired up; ANTHROPIC_API_KEY is not supported yet.",
+  "GEMINI_API_KEY": "",
+  "OPENAI_API_KEY": "",
+
+  "_comment_tracing": "Optional. Langfuse needs all three keys or none. LangSmith needs LANGSMITH_TRACING=true as well as the key; set LANGSMITH_ENDPOINT only if your region differs from the default.",
+  "LANGFUSE_PUBLIC_KEY": "",
+  "LANGFUSE_SECRET_KEY": "",
+  "LANGFUSE_BASE_URL": "",
+  "LANGSMITH_TRACING": "",
+  "LANGSMITH_API_KEY": "",
+  "LANGSMITH_PROJECT": "",
+
+  "LOG_LEVEL": "INFO"
+}

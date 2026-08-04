@@ -47,38 +47,6 @@ def ensure_dirs() -> None:
     data_dir().mkdir(parents=True, exist_ok=True)
 
 
-# --------------------------------------------------------------------------
-# Transitional shims. DO NOT add callers.
-#
-# `wizard/`, `cloud.py` and `wizard/state.py` still read and write a `.env`.
-# They are all deleted once the GUI owns setup (OAuth, history import, deploy),
-# and these three functions go with them. They exist only so the tree stays
-# green in between — the app itself no longer reaches any of this.
-#
-# While both formats exist, config.json is the one the app reads. A value the
-# wizard writes to .env is therefore invisible to the desktop app.
-# --------------------------------------------------------------------------
-
-def env_file() -> Path:
-    return (config_dir() / ".env").resolve()
-
-
-def is_dev() -> bool:
-    import os
-
-    return bool(os.environ.get("SPOTIFY_CONFIG", "").strip())
-
-
-def platform_env_file() -> Path:
-    import platformdirs
-
-    return (Path(platformdirs.user_config_dir("spotify-mcp")) / ".env").resolve()
-
-
-def cwd_env_file() -> Path:
-    return (Path.cwd() / ".env").resolve()
-
-
 def describe() -> dict:
     """Snapshot of the resolved paths, so a user can see which files an
     invocation is actually using."""

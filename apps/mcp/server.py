@@ -10,25 +10,28 @@ Required environment variables:
 """
 import os
 
-from dotenv import load_dotenv
 from loguru import logger
 
-from spotify_core import paths
+from spotify_core import config_file
 from spotify_core.logging import setup_mcp_logging
 from spotify_mcp.config import get_client_id, get_fernet_key
 
-# Load platformdirs .env first; cwd .env fills any gaps but never overrides.
-if paths.env_file().exists():
-    load_dotenv(paths.env_file())
-load_dotenv(override=False)
+# Copy config.json into os.environ for env-based SDKs. Real environment variables
+# always win, so a shell can override any single key. Set $SPOTIFY_CONFIG to point
+# at a dev config instead of the one a packaged install uses.
+config_file.load_into_env()
 
 _log_file = setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
 logger.info("Logging to {}", _log_file)
 
 if not get_client_id():
-    raise RuntimeError("SPOTIFY_CLIENT_ID is not set. Set it in .env or as an environment variable.")
+    raise RuntimeError(
+        f"SPOTIFY_CLIENT_ID is not set in {config_file.path()} — set it in the desktop app's Setup page."
+    )
 if not get_fernet_key():
-    raise RuntimeError("TOKEN_ENCRYPT_KEY is not set. Set it in .env or as an environment variable.")
+    raise RuntimeError(
+        f"TOKEN_ENCRYPT_KEY is not set in {config_file.path()} — open the desktop app once; it generates one."
+    )
 
 from spotify_mcp._mcp import main, mcp  # noqa: E402 — must come after env/logging setup
 

@@ -2,6 +2,7 @@
 // Shared with the desktop frontend: the app encrypts tokens with the same code
 // this cron decrypts them with. See packages/shared-ts/README.md.
 import { fernetDecrypt, fernetEncrypt } from "../../packages/shared-ts/fernet";
+import { playRowId, playedAtIso } from "../../packages/shared-ts/rowid";
 import { INSERT_SQL } from "./tracks";
 
 export interface SyncEnv {
@@ -71,11 +72,6 @@ async function refreshAndStore(
   return { accessToken: tok.access_token, refreshToken: newRefresh };
 }
 
-async function sha1Hex(s: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(s));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
 interface ParsedRow {
   id: string;
   trackId: string;
@@ -87,22 +83,22 @@ interface ParsedRow {
   playedAtMs: number;
 }
 
-/** Port of pipeline.parse_api_item — identical row id (sha1 of "uri:iso") so
- * inserts stay idempotent across the Python and Worker sync paths. */
+/** Port of pipeline.parse_api_item. The row id comes from shared-ts/rowid so a
+ * play imported from the data export and the same play seen by this cron collide
+ * on INSERT OR IGNORE instead of being counted twice. */
 async function parseApiItem(item: Record<string, any>): Promise<ParsedRow | null> {
   const track = item.track ?? {};
   const trackUri: string = track.uri ?? "";
   const playedAtMs = Date.parse(item.played_at ?? "");
   if (Number.isNaN(playedAtMs)) return null;
-  // Seconds-precision UTC ISO, matching Python's strftime("%Y-%m-%dT%H:%M:%SZ")
-  const playedAtIso = new Date(playedAtMs).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const iso = playedAtIso(playedAtMs);
   return {
-    id: await sha1Hex(`${trackUri}:${playedAtIso}`),
+    id: await playRowId(trackUri, iso),
     trackId: trackUri,
     trackName: track.name ?? null,
     artistName: track.artists?.[0]?.name ?? null,
     albumName: track.album?.name ?? null,
-    playedAtIso,
+    playedAtIso: iso,
     msPlayed: track.duration_ms ?? null,
     playedAtMs,
   };

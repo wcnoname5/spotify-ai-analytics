@@ -147,18 +147,14 @@ export async function runDoctor(): Promise<DoctorReport> {
   };
 }
 
-/** Steps that still shell out to Python. OAuth left this list when the flow
- *  moved to lib/oauth.ts; `import` and `sync` are the remaining two. */
+/**
+ * The Setup page's actionable steps.
+ *
+ * None of them spawn Python any more: `oauth` is lib/oauth.ts, `import` is
+ * lib/historyImport.ts, and `sync` is a Worker call. `runSetupStep` and the Rust
+ * command behind it are gone with the last of them.
+ */
 export type SetupStep = "import" | "sync";
-
-/** Run a whitelisted setup step. Buffered: resolves when the step finishes. */
-export async function runSetupStep(step: SetupStep, arg?: string): Promise<string> {
-  try {
-    return await invoke<string>("run_setup_step", { step, arg: arg ?? null });
-  } finally {
-    invalidateConfig();
-  }
-}
 
 /**
  * Whether D1 already holds a token row for the configured user.

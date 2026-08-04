@@ -15,12 +15,13 @@ from spotify_mcp.prompts import register_prompts
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):
-    from spotify_mcp.wizard.state import collect_report
+    from spotify_mcp.cli import _collect_report as collect_report
 
     report = collect_report()
-    blocking = [a for a in report["actions_needed"] if "Load history" not in a]
-    if blocking:
-        msg = "spotify-mcp not configured. Run: spotify-mcp setup"
+    # `ready` already excludes the non-blocking "fill the local cache" action.
+    if not report["ready"]:
+        blocking = report["actions_needed"]
+        msg = "spotify-mcp not configured. Finish setup in the desktop app."
 
         def _ascii_safe(s: str) -> str:
             # TODO: remove this and drop all em-dash directly in all .py files to avoid the UnicodeDecodeError in Windows consoles (cp1252) when printing to stderr.
@@ -78,7 +79,7 @@ def setup_check() -> dict:
         }
     """
     logger.debug("[Tool] setup_check: running diagnostics on server configuration.")
-    from spotify_mcp.wizard.state import collect_report
+    from spotify_mcp.cli import _collect_report as collect_report
 
     return collect_report()
 

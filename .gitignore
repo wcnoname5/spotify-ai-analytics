@@ -147,6 +147,10 @@ node_modules/
 # Environments
 .env
 .envrc
+# Dev config: SPOTIFY_CONFIG=./dev.config.json holds real keys.
+# config.example.json is the committed template.
+dev.config.json
+config.json
 .venv
 env/
 venv/

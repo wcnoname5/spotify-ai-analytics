@@ -1,25 +1,24 @@
-"""Cloudflare deploy + seed, driven from the CLI (and therefore from the GUI).
+"""Cloudflare deploy, and the D1 -> local cache pull.
 
-Replaces scripts/setup_cloud.sh. Two things made the shell version wrong once the
-Tauri Setup page existed:
+Two things live here and they are going in opposite directions:
 
-- It prompted for SPOTIFY_CLIENT_ID and generated TOKEN_ENCRYPT_KEY itself, and
-  reimplemented .env read/write in bash. The wizard now guarantees both, and
-  spotify_core.env_file owns the .env format -- a second implementation of it is
-  exactly the twin-.env class of bug.
-- The GUI cannot assume a bash on Windows, and must not talk to wrangler
-  directly: wrangler needs node/npx, which a packaged user will not have.
+- `deploy()` needs `node`/`npx` for wrangler, which is exactly why it cannot be
+  what the desktop app calls: an external user standing up their own Cloudflare
+  stack will not have Node. It is being replaced by direct Cloudflare REST calls
+  from Rust. This remains the source-checkout path.
+- `pull()` refreshes the local SQLite cache that MCP and report generation read.
+  It stays.
 
-So the GUI calls `spotify-mcp cloud deploy` and nothing else. When this grows a
-Cloudflare REST implementation (no node, no wrangler), only `_wrangler` and the
-functions below change -- the CLI and GUI surface stay as they are.
+`seed()` used to be the third: it pushed this machine's tokens.db and local
+history *up* to D1. Neither exists any more — the app authorizes straight into D1
+and posts the data export straight to the Worker — so there is nothing to push.
 
 Nothing here prints a token or a track name: the repo is public and this output
 is streamed into the Setup page log pane.
 
 Note: wrangler auto-loads a `.env` from its own cwd, which here is worker/. A
 `worker/.env` would therefore feed variables into a deploy without appearing
-anywhere below. The repo root .env is not read, so this is latent, not live.
+anywhere below. Latent, not live — and it disappears with wrangler.
 """
 from __future__ import annotations
 
@@ -31,22 +30,22 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 from typing import Optional
 
-from spotify_core import env_file, paths
+from spotify_core import config_file
 
 # Pinned major: wrangler 5 would be an unreviewed change to every command below.
 WRANGLER = ["npx", "--yes", "wrangler@4"]
 DEFAULT_NAME = "spotify-analytics"
 WORKERS_DEV_RE = re.compile(r"https://[^\s]+\.workers\.dev")
 
-# A freshly-set `wrangler secret put` takes a few seconds to reach every edge
-# node, so the first seed attempt can 401. Real propagation delay, not a retry
-# band-aid -- keep the knob.
-SEED_ATTEMPTS = 5
-SEED_BACKOFF_S = 5
+# NOTE for the Rust/REST rewrite: a freshly-set Worker secret takes a few seconds
+# to reach every edge node, so the first authenticated call after a deploy can
+# 401. That is real propagation delay, not a flaky-test band-aid — whatever
+# replaces this needs the same retry, and the knob for it.
+SECRET_PROPAGATION_ATTEMPTS = 5
+SECRET_PROPAGATION_BACKOFF_S = 5
 
 
 def worker_dir() -> Path:
@@ -157,21 +156,14 @@ def _tolerant_console() -> None:
             pass  # already-wrapped or non-reconfigurable stream: nothing to do
 
 
-def _seed_module():
-    """Imported lazily: it pulls in spotify_core.config, which reads the .env."""
-    from spotify_mcp import seed
-
-    return seed
-
-
 def deploy(name: str = DEFAULT_NAME, api_token: str = "", rotate: bool = False) -> int:
-    """Create D1, migrate, deploy the Worker (cron goes live), set secrets, seed."""
+    """Create D1, migrate, deploy the Worker (cron goes live), set secrets."""
     _tolerant_console()
-    target = paths.env_file()
-    client_id = env_file.read_key(target, "SPOTIFY_CLIENT_ID") or ""
-    fernet_key = env_file.read_key(target, "TOKEN_ENCRYPT_KEY") or ""
-    # The wizard owns asking for these. If they are missing the user is not
-    # ready for this step, and prompting here would be a second place to ask.
+    target = config_file.path()
+    client_id = config_file.read_key("SPOTIFY_CLIENT_ID") or ""
+    fernet_key = config_file.read_key("TOKEN_ENCRYPT_KEY") or ""
+    # The app's Setup page owns asking for these. If they are missing the user is
+    # not ready for this step, and prompting here would be a second place to ask.
     if not client_id or not fernet_key:
         print("Finish Setup step 1 (Spotify Client ID) first — "
               f"{target} has no SPOTIFY_CLIENT_ID/TOKEN_ENCRYPT_KEY.", file=sys.stderr)
@@ -180,7 +172,7 @@ def deploy(name: str = DEFAULT_NAME, api_token: str = "", rotate: bool = False) 
     # Reuse the existing token. Minting a new one on every deploy (as the old
     # shell script did) silently 401s every other machine pointing at this
     # Worker; rotation has to be something you ask for.
-    worker_token = env_file.read_key(target, "WORKER_AUTH_TOKEN") or ""
+    worker_token = config_file.read_key("WORKER_AUTH_TOKEN") or ""
     if rotate or not worker_token:
         worker_token = secrets.token_hex(32)
         print("Generated a new Worker auth token." if not rotate else "Rotating the Worker auth token.")
@@ -209,8 +201,8 @@ def deploy(name: str = DEFAULT_NAME, api_token: str = "", rotate: bool = False) 
         config.unlink(missing_ok=True)
 
     if worker_url:
-        env_file.upsert(target, "WORKER_URL", worker_url)
-    env_file.upsert(target, "WORKER_AUTH_TOKEN", worker_token)
+        config_file.upsert("WORKER_URL", worker_url)
+    config_file.upsert("WORKER_AUTH_TOKEN", worker_token)
     print(f"Wrote WORKER_URL/WORKER_AUTH_TOKEN to {target}")
 
     if not worker_url:
@@ -218,90 +210,43 @@ def deploy(name: str = DEFAULT_NAME, api_token: str = "", rotate: bool = False) 
               "set WORKER_URL manually.", file=sys.stderr)
         return 1
 
-    # Deploying before authorizing Spotify is a legitimate order (the wizard
-    # offers Cloud right after history), and there is nothing to push yet. The
-    # retry loop below is for secret propagation only, so retrying a permanent
-    # "no tokens here" five times would just be 25s of waiting.
-    user_id = env_file.read_key(target, "SPOTIFY_USER_ID") or "default"
-    if _seed_module().local_token_row(user_id) is None:
-        print("==> [5/5] Nothing to seed yet — this machine has not authorized Spotify.")
-        print("    Finish Setup step 2, then press Deploy again (or run `spotify-mcp cloud seed`).")
-        print(f"Done: D1 {name!r}, Worker deployed — the hourly cron (:07) is live.")
-        return 0
-
-    print("==> [5/5] Seeding D1 (tokens + history) — skips whatever D1 already has")
-    for attempt in range(1, SEED_ATTEMPTS + 1):
-        if seed(worker_url, worker_token) == 0:
-            break
-        if attempt < SEED_ATTEMPTS:
-            print(f"    (attempt {attempt}/{SEED_ATTEMPTS} failed — "
-                  f"secret may still be propagating, retrying in {SEED_BACKOFF_S}s)")
-            time.sleep(SEED_BACKOFF_S)
-    else:
-        print("! Seeding incomplete — the Worker is deployed; rerun "
-              "`spotify-mcp cloud seed` once it settles.", file=sys.stderr)
-
+    # Seeding used to be step 5: it pushed this machine's tokens.db and local
+    # history up to D1. Neither exists to push any more — the app authorizes
+    # straight into D1 and imports the data export straight into D1 — so there is
+    # nothing to seed, only to pull back down.
     print(f"Done: D1 {name!r}, Worker deployed — the hourly cron (:07) is live.")
+    print("Authorize Spotify in the app next; its tokens go directly to D1.")
     return 0
 
 
 def pull(worker_url: str = "", worker_token: str = "", quiet: bool = False) -> int:
-    """Refresh the local SQLite cache from D1. The mirror image of `seed`.
+    """Refresh the local SQLite cache from D1.
 
-    The cache is what the MCP server and report generation read, and until this
-    existed as a subcommand the only thing that refreshed it was opening the
-    Tauri app (`lib/sync.ts` syncOnStartup) or a script that packaging does not
-    ship. Idempotent: INSERT OR IGNORE from MAX(played_at).
+    The cache is what the MCP server and report generation read. Idempotent:
+    INSERT OR IGNORE from MAX(played_at).
+
+    This is the only direction left. `seed()` pushed this machine's tokens.db and
+    local history *up* to D1, and neither exists any more: the app authorizes
+    straight into D1 and posts the data export straight to the Worker.
     """
     if not quiet:
         _tolerant_console()
-    from spotify_core.config import settings
+    from spotify_core.config import load
     from spotify_core.db.local_sync import run_local_sync
     from spotify_core.db.worker_client import WorkerClient
 
-    target = paths.env_file()
-    url = worker_url or env_file.read_key(target, "WORKER_URL") or ""
-    token = worker_token or env_file.read_key(target, "WORKER_AUTH_TOKEN") or ""
+    url = worker_url or config_file.read_key("WORKER_URL") or ""
+    token = worker_token or config_file.read_key("WORKER_AUTH_TOKEN") or ""
     if not url or not token:
         print("WORKER_URL / WORKER_AUTH_TOKEN not set — nothing to pull from.", file=sys.stderr)
         return 1
 
     try:
         with WorkerClient(url, token) as worker:
-            result = run_local_sync(settings.history_db_path, worker)
+            result = run_local_sync(load().history_db_path, worker)
     except Exception as exc:
         print(f"pull failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
     if not quiet:
         print(f"local sync result: {result}")
     return 0
-
-
-def seed(worker_url: str = "", worker_token: str = "",
-         force: bool = False, tokens_only: bool = False) -> int:
-    """Push local tokens + history to D1. Rerun-safe; falls back to the .env values."""
-    _tolerant_console()
-    from spotify_core.db.worker_client import WorkerClient
-
-    _seed = _seed_module()
-
-    target = paths.env_file()
-    url = worker_url or env_file.read_key(target, "WORKER_URL") or ""
-    token = worker_token or env_file.read_key(target, "WORKER_AUTH_TOKEN") or ""
-    if not url or not token:
-        print("WORKER_URL / WORKER_AUTH_TOKEN not set", file=sys.stderr)
-        return 1
-
-    user_id = env_file.read_key(target, "SPOTIFY_USER_ID") or "default"
-    # Every Worker call raises on a non-2xx, and the expected failure right
-    # after a deploy is a 401 from a secret that has not reached every edge node
-    # yet. deploy()'s retry loop can only act on that if it comes back as a
-    # return code, so nothing may escape from here.
-    try:
-        with WorkerClient(url, token) as worker:
-            tokens_ok = _seed.seed_tokens(worker, user_id, force=force)
-            history_ok = True if tokens_only else _seed.seed_history(worker)
-    except Exception as exc:
-        print(f"seed failed: {type(exc).__name__}: {exc}", file=sys.stderr)
-        return 1
-    return 0 if (tokens_ok and history_ok) else 1

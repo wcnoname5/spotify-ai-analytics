@@ -41,4 +41,11 @@ def test_lifespan_writes_actionable_stderr_when_dbs_missing(monkeypatch, tmp_pat
         asyncio.run(_run())
 
     captured = capsys.readouterr()
-    assert "spotify-mcp setup" in captured.err
+    # Claude Desktop shows the server's stderr and nothing else, so this is the
+    # only place a user finds out why it refused to start. It has to say what to
+    # do, not just that something is wrong.
+    assert "not configured" in captured.err
+    assert captured.err.count("  - ") >= 1, "no actionable steps listed"
+    # ASCII only: Claude Desktop reads this on Windows consoles (cp1252), where
+    # an em-dash produces un-decodable bytes.
+    assert captured.err.isascii()

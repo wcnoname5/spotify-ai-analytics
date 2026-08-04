@@ -6,39 +6,27 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-// ponytail: dev-only runner; the report is out of scope for the first release
-// (`ReportPage` is hidden unless the app is running against a dev config), and
-// this is the last spawn left. It goes when the report backend is settled —
-// either a PyInstaller sidecar or LangGraph.js — and `repo_root()` goes with it.
+// ponytail: the last spawn in the app, and dev-only. The report is out of scope
+// for the first release (`ReportPage` is hidden unless the app is running against
+// a dev config). It goes when the report backend is settled — a PyInstaller
+// sidecar or LangGraph.js — and `repo_root()` goes with it.
+//
+// `run_setup_step` and its `spotify-mcp` runner used to be here too. Every step
+// it dispatched (oauth, import, sync) is now in the app or on the Worker, so the
+// list shrank to nothing rather than being replaced.
 const REPORT_CMD: &[&str] = &["uv", "run", "python", "-m", "spotify_core.report"];
 
-// The remaining setup steps that still shell out to Python. Each one is a Phase 2
-// item; the list shrinks to nothing rather than being replaced.
+// The Cloudflare deploy is the other remaining spawn, and the one that has to
+// stop being a spawn for the app to be shippable at all: an external user needs
+// it to stand up their own D1 and Worker. It becomes direct Cloudflare REST calls
+// from Rust, which also drops the node/npx/wrangler requirement.
 const CLI_CMD: &[&str] = &["uv", "run", "spotify-mcp"];
 
 /// Repo root, resolved at *compile* time — so anything using this only works on
-/// the machine that built it. That is why it may only be reached from the two
-/// dev-only spawns below, never from a path a packaged user can take.
+/// the machine that built it. Reachable only from `generate_report` below, which
+/// is hidden outside a dev config; never from a path a packaged user can take.
 fn repo_root() -> PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
-}
-
-/// Run a `spotify-mcp` subcommand from the repo root and return its stdout.
-fn run_cli(args: &[String]) -> Result<String, String> {
-    let out = Command::new(CLI_CMD[0])
-        .args(&CLI_CMD[1..])
-        .args(args)
-        .current_dir(repo_root())
-        .env("PYTHONUTF8", "1")
-        .output()
-        .map_err(|e| format!("failed to spawn `{}`: {e}", CLI_CMD[0]))?;
-    if out.status.success() {
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
-    } else {
-        let err = String::from_utf8_lossy(&out.stderr);
-        let tail: Vec<&str> = err.lines().rev().take(12).collect();
-        Err(tail.into_iter().rev().collect::<Vec<_>>().join("\n"))
-    }
 }
 
 /// Effective runtime config as a JSON string; the frontend parses it.
@@ -91,36 +79,6 @@ async fn await_oauth_callback(authorize_url: String, port: u16) -> Result<String
     tauri::async_runtime::spawn_blocking(move || oauth::await_callback(&authorize_url, port))
         .await
         .map_err(|e| e.to_string())?
-}
-
-/// Run one setup step. Steps are whitelisted rather than taking a command from
-/// the frontend, so this stays a fixed surface and not an arbitrary spawn.
-///
-/// Buffered like `generate_report`: neither step has meaningful intermediate
-/// progress, so the UI shows running/done/failed and expands output on failure.
-#[tauri::command]
-async fn run_setup_step(step: String, arg: Option<String>) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let args: Vec<String> = match step.as_str() {
-            // run_oauth() only prints, never reads stdin — safe to spawn headless.
-            // It opens the browser itself and serves the 127.0.0.1:8888 callback.
-            "oauth" => vec!["reauth".into()],
-            // Fallback for users whose Spotify export has not arrived yet:
-            // pulls the last ~50 plays so the dashboard is not empty.
-            "sync" => vec!["sync".into()],
-            "import" => vec![
-                "import-history".into(),
-                "--from".into(),
-                arg.ok_or("import step requires a path")?,
-            ],
-            // `keygen` used to be here. It is the `keygen` command now, in Rust:
-            // 32 bytes from the OS RNG never needed a Python process.
-            other => return Err(format!("unknown setup step: {other}")),
-        };
-        run_cli(&args)
-    })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Deploy the Cloudflare backend, streaming the log to the Setup page.
@@ -186,6 +144,52 @@ async fn cloud_deploy(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The `Streaming_History_Audio_*.json` files in a chosen export folder, sorted.
+///
+/// Paths only. A full export can be hundreds of MB, so the frontend reads and
+/// posts one file at a time rather than receiving the lot over IPC at once.
+#[tauri::command]
+fn list_history_files(folder: String) -> Result<Vec<String>, String> {
+    let dir = std::path::Path::new(&folder);
+    let entries = std::fs::read_dir(dir).map_err(|e| format!("{folder}: {e}"))?;
+
+    let mut files: Vec<String> = entries
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| {
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            // Spotify's own naming. Matching *.json instead would pick up the
+            // export's Userdata.json and Follow.json, which are not plays.
+            name.starts_with("Streaming_History_Audio_") && name.ends_with(".json")
+        })
+        .map(|p| p.display().to_string())
+        .collect();
+    // Chronological by name, so a partial import covers a contiguous period.
+    files.sort();
+
+    if files.is_empty() {
+        return Err(format!(
+            "no Streaming_History_Audio_*.json files in {folder}. \
+             Pick the folder from Spotify's extended streaming history export."
+        ));
+    }
+    Ok(files)
+}
+
+/// One export file's contents.
+///
+/// Restricted to the export's own filenames so this cannot be turned into a
+/// read-any-file command from the webview.
+#[tauri::command]
+fn read_history_file(path: String) -> Result<String, String> {
+    let p = std::path::Path::new(&path);
+    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    if !(name.starts_with("Streaming_History_Audio_") && name.ends_with(".json")) {
+        return Err(format!("refusing to read {name}: not an export history file"));
+    }
+    std::fs::read_to_string(p).map_err(|e| format!("{path}: {e}"))
 }
 
 /// Folder picker for the history import. Spotify exports are a directory of
@@ -365,7 +369,8 @@ pub fn run() {
             keygen,
             encryption_key,
             await_oauth_callback,
-            run_setup_step,
+            list_history_files,
+            read_history_file,
             pick_history_folder,
             open_setup_window,
             main_ready,

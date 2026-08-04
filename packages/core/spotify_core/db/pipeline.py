@@ -1,46 +1,23 @@
-"""Data pipeline: initialize, import, sync, and inspect the history DB."""
+"""Data pipeline: initialize and sync the history DB.
+
+`import_json_to_db` used to live here. It read a Spotify data export with Polars
+(156 MB of dependencies to parse JSON) and wrote to the *local* SQLite, which was
+backwards: local SQLite is a disposable mirror of D1, so an import that only
+landed there was lost on any machine change. The desktop app now parses the
+export in TS (`packages/shared-ts/export.ts`) and posts it to the Worker.
+
+`open_inspect_shell` went too — it shelled out to a `sqlite3` binary that a
+packaged user has no reason to have.
+"""
 import hashlib
 import sqlite3
 from loguru import logger
-import subprocess
-import tempfile
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
-from spotify_dataloader.data_loader import SpotifyDataLoader
 from .migrations import init_history_db as _migrations_init_history_db, init_tokens_db, get_connection
 from ..spotify_client.client import SpotifyClient
 from ..spotify_client.token_store import load_tokens, export_encrypted_row, import_encrypted_row
-
-_CHEATSHEET = """
-=== Spotify History DB — Quick Reference ===
-DB: {db_path}
-
--- Recent 20 plays
-SELECT played_at, track_name, artist_name, ms_played/1000 AS secs
-FROM listening_history ORDER BY played_at DESC LIMIT 20;
-
--- Top artists by total listening time (minutes)
-SELECT artist_name, SUM(ms_played)/60000 AS minutes
-FROM listening_history GROUP BY artist_name ORDER BY minutes DESC LIMIT 10;
-
--- Top tracks by play count
-SELECT track_name, artist_name, COUNT(*) AS plays
-FROM listening_history GROUP BY track_id ORDER BY plays DESC LIMIT 10;
-
--- Listening by hour of day
-SELECT strftime('%H', played_at) AS hour, COUNT(*) AS plays
-FROM listening_history GROUP BY hour ORDER BY hour;
-
--- Row count and date range
-SELECT COUNT(*) AS total, MIN(played_at) AS earliest, MAX(played_at) AS latest
-FROM listening_history;
-
--- Sync cursor (last API sync timestamp in ms)
-SELECT key, value FROM sync_state;
-============================================
-"""
 
 
 def init_history_db(db_path: str) -> None:
@@ -49,105 +26,6 @@ def init_history_db(db_path: str) -> None:
     Idempotent — safe to call multiple times.
     """
     _migrations_init_history_db(db_path)
-
-
-def import_json_to_db(json_dir: str, db_path: str) -> dict:
-    """Bulk load Streaming*.json files into listening_history.
-
-    Returns:
-        {"inserted": int, "skipped_duplicated": int, "skipped_parse_error": int}
-    """
-    json_path = Path(json_dir)
-    if not list(json_path.rglob("Streaming*.json")):
-        logger.warning("No Streaming*.json files found in {}", json_dir)
-        return {"inserted": 0, "skipped_duplicated": 0, "skipped_parse_error": 0}
-
-    loader = SpotifyDataLoader(directory=json_path)
-    df = loader.df
-    if df is None or df.is_empty():
-        return {"inserted": 0, "skipped_duplicated": 0, "skipped_parse_error": 0}
-
-    inserted = skipped_duplicated = skipped_parse_error = 0
-    conn = get_connection(db_path)
-    try:
-        with conn:  # BEGIN/COMMIT on success, ROLLBACK on exception
-            for row in df.iter_rows(named=True):
-                track_uri = row.get("track_uri") or ""
-                ts_str = row.get("ts") or ""
-                try:
-                    played_dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-                    played_at_iso = played_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-                except (ValueError, AttributeError):
-                    logger.warning("Skipping row with unparseable ts: {}", ts_str)
-                    skipped_parse_error += 1
-                    continue
-                row_id = hashlib.sha1(f"{track_uri}:{played_at_iso}".encode()).hexdigest()
-
-                # Polars Duration("ms") columns become Python timedelta via iter_rows()
-                ms_played_val = row.get("ms_played")
-                ms_played_int = (
-                    int(ms_played_val.total_seconds() * 1000)
-                    if ms_played_val is not None
-                    else None
-                )
-
-                shuffle_val = row.get("shuffle")
-                skipped_val = row.get("skipped")
-
-                cur = conn.execute(
-                    "INSERT OR IGNORE INTO listening_history "
-                    "(id, track_id, track_name, artist_name, album_name, "
-                    " played_at, ms_played, source, "
-                    " platform, conn_country, reason_start, reason_end, shuffle, skipped) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        row_id, track_uri,
-                        row.get("track"), row.get("artist"), row.get("album"),
-                        played_at_iso, ms_played_int, "json_import",
-                        row.get("platform"), row.get("conn_country"),
-                        row.get("reason_start"), row.get("reason_end"),
-                        int(shuffle_val) if shuffle_val is not None else None,
-                        int(skipped_val) if skipped_val is not None else None,
-                    ),
-                )
-                if cur.rowcount > 0:
-                    inserted += 1
-                else:
-                    skipped_duplicated += 1
-    finally:
-        conn.close()
-
-    logger.info("JSON import: {} inserted, {} skipped duplicated, {} skipped parse errors", inserted, skipped_duplicated, skipped_parse_error)
-
-    # Advance sync_state cursor to the latest json_import play so that
-    # subsequent sync_api_to_db calls start from the right point.
-    if inserted > 0:
-        conn2 = get_connection(db_path)
-        try:
-            with conn2:
-                anchor_row = conn2.execute(
-                    "SELECT MAX(played_at) FROM listening_history WHERE source='json_import'"
-                ).fetchone()
-                if anchor_row and anchor_row[0]:
-                    try:
-                        anchor_dt = datetime.fromisoformat(anchor_row[0].replace("Z", "+00:00"))
-                        anchor_ms = int(anchor_dt.timestamp() * 1000)
-                        cur_row = conn2.execute(
-                            "SELECT value FROM sync_state WHERE key='last_played_at_ms'"
-                        ).fetchone()
-                        existing_ms = cur_row["value"] if cur_row else 0
-                        if anchor_ms > (existing_ms or 0):
-                            conn2.execute(
-                                "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_played_at_ms', ?)",
-                                (anchor_ms,),
-                            )
-                            logger.info("JSON import: sync cursor advanced to {} ms", anchor_ms)
-                    except (ValueError, AttributeError):
-                        pass
-        finally:
-            conn2.close()
-
-    return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error}
 
 
 def parse_api_item(item: dict, source: str = "api") -> Optional[dict]:
@@ -304,20 +182,3 @@ def sync_api_to_db(
 
     logger.info("API sync: {} inserted, {} skipped duplicated, {} skipped parse errors, cursor={}", inserted, skipped_duplicated, skipped_parse_error, new_cursor_ms)
     return {"inserted": inserted, "skipped_duplicated": skipped_duplicated, "skipped_parse_error": skipped_parse_error, "cursor_ms": new_cursor_ms}
-
-
-def open_inspect_shell(db_path: str) -> None:
-    """Print SQL cheatsheet then launch sqlite3 interactive shell."""
-    print(_CHEATSHEET.format(db_path=db_path))
-
-    sqliterc = ".mode column\n.headers on\n"
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".sqliterc", delete=False
-    ) as f:
-        f.write(sqliterc)
-        tmp_rc = f.name
-
-    try:
-        subprocess.run(["sqlite3", db_path, "-init", tmp_rc], check=False)
-    finally:
-        Path(tmp_rc).unlink(missing_ok=True)

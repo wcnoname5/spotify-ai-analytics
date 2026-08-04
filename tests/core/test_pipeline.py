@@ -1,13 +1,15 @@
-"""Tests for spotify_core.db.pipeline."""
+"""Tests for spotify_core.db.pipeline.
+
+The `import_json_to_db` and `open_inspect_shell` tests went with those functions:
+the data export is parsed in TS now (see packages/shared-ts/export.test.ts) and
+posted to the Worker, and the inspect shell needed a `sqlite3` binary.
+"""
 import sqlite3
-import json
 import pytest
 from unittest.mock import patch, MagicMock
 from spotify_core.db.pipeline import (
     init_history_db,
-    import_json_to_db,
     sync_api_to_db,
-    open_inspect_shell
 )
 
 
@@ -33,111 +35,11 @@ def test_pipeline_init_idempotent(tmp_path):
 
 
 @pytest.fixture
-def sample_json_dir(tmp_path):
-    """Temp dir with one Streaming_test.json matching Spotify export format."""
-    records = [
-        {
-            "ts": "2024-01-15T08:30:00Z",
-            "platform": "Windows",
-            "conn_country": "US",
-            "master_metadata_track_name": "Bohemian Rhapsody",
-            "master_metadata_album_artist_name": "Queen",
-            "master_metadata_album_album_name": "A Night at the Opera",
-            "ms_played": 354000,
-            "spotify_track_uri": "spotify:track:001",
-            "reason_start": "trackdone",
-            "reason_end": "trackdone",
-            "shuffle": False,
-            "skipped": False,
-        },
-        {
-            "ts": "2024-01-15T09:00:00Z",
-            "platform": "iOS",
-            "conn_country": "US",
-            "master_metadata_track_name": "Stairway to Heaven",
-            "master_metadata_album_artist_name": "Led Zeppelin",
-            "master_metadata_album_album_name": "Led Zeppelin IV",
-            "ms_played": 482000,
-            "spotify_track_uri": "spotify:track:002",
-            "reason_start": "trackdone",
-            "reason_end": "trackdone",
-            "shuffle": False,
-            "skipped": False,
-        },
-    ]
-    f = tmp_path / "Streaming_test.json"
-    f.write_text(json.dumps(records))
-    return tmp_path
-
-
-@pytest.fixture
 def history_db(tmp_path):
     """Initialized history DB."""
     db = tmp_path / "history.db"
     init_history_db(str(db))
     return db
-
-
-@pytest.mark.unit
-def test_import_json_inserts_rows(sample_json_dir, history_db):
-    """import_json_to_db inserts rows from JSON files."""
-    result = import_json_to_db(str(sample_json_dir), str(history_db))
-    assert result["inserted"] == 2
-    assert result["skipped_duplicated"] == 0
-    assert result["skipped_parse_error"] == 0
-    with sqlite3.connect(history_db) as conn:
-        count = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()[0]
-    assert count == 2
-
-
-@pytest.mark.unit
-def test_import_json_idempotent(sample_json_dir, history_db):
-    """Importing the same files twice skips duplicates."""
-    import_json_to_db(str(sample_json_dir), str(history_db))
-    result = import_json_to_db(str(sample_json_dir), str(history_db))
-    assert result["inserted"] == 0
-    assert result["skipped_duplicated"] == 2
-
-
-@pytest.mark.unit
-def test_import_json_empty_dir(tmp_path, history_db):
-    """import_json_to_db with empty dir returns zeros without raising."""
-    result = import_json_to_db(str(tmp_path), str(history_db))
-    assert result == {"inserted": 0, "skipped_duplicated": 0, "skipped_parse_error": 0}
-
-
-@pytest.mark.unit
-def test_import_json_source_field(sample_json_dir, history_db):
-    """Imported rows have source='json_import'."""
-    import_json_to_db(str(sample_json_dir), str(history_db))
-    with sqlite3.connect(history_db) as conn:
-        sources = {r[0] for r in conn.execute("SELECT DISTINCT source FROM listening_history")}
-    assert sources == {"json_import"}
-
-
-@pytest.mark.unit
-def test_import_json_sets_sync_cursor(sample_json_dir, history_db):
-    """import_json_to_db writes last_played_at_ms to sync_state after inserting rows."""
-    import_json_to_db(str(sample_json_dir), str(history_db))
-    with sqlite3.connect(history_db) as conn:
-        row = conn.execute("SELECT value FROM sync_state WHERE key='last_played_at_ms'").fetchone()
-    assert row is not None
-    assert row[0] > 0
-
-
-@pytest.mark.unit
-def test_import_json_cursor_does_not_regress(sample_json_dir, history_db):
-    """import_json_to_db never moves the cursor backward when one already exists."""
-    future_cursor = 9_999_999_999_999  # far in the future
-    with sqlite3.connect(history_db) as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('last_played_at_ms', ?)",
-            (future_cursor,),
-        )
-    import_json_to_db(str(sample_json_dir), str(history_db))
-    with sqlite3.connect(history_db) as conn:
-        row = conn.execute("SELECT value FROM sync_state WHERE key='last_played_at_ms'").fetchone()
-    assert row[0] == future_cursor  # unchanged
 
 
 def _make_recently_played_response(items):
@@ -232,24 +134,3 @@ def test_sync_api_idempotent(history_db, tmp_path):
     assert second["cursor_ms"] == first["cursor_ms"]
 
 
-@pytest.mark.unit
-def test_open_inspect_shell_prints_cheatsheet(history_db, capsys):
-    """open_inspect_shell prints the cheatsheet before launching sqlite3."""
-    with patch("spotify_core.db.pipeline.subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
-        open_inspect_shell(str(history_db))
-    captured = capsys.readouterr()
-    assert "listening_history" in captured.out
-    assert "Top artists" in captured.out
-    assert str(history_db) in captured.out
-
-
-@pytest.mark.unit
-def test_open_inspect_shell_calls_sqlite3(history_db):
-    """open_inspect_shell invokes sqlite3 with the correct db path."""
-    with patch("spotify_core.db.pipeline.subprocess.run") as mock_run:
-        mock_run.return_value = MagicMock(returncode=0)
-        open_inspect_shell(str(history_db))
-    call_args = mock_run.call_args[0][0]
-    assert call_args[0] == "sqlite3"
-    assert str(history_db) in call_args

@@ -15,14 +15,12 @@ dependencies = [
     "numpy>=2.4.0",
     "openai>=2.14.0",
     "pandas>=2.3.3",
-    "polars>=1.36.1",
     "pydantic==2.12.5",
     "pydantic-settings==2.12.0",
     # `dotenv` (the shim package) removed: python-dotenv is what provides `import dotenv`.
     "python-dotenv==1.2.1",
     # workspace members — ensures uv sync at the root installs all transitive deps
     "spotify-analytics-core",
-    "spotify-analytics-dataloader",
     "spotify-analytics-mcp",
 ]
 
@@ -42,11 +40,9 @@ dev = [
 [tool.uv.workspace]
 members = [
     "packages/core",
-    "packages/dataloader",
     "apps/mcp",
 ]
 
 [tool.uv.sources]
 spotify-analytics-core = { workspace = true }
-spotify-analytics-dataloader = { workspace = true }
 spotify-analytics-mcp = { workspace = true }

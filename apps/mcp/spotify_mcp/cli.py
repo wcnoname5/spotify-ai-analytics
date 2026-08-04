@@ -1,39 +1,44 @@
 """CLI entry point for spotify-mcp.
 
 Usage:
-    spotify-mcp              # defaults to 'setup'
-    spotify-mcp setup        # interactive setup wizard
-    spotify-mcp import-history [--from <path>]
+    spotify-mcp config       # show resolved paths and which settings are set
     spotify-mcp doctor       # check environment readiness
-    spotify-mcp reauth       # re-run OAuth flow
-    spotify-mcp sync         # sync recent plays from Spotify API
+    spotify-mcp cloud pull   # refresh the local SQLite cache from D1
+    spotify-mcp cloud deploy # create/update the Worker + D1 (needs node)
+    spotify-mcp mcp-config   # print the Claude Desktop MCP entry
     spotify-mcp serve        # start the MCP server (used by Claude Desktop)
+
+Setup is the desktop app's job now, so `setup`, `reauth`, `import-history` and
+`sync` are gone:
+
+- `setup` was an interactive Typer wizard duplicating the app's Setup page.
+- `reauth` ran the OAuth flow; the app does it (`apps/tauri/src/lib/oauth.ts`),
+  and tokens go straight to D1 rather than to a local tokens.db.
+- `import-history` read a data export with Polars and wrote to the *local*
+  SQLite, which was backwards — that copy is a disposable mirror of D1.
+- `sync` needed the Spotify tokens on this machine. They only exist in D1 now,
+  so the Worker is the only thing that can do it: `POST /api/sync`.
+
+What is left is diagnostics, the D1 -> local cache pull that MCP and report
+generation read, and the MCP server itself.
 """
 from __future__ import annotations
 
 import json
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
-from pathlib import Path
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
-
-from spotify_mcp.wizard import run_wizard
-from spotify_mcp.wizard import history_import as _history_import
-from spotify_mcp.wizard import oauth_step as _oauth_step
-from spotify_mcp.wizard import state as _state
-
-from loguru import logger
 
 console = Console()
 
 
 app = typer.Typer(
     name="spotify-mcp",
-    no_args_is_help=False,
+    no_args_is_help=True,
     add_completion=False,
-    help="Spotify MCP setup and management CLI.",
+    help="Spotify MCP diagnostics and management CLI. Setup lives in the desktop app.",
 )
 
 
@@ -48,9 +53,8 @@ def _version_callback(value: bool) -> None:
     raise typer.Exit()
 
 
-@app.callback(invoke_without_command=True)
+@app.callback()
 def _default(
-    ctx: typer.Context,
     _version: Annotated[
         bool,
         typer.Option(
@@ -61,39 +65,59 @@ def _default(
         ),
     ] = False,
 ) -> None:
-    """Default action when no subcommand is given: run setup."""
-    if ctx.invoked_subcommand is None:
-        ctx.invoke(setup)
+    """Spotify MCP diagnostics and management CLI."""
 
 
-@app.command()
-def setup(
-    setup_claude_desktop: Annotated[
-        bool,
-        typer.Option("--setup-claude-desktop", help="Register the MCP server with Claude Desktop."),
-    ] = False,
-) -> None:
-    """Run the interactive setup wizard."""
-    _setup(setup_claude_desktop=setup_claude_desktop)
+def _collect_report() -> dict:
+    """Environment readiness, from the config file and the local cache.
 
+    Deliberately not the same code the app uses: the app has to check whether D1
+    holds a token row, which needs the Worker. This is the offline subset, for a
+    terminal in a source checkout.
+    """
+    import sqlite3
 
-def _setup(setup_claude_desktop: bool) -> None:
-    """Internal helper shared by the default callback and the setup subcommand."""
-    try:
-        run_wizard(setup_claude_desktop=setup_claude_desktop)
-    except NotImplementedError:
-        console.print("[yellow]Setup wizard is not yet implemented.[/yellow]")
+    from spotify_core import config_file, paths
 
+    client_id = bool(config_file.read_key("SPOTIFY_CLIENT_ID"))
+    fernet_key = bool(config_file.read_key("TOKEN_ENCRYPT_KEY"))
+    worker = bool(config_file.read_key("WORKER_URL") and config_file.read_key("WORKER_AUTH_TOKEN"))
 
-@app.command("import-history")
-def import_history(
-    from_path: Annotated[
-        Optional[Path],
-        typer.Option("--from", help="Path to a Spotify history export file or folder to import."),
-    ] = None,
-) -> None:
-    """Import Spotify listening history from a JSON export file or folder."""
-    _history_import.import_history(console=console, import_path=from_path)
+    history_has_data = False
+    if paths.history_db().exists():
+        try:
+            with sqlite3.connect(paths.history_db()) as conn:
+                row = conn.execute("SELECT COUNT(*) FROM listening_history").fetchone()
+                history_has_data = bool(row and row[0] > 0)
+        except sqlite3.Error:
+            pass
+
+    checks = {
+        "client_id": client_id,
+        "fernet_key": fernet_key,
+        "worker": worker,
+        "history_has_data": history_has_data,
+    }
+    actions: list[str] = []
+    if not client_id:
+        actions.append("Set your Spotify Client ID in the desktop app's Setup page.")
+    if not fernet_key:
+        actions.append("Open the desktop app once — it generates TOKEN_ENCRYPT_KEY on sight.")
+    if not worker:
+        actions.append("Deploy Cloud sync from the desktop app's Setup page.")
+    # Non-blocking: the export takes days to arrive, so an empty cache is a
+    # normal state to be in.
+    if worker and not history_has_data:
+        actions.append("Run `spotify-mcp cloud pull` to fill the local cache from D1.")
+
+    blocking = [a for a in actions if not a.startswith("Run `spotify-mcp cloud pull`")]
+    return {
+        "ready": not blocking,
+        "checks": checks,
+        "actions_needed": actions,
+        "message": "All set." if not actions else f"{len(actions)} action(s) required.",
+        "paths": paths.describe(),
+    }
 
 
 @app.command()
@@ -102,189 +126,19 @@ def doctor(
         bool, typer.Option("--json", help="Print bare JSON (no colour) for machine callers.")
     ] = False,
 ) -> None:
-    """Check environment readiness and print a JSON report.
+    """Check environment readiness and print a JSON report. Exits 1 when not ready.
 
-    Exits 1 when not ready.
-
-    The desktop app no longer calls this — it composes the same checks itself
-    (config-derived ones in `src-tauri/src/config.rs`, database-derived ones in
-    `lib/config.ts`), which saved a ~1.7s process spawn per open and works in a
-    packaged build. This stays as a terminal diagnostic for a source checkout.
+    The desktop app composes its own version of these checks (config-derived in
+    `src-tauri/src/config.rs`, database-derived in `lib/config.ts`), which saved a
+    ~1.7s process spawn per open and works in a packaged build. This is the
+    terminal equivalent for a source checkout.
     """
-    report = _state.collect_report()
+    report = _collect_report()
     if json_out:
         print(json.dumps(report))
     else:
         console.print_json(json.dumps(report))
-    is_ready: bool = bool(report.get("ready", False))
-    raise typer.Exit(code=0 if is_ready else 1)
-
-
-@app.command()
-def reauth() -> None:
-    """Re-run the Spotify OAuth authorisation flow."""
-    try:
-        _oauth_step.run_oauth(console=console, force=True)
-    except NotImplementedError:
-        console.print("[yellow]OAuth step is not yet implemented.[/yellow]")
-
-
-@app.command()
-def sync(
-    user_id: Annotated[
-        Optional[str],
-        typer.Option("--user-id", help="Spotify user ID (defaults to SPOTIFY_USER_ID from .env)"),
-    ] = None,
-    verbose: Annotated[
-        bool,
-        typer.Option("--verbose", "-v", help="Enable verbose logging"),
-    ] = False,
-) -> None:
-    """Fetch recent plays from Spotify API and upsert into local database.
-
-    This syncs the most recent ~50 plays. Run this periodically to keep
-    your local history up to date.
-    """
-    import os
-
-    from spotify_core import env_file as _env_file
-    from spotify_core import paths
-    from spotify_core.db.migrations import init_history_db
-    from spotify_core.logging import setup_logging
-    # spotify_mcp.config imports spotify_core.config.settings, which reads the
-    # platform .env via pydantic-settings; get_client_id/get_fernet_key delegate to it.
-    from spotify_mcp.config import DB_PATH, TOKENS_DB, get_client_id, get_fernet_key
-
-    paths.ensure_dirs()
-    # Promptless entry (the Tauri Setup page) never runs the wizard's init step,
-    # so this path must create the schema itself. Idempotent.
-    init_history_db(paths.history_db())
-
-    # Setup logging
-    level = "DEBUG" if verbose else os.getenv("LOG_LEVEL", "INFO").upper()
-    setup_logging(log_name="sync", level=level)
-
-    # Determine user ID: CLI flag > wizard config > "default" (matches OAuth default)
-    final_user_id = (
-        user_id
-        or _env_file.read_key(paths.env_file(), "SPOTIFY_USER_ID")
-        or "default"
-    )
-
-    # Check required credentials
-    try:
-        client_id = get_client_id()
-        fernet_key = get_fernet_key()
-    except Exception as exc:
-        console.print(f"[red]Error: {exc}[/red]")
-        raise typer.Exit(code=1)
-
-    # Run sync
-    try:
-        from spotify_core.db.pipeline import sync_api_to_db
-
-        logger.info("Syncing recent plays for user '{}'", final_user_id)
-        result = sync_api_to_db(
-            db_path=DB_PATH,
-            tokens_db_path=TOKENS_DB,
-            user_id=final_user_id,
-            client_id=client_id,
-            fernet_key=fernet_key,
-        )
-        logger.info(
-            "Inserted {} rows, cursor updated to {} ms",
-            result["inserted"], result["cursor_ms"]
-        )
-        console.print(f"[green]✓ Synced {result['inserted']} new plays (cursor: {result['cursor_ms']} ms)[/green]")
-    except Exception as exc:
-        logger.error("Sync failed: {}", exc)
-        console.print(f"[red]Error: {exc}[/red]")
-        raise typer.Exit(code=1)
-
-
-# `path` used to live here. It printed paths.describe() plus path_warnings(),
-# both of which `doctor --json` already returns under "paths" and "warnings" --
-# and nothing (including the Tauri app) ever called it.
-
-
-@app.command("mcp-config")
-def mcp_config() -> None:
-    """Print the Claude Desktop MCP entry for this install, as JSON.
-
-    One source of truth for the config: the wizard writes it, and the desktop
-    app's MCP screen shows the same thing to copy. The `command` differs between
-    a source checkout (uvx) and a packaged build (its own exe), which is exactly
-    why neither caller should build this dict itself.
-    """
-    from spotify_mcp.wizard import claude_desktop as _cd
-
-    print(json.dumps({
-        "config_path": str(_cd.default_config_path()),
-        "entry": {"mcpServers": {"spotify-mcp": _cd.build_entry()}},
-    }))
-
-
-cloud_app = typer.Typer(help="Deploy and seed the Cloudflare Worker + D1 backend.")
-app.add_typer(cloud_app, name="cloud")
-
-
-@cloud_app.command("deploy")
-def cloud_deploy(
-    name: Annotated[
-        str, typer.Option("--name", help="D1 database / Worker name. Use a different one for a test stack.")
-    ] = "spotify-analytics",
-    api_token: Annotated[
-        str, typer.Option("--api-token", help="Cloudflare API token. Without it wrangler tries an interactive login.")
-    ] = "",
-    rotate: Annotated[
-        bool, typer.Option("--rotate", help="Mint a new Worker auth token (invalidates every other machine's).")
-    ] = False,
-) -> None:
-    """Create D1, apply migrations, deploy the Worker (cron goes live), set secrets, seed.
-
-    Promptless by design: this is what the Setup page's Deploy button spawns, and
-    a `read` here would hang a non-tty child forever.
-    """
-    import sys
-
-    from spotify_mcp import cloud
-
-    # The GUI streams this into a log pane, where a Python traceback is noise
-    # the user cannot act on. Print the message, keep the exit code.
-    try:
-        code = cloud.deploy(name=name, api_token=api_token, rotate=rotate)
-    except RuntimeError as exc:
-        # Ours, and already phrased for a human — the class name adds nothing.
-        print(str(exc), file=sys.stderr)
-        code = 1
-    except Exception as exc:
-        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
-        code = 1
-    raise typer.Exit(code=code)
-
-
-@cloud_app.command("pull")
-def cloud_pull() -> None:
-    """Refresh the local SQLite cache from D1. Reads WORKER_* from the resolved .env.
-
-    The cache is what MCP and report generation read; `serve` also does this on
-    startup, so this is for refreshing without launching anything.
-    """
-    from spotify_mcp import cloud
-
-    raise typer.Exit(code=cloud.pull())
-
-
-@cloud_app.command("seed")
-def cloud_seed(
-    force: Annotated[bool, typer.Option("--force", help="Overwrite the token row already in D1.")] = False,
-    tokens_only: Annotated[bool, typer.Option("--tokens-only", help="Skip the history push.")] = False,
-) -> None:
-    """Push local tokens + listening history to D1. Rerun-safe; reads WORKER_* from .env."""
-    from spotify_mcp import cloud
-
-    # cloud.seed already turns Worker/HTTP failures into a return code.
-    raise typer.Exit(code=cloud.seed(force=force, tokens_only=tokens_only))
+    raise typer.Exit(code=0 if report["ready"] else 1)
 
 
 @app.command("config")
@@ -293,7 +147,7 @@ def config_show() -> None:
 
     Read-only. `config get`, `config set` and `config keygen` used to live here;
     the desktop app called them and paid ~1.7s per invocation for a file read.
-    The app now owns config entirely (`src-tauri/src/config.rs`), which is also
+    The app owns config entirely now (`src-tauri/src/config.rs`), which is also
     the only way it can work in a packaged build with no `uv` on the machine.
     Writing from two places is what produced divergent config files before, so
     this side deliberately only reads.
@@ -326,21 +180,81 @@ def config_show() -> None:
     )
 
 
+@app.command("mcp-config")
+def mcp_config() -> None:
+    """Print the Claude Desktop MCP entry for this install, as JSON."""
+    from spotify_mcp import claude_desktop as _cd
+
+    print(json.dumps({
+        "config_path": str(_cd.default_config_path()),
+        "entry": {"mcpServers": {"spotify-mcp": _cd.build_entry()}},
+    }))
+
+
+cloud_app = typer.Typer(help="Talk to the Cloudflare Worker + D1 backend.")
+app.add_typer(cloud_app, name="cloud")
+
+
+@cloud_app.command("deploy")
+def cloud_deploy(
+    name: Annotated[
+        str, typer.Option("--name", help="D1 database / Worker name. Use a different one for a test stack.")
+    ] = "spotify-analytics",
+    api_token: Annotated[
+        str, typer.Option("--api-token", help="Cloudflare API token. Without it wrangler tries an interactive login.")
+    ] = "",
+    rotate: Annotated[
+        bool, typer.Option("--rotate", help="Mint a new Worker auth token (invalidates every other machine's).")
+    ] = False,
+) -> None:
+    """Create D1, apply migrations, deploy the Worker (cron goes live), set secrets.
+
+    Needs `node`/`npx` on PATH, which is why the desktop app cannot rely on this:
+    an external user standing up their own Cloudflare stack will not have it. The
+    app's Deploy button calls Cloudflare's REST API from Rust instead.
+    """
+    import sys
+
+    from spotify_mcp import cloud
+
+    # A Python traceback is noise the user cannot act on. Print the message,
+    # keep the exit code.
+    try:
+        code = cloud.deploy(name=name, api_token=api_token, rotate=rotate)
+    except RuntimeError as exc:
+        # Ours, and already phrased for a human — the class name adds nothing.
+        print(str(exc), file=sys.stderr)
+        code = 1
+    except Exception as exc:
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        code = 1
+    raise typer.Exit(code=code)
+
+
+@cloud_app.command("pull")
+def cloud_pull() -> None:
+    """Refresh the local SQLite cache from D1. Reads WORKER_* from the config file.
+
+    The cache is what MCP and report generation read; `serve` also does this on
+    startup, so this is for refreshing without launching anything.
+    """
+    from spotify_mcp import cloud
+
+    raise typer.Exit(code=cloud.pull())
+
+
 @app.command()
 def serve() -> None:
     """Start the MCP server over stdio (invoked by Claude Desktop)."""
     import os
 
-    from dotenv import load_dotenv
-
-    from spotify_core import paths
+    from spotify_core import config_file, paths
     from spotify_core.logging import setup_mcp_logging
 
     paths.ensure_dirs()
-    # Load the platform .env into os.environ so env-based SDKs (e.g. Langfuse) see
-    # their credentials. The cwd .env is a dev-checkout fallback (no override).
-    load_dotenv(paths.env_file())
-    load_dotenv(override=False)
+    # Copy config into os.environ so env-based SDKs (e.g. Langfuse) see their
+    # credentials. Real environment variables are never overridden.
+    config_file.load_into_env()
 
     setup_mcp_logging(level=os.getenv("LOG_LEVEL", "DEBUG").upper())
 

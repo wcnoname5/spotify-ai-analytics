@@ -56,6 +56,19 @@ export default {
     if (pathname === "/api/cursor" && method === "POST") {
       return handlePostCursor(request, env);
     }
+    // The same work the hourly cron does, on demand. The app offers it right
+    // after authorizing so a new user is not looking at an empty dashboard until
+    // the next tick. It replaced a local `spotify-mcp sync`, which needed a copy
+    // of the tokens on the user's machine.
+    if (pathname === "/api/sync" && method === "POST") {
+      try {
+        return Response.json(await runSync(env));
+      } catch (e) {
+        // The actionable cases are "no token row yet" and an expired refresh
+        // token; both are worth showing the user rather than a bare 500.
+        return Response.json({ error: (e as Error).message }, { status: 502 });
+      }
+    }
 
     return new Response("Not Found", { status: 404 });
   },
