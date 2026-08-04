@@ -17,7 +17,16 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Mirrors the aliases in vite.config.ts — vue-tsc must resolve them the
+       same way Vite does, or the build typechecks something Vite never loads. */
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["../../packages/shared-ts/*"],
+      "@sql/*": ["../../packages/core/spotify_core/db/sql/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../../packages/shared-ts/*.ts"],
+  "exclude": ["../../packages/shared-ts/*.test.ts"]
 }

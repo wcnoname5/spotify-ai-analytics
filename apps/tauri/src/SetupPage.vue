@@ -24,6 +24,7 @@ import {
   type DoctorReport,
   type SetupStep,
 } from "./lib/config";
+import { authorizeSpotify } from "./lib/oauth";
 
 const DASHBOARD_URL = "https://developer.spotify.com/dashboard";
 const CF_TOKEN_URL = "https://dash.cloudflare.com/profile/api-tokens";
@@ -99,7 +100,10 @@ const form = reactive({
 
 // keygen is not a step: it needs no decision from the user, so it runs
 // automatically (see refresh) rather than being something they must remember.
-type ManualStep = SetupStep;
+//
+// `oauth` is not a SetupStep: SetupStep is the list of steps that still spawn
+// Python, and OAuth left it when the flow moved to lib/oauth.ts.
+type ManualStep = SetupStep | "oauth";
 type StepState = { running: boolean; ok: boolean | null; output: string };
 const steps = reactive<Record<ManualStep, StepState>>({
   oauth: { running: false, ok: null, output: "" },
@@ -262,18 +266,25 @@ async function runStep(step: ManualStep) {
   state.ok = null;
   state.output = "";
   try {
-    let arg: string | undefined;
-    if (step === "import") {
-      const folder = await pickHistoryFolder();
-      if (!folder) return; // cancelled
-      arg = folder;
+    if (step === "oauth") {
+      // No longer a spawned `spotify-mcp reauth`: Rust listens on the callback
+      // port and the flow itself is TS. See lib/oauth.ts.
+      const { userId } = await authorizeSpotify();
+      state.output = `Authorized as ${userId}.`;
+    } else {
+      let arg: string | undefined;
+      if (step === "import") {
+        const folder = await pickHistoryFolder();
+        if (!folder) return; // cancelled
+        arg = folder;
+      }
+      state.output = await runSetupStep(step as Exclude<ManualStep, "oauth">, arg);
     }
-    state.output = await runSetupStep(step, arg);
     state.ok = true;
     await refresh();
   } catch (e) {
     state.ok = false;
-    state.output = String(e);
+    state.output = e instanceof Error ? e.message : String(e);
   } finally {
     state.running = false;
   }

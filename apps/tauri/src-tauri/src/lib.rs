@@ -1,4 +1,5 @@
 mod config;
+mod oauth;
 
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -64,6 +65,32 @@ fn set_config(pairs: Vec<String>) -> Result<String, String> {
 fn keygen() -> Result<String, String> {
     let created = config::ensure_fernet_key()?;
     Ok(serde_json::json!({ "created": created }).to_string())
+}
+
+/// The Fernet key, for the frontend to encrypt tokens with before they are sent
+/// to the Worker.
+///
+/// This is the one place a secret crosses into the webview. The alternative —
+/// encrypting in Rust — would mean a second Fernet implementation, and the
+/// Worker cron has to decrypt exactly what this produces. A disagreement of one
+/// byte yields tokens the cron cannot read, and it surfaces hours later in a
+/// scheduled run rather than here. Sharing `fernet.ts` with the Worker is the
+/// property worth protecting; the webview is local and loads no remote code.
+#[tauri::command]
+fn encryption_key() -> Result<String, String> {
+    config::fernet_key_value().ok_or_else(|| "no TOKEN_ENCRYPT_KEY set".to_string())
+}
+
+/// Wait for Spotify's OAuth redirect and return its raw query string.
+///
+/// Blocking, on the blocking pool: it is idle for as long as the user takes in
+/// the browser. The frontend built `authorize_url` and holds the `state` and
+/// verifier to check the result against.
+#[tauri::command]
+async fn await_oauth_callback(authorize_url: String, port: u16) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || oauth::await_callback(&authorize_url, port))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Run one setup step. Steps are whitelisted rather than taking a command from
@@ -336,6 +363,8 @@ pub fn run() {
             get_config,
             set_config,
             keygen,
+            encryption_key,
+            await_oauth_callback,
             run_setup_step,
             pick_history_folder,
             open_setup_window,

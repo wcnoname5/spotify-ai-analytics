@@ -32,46 +32,23 @@ export function getDb(): Promise<Database> {
 }
 
 /**
- * The two readiness checks that need a database rather than the config file.
+ * The readiness check that needs the database rather than the config file.
  *
  * Inline SQL rather than a shared `sql/` file: the shared module exists so the
- * Python and TS query paths cannot drift, and these two have no Python caller —
- * `spotify-mcp doctor` is gone.
+ * Python and TS query paths cannot drift, and this has no Python caller.
  *
- * Never throws. Setup runs on machines where these DBs may not exist yet, and a
+ * Never throws. Setup runs on machines where the DB may not exist yet, and a
  * missing file has to read as "not done", not as a crash.
  */
-export async function readinessChecks(): Promise<{
-  historyHasData: boolean;
-  tokensValid: boolean;
-}> {
-  let historyHasData = false;
+export async function readinessChecks(): Promise<{ historyHasData: boolean }> {
   try {
     const db = await getDb();
     const rows = await db.select<{ n: number }[]>(
       "SELECT COUNT(*) AS n FROM listening_history"
     );
-    historyHasData = (rows[0]?.n ?? 0) > 0;
+    return { historyHasData: (rows[0]?.n ?? 0) > 0 };
   } catch (e) {
     console.error("readinessChecks: history check failed:", e);
+    return { historyHasData: false };
   }
-
-  let tokensValid = false;
-  try {
-    const { history_db_path } = await getConfig();
-    // tokens.db sits beside history.db. ponytail: this whole check goes when
-    // OAuth writes straight to D1 and the local tokens.db stops existing —
-    // it becomes `GET /api/tokens`.
-    const tokensPath = history_db_path.replace(/history\.db$/, "tokens.db");
-    const tokensDb = await Database.load("sqlite:" + tokensPath.replace(/\\/g, "/"));
-    const rows = await tokensDb.select<{ n: number }[]>(
-      "SELECT COUNT(*) AS n FROM spotify_tokens WHERE refresh_token != ''"
-    );
-    tokensValid = (rows[0]?.n ?? 0) > 0;
-  } catch (e) {
-    // Includes "no such table" on a DB the OAuth step has never written to.
-    console.debug("readinessChecks: token check failed:", e);
-  }
-
-  return { historyHasData, tokensValid };
 }

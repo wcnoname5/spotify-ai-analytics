@@ -1,5 +1,7 @@
 // Hourly cron sync: Spotify recently-played -> D1.
-import { fernetDecrypt, fernetEncrypt } from "./fernet";
+// Shared with the desktop frontend: the app encrypts tokens with the same code
+// this cron decrypts them with. See packages/shared-ts/README.md.
+import { fernetDecrypt, fernetEncrypt } from "../../packages/shared-ts/fernet";
 import { INSERT_SQL } from "./tracks";
 
 export interface SyncEnv {

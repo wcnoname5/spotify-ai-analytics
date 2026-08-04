@@ -12,5 +12,6 @@
     "isolatedModules": true,
     "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "../packages/shared-ts/*.ts"],
+  "exclude": ["../packages/shared-ts/*.test.ts"]
 }

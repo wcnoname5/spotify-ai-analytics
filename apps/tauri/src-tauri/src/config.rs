@@ -132,6 +132,13 @@ pub struct AppConfig {
     env_file: String,
     dev: bool,
     history_db_path: String,
+    /// Not a secret: PKCE has no client secret, and this value appears in the
+    /// authorize URL the user's own browser opens. The frontend needs it to
+    /// build that URL.
+    spotify_client_id: String,
+    /// Which `spotify_tokens` row belongs to this install. Written by the OAuth
+    /// step from Spotify's own profile response; "default" until then.
+    spotify_user_id: String,
     worker_url: String,
     worker_auth_token: String,
     configured: ConfiguredFlags,
@@ -163,7 +170,8 @@ fn history_db_path(values: &Values) -> PathBuf {
 pub fn read() -> AppConfig {
     let values = load_values();
 
-    let client_id = !get(&values, "SPOTIFY_CLIENT_ID").is_empty();
+    let spotify_client_id = get(&values, "SPOTIFY_CLIENT_ID");
+    let client_id = !spotify_client_id.is_empty();
     let fernet_key = !get(&values, "TOKEN_ENCRYPT_KEY").is_empty();
     let worker_url = get(&values, "WORKER_URL");
     let worker_auth_token = get(&values, "WORKER_AUTH_TOKEN");
@@ -177,6 +185,11 @@ pub fn read() -> AppConfig {
         // `dev` now means exactly "running against a non-default config file".
         dev: std::env::var("SPOTIFY_CONFIG").is_ok_and(|v| !v.trim().is_empty()),
         history_db_path: history_db_path(&values).display().to_string(),
+        spotify_client_id,
+        spotify_user_id: {
+            let id = get(&values, "SPOTIFY_USER_ID");
+            if id.is_empty() { "default".to_string() } else { id }
+        },
         configured: ConfiguredFlags {
             client_id,
             gemini: !get(&values, "GEMINI_API_KEY").is_empty(),
@@ -190,6 +203,20 @@ pub fn read() -> AppConfig {
         worker_url,
         worker_auth_token,
         checks,
+    }
+}
+
+/// The raw `TOKEN_ENCRYPT_KEY`, or None when unset.
+///
+/// The only getter that returns a secret. It exists because the frontend does
+/// the Fernet encryption, using the same `fernet.ts` the Worker cron decrypts
+/// with — see the `encryption_key` command for why that is the tradeoff taken.
+pub fn fernet_key_value() -> Option<String> {
+    let key = get(&load_values(), "TOKEN_ENCRYPT_KEY");
+    if key.is_empty() {
+        None
+    } else {
+        Some(key)
     }
 }
 

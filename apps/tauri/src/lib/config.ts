@@ -29,6 +29,10 @@ export interface AppConfig {
   env_file: string;
   dev: boolean;
   history_db_path: string;
+  /** Not a secret — PKCE has no client secret and this appears in the authorize URL. */
+  spotify_client_id: string;
+  /** Which `spotify_tokens` row belongs to this install. "default" until OAuth runs. */
+  spotify_user_id: string;
   worker_url: string;
   worker_auth_token: string;
   configured: ConfiguredFlags;
@@ -40,6 +44,8 @@ const BROWSER_FALLBACK: AppConfig = {
   env_file: "",
   dev: false,
   history_db_path: "",
+  spotify_client_id: "",
+  spotify_user_id: "default",
   worker_url: "",
   worker_auth_token: "",
   configured: {
@@ -110,7 +116,10 @@ export interface DoctorReport {
  */
 export async function runDoctor(): Promise<DoctorReport> {
   const cfg = await getConfig();
-  const { historyHasData, tokensValid } = await import("./db").then((m) => m.readinessChecks());
+  const [{ historyHasData }, tokensValid] = await Promise.all([
+    import("./db").then((m) => m.readinessChecks()),
+    hasStoredTokens(cfg),
+  ]);
 
   const checks: Record<string, boolean> = {
     ...cfg.checks,
@@ -138,7 +147,9 @@ export async function runDoctor(): Promise<DoctorReport> {
   };
 }
 
-export type SetupStep = "oauth" | "import" | "sync";
+/** Steps that still shell out to Python. OAuth left this list when the flow
+ *  moved to lib/oauth.ts; `import` and `sync` are the remaining two. */
+export type SetupStep = "import" | "sync";
 
 /** Run a whitelisted setup step. Buffered: resolves when the step finishes. */
 export async function runSetupStep(step: SetupStep, arg?: string): Promise<string> {
@@ -146,6 +157,30 @@ export async function runSetupStep(step: SetupStep, arg?: string): Promise<strin
     return await invoke<string>("run_setup_step", { step, arg: arg ?? null });
   } finally {
     invalidateConfig();
+  }
+}
+
+/**
+ * Whether D1 already holds a token row for the configured user.
+ *
+ * Asks the Worker, not a local file: OAuth writes tokens straight to D1 and this
+ * machine keeps no copy. Never throws — offline reads as "not authorized", which
+ * is the same thing the Setup page needs to show.
+ */
+async function hasStoredTokens(cfg: AppConfig): Promise<boolean> {
+  if (!cfg.configured.worker) return false;
+  try {
+    const { fetch } = await import("@tauri-apps/plugin-http");
+    const res = await fetch(
+      `${cfg.worker_url}/api/tokens?user_id=${encodeURIComponent(cfg.spotify_user_id)}`,
+      { headers: { Authorization: `Bearer ${cfg.worker_auth_token}` } }
+    );
+    if (!res.ok) return false; // 404 is the documented "no row" answer
+    const row = (await res.json()) as { refresh_token?: string };
+    return !!row.refresh_token;
+  } catch (e) {
+    console.debug("hasStoredTokens failed:", e);
+    return false;
   }
 }
 

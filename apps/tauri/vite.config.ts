@@ -16,6 +16,9 @@ export default defineConfig(async () => {
     resolve: {
       alias: {
         "@sql": resolve(__dirname, "../../packages/core/spotify_core/db/sql"),
+        // TS shared with the Worker (Fernet, PKCE). Mirrored in tsconfig.json
+        // `paths` so vue-tsc resolves it the same way Vite does.
+        "@shared": resolve(__dirname, "../../packages/shared-ts"),
       },
     },
 
