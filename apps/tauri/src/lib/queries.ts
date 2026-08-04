@@ -84,9 +84,9 @@ export interface RecentPlay {
   track_id: string;
 }
 
-export async function recentPlays(limit: number): Promise<RecentPlay[]> {
+export async function recentPlays(limit: number, start: string | null = null, end: string | null = null): Promise<RecentPlay[]> {
   const db = await getDb();
-  return db.select<RecentPlay[]>(recentPlaysSql, [null, null, limit]);
+  return db.select<RecentPlay[]>(recentPlaysSql, [start, end, limit]);
 }
 
 export interface TrendPoint {

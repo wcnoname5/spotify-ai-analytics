@@ -229,6 +229,12 @@ function unusedTracingKeys(): (keyof typeof form)[] {
 }
 
 async function save() {
+  // "None" writes nothing, so `stepDone.tracing` would stay false and the wizard
+  // would sit on this step forever. Declining is a skip, not a stored value —
+  // no `tracing: "none"` field to then have to mean something everywhere else.
+  // `save` is every card's button, so this only fires on the tracing step —
+  // otherwise the default "none" would skip a step never shown.
+  if (current.value === "tracing" && tracing.value === "none") skipped.add("tracing");
   const skip = new Set<string>(unusedTracingKeys());
   const values = Object.fromEntries(
     Object.entries(form).filter(([k, v]) => v.trim() !== "" && !skip.has(k))
@@ -451,7 +457,9 @@ async function runStep(step: ManualStep) {
           <div class="step">
             <button class="btn" @click="revealToken = !revealToken">{{ revealToken ? "Hide" : "Reveal" }}</button>
             <button class="btn" @click="copyToken">{{ copied ? "Copied" : "Copy" }}</button>
-            <button class="btn" :disabled="deploying" @click="runDeploy(true)">Rotate token</button>
+            <!-- ponytail: no Rotate button. It 401s every other machine, and
+                 nothing here says so; `runDeploy(true)` stays for when there is
+                 a reason to expose it (leaked token). -->
             <span class="hint">Cloudflare cannot show you this token — back it up with <code>{{ envFile }}</code>.</span>
           </div>
         </template>
@@ -491,7 +499,7 @@ async function runStep(step: ManualStep) {
         <details v-if="!configured.worker">
           <summary class="hint">Connect to an existing Worker instead</summary>
           <p class="hint">
-            The token is the one written to that Worker's <code>.env</code> when it was deployed —
+            The token is the one written to <code>config.json</code> when it was deployed —
             Cloudflare cannot show it to you.
           </p>
           <label>Worker URL <input v-model="form.WORKER_URL" placeholder="https://….workers.dev" /></label>

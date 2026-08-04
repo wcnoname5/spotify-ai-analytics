@@ -2,11 +2,23 @@
 // here inserts N copies of one play with no error to notice, so asserting on the
 // generated string alone would not be enough.
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import insertTrackSql from "@sql/insert_track.sql?raw";
-import { multiRowInsert } from "./sync";
+import { multiRowInsert, syncOnStartup } from "./sync";
 import { migrate, statements } from "./migrations";
+
+// The startup sync's collaborators are all Tauri plugins; only the cursor
+// decision is under test here.
+const fetchMock = vi.fn();
+vi.mock("@tauri-apps/plugin-http", () => ({
+  fetch: (...args: unknown[]) => fetchMock(...args),
+}));
+vi.mock("./config", () => ({
+  getConfig: async () => ({ worker_url: "https://w.example", worker_auth_token: "t" }),
+}));
+const dbStub = { select: vi.fn(), execute: vi.fn() };
+vi.mock("./db", () => ({ getDb: async () => dbStub }));
 
 async function migrated(): Promise<DatabaseSync> {
   const db = new DatabaseSync(":memory:");
@@ -94,6 +106,55 @@ describe("multiRowInsert", () => {
     // 14 columns x 60 rows = 840. A larger chunk would fail only on a full page,
     // i.e. only during a first sync against a big history.
     expect((multiRowInsert(60).match(/\?/g) ?? []).length).toBeLessThan(999);
+  });
+});
+
+describe("syncOnStartup cursor", () => {
+  const LOCAL_MAX = "2026-01-05T00:00:00Z";
+
+  /** Answer the count endpoint with `remote`, then hand back one empty page. */
+  function arrange(localCount: number, remoteCount: number) {
+    dbStub.select.mockImplementation(async (sql: string) =>
+      /COUNT/i.test(sql) ? [{ n: localCount }] : [{ c: LOCAL_MAX }]
+    );
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        url.includes("/count") ? { count: remoteCount } : { tracks: [] },
+    }));
+  }
+
+  const tracksUrl = () =>
+    fetchMock.mock.calls.map((c) => String(c[0])).find((u) => !u.includes("/count"));
+
+  beforeEach(() => {
+    dbStub.select.mockReset();
+    dbStub.execute.mockReset();
+    fetchMock.mockReset();
+  });
+
+  it("stays incremental when the counts agree", async () => {
+    arrange(10, 10);
+    await syncOnStartup();
+    expect(tracksUrl()).toContain(encodeURIComponent(LOCAL_MAX));
+  });
+
+  it("backfills from the epoch when D1 holds rows the cursor cannot reach", async () => {
+    // The export-import case: 50 recent plays locally, years of history in D1.
+    arrange(50, 90000);
+    await syncOnStartup();
+    expect(tracksUrl()).toContain(encodeURIComponent("1970-01-01T00:00:00Z"));
+  });
+
+  it("stays incremental when the count check fails", async () => {
+    dbStub.select.mockImplementation(async () => [{ c: LOCAL_MAX }]);
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes("/count")
+        ? { ok: false, status: 500 }
+        : { ok: true, json: async () => ({ tracks: [] }) }
+    );
+    await syncOnStartup();
+    expect(tracksUrl()).toContain(encodeURIComponent(LOCAL_MAX));
   });
 });
 

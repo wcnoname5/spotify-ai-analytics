@@ -46,6 +46,10 @@ export async function syncOnStartup(): Promise<SyncResult> {
     let sinceId: string | undefined;
     let inserted = 0;
 
+    if (since !== EPOCH && (await isBehind(db, worker_url, worker_auth_token))) {
+      since = EPOCH;
+    }
+
     // Loop until the Worker stops handing back a cursor. It caps each page, so a
     // first sync against a full imported history is many small responses rather
     // than one that blows the Worker's 128 MB budget.
@@ -73,6 +77,46 @@ export async function syncOnStartup(): Promise<SyncResult> {
   } catch (e) {
     console.error("syncOnStartup failed:", e);
     return { offline: true, reason: "error" };
+  }
+}
+
+/**
+ * Is the local mirror missing rows the cursor can never reach?
+ *
+ * The cursor only moves forward, so a row landing in D1 *older* than the local
+ * MAX(played_at) is invisible to an incremental sync — permanently. That is the
+ * normal case, not an edge one: authorizing pulls the last ~50 plays, then the
+ * Spotify export arrives days later and imports years of older history.
+ *
+ * Row counts are the cheap way to notice. `<`, not `!==`: rows deleted from D1
+ * would otherwise make every startup re-scan and never reconcile.
+ *
+ * Any failure answers "no" — a full re-pull is the expensive branch, and being
+ * offline is not evidence of a gap.
+ */
+async function isBehind(
+  db: Awaited<ReturnType<typeof getDb>>,
+  workerUrl: string,
+  token: string
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${workerUrl}/api/tracks/count`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return false;
+    const { count } = (await res.json()) as { count?: number };
+    if (typeof count !== "number") return false;
+
+    const rows = await db.select<{ n: number }[]>(
+      "SELECT COUNT(*) AS n FROM listening_history"
+    );
+    const local = rows[0]?.n ?? 0;
+    if (local >= count) return false;
+    console.info(`sync: local ${local} rows vs D1 ${count} — backfilling from the epoch`);
+    return true;
+  } catch (e) {
+    console.error("sync: row-count check failed, staying incremental:", e);
+    return false;
   }
 }
 

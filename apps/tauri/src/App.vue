@@ -128,7 +128,7 @@ async function loadFromDb(current: Range, previous: Range, isAll: boolean) {
     listeningSummary(current),
     topArtists(current, 20),
     topTracks(current, 20),
-    recentPlays(50),
+    recentPlays(50, current.start, current.end), // TODO: support custom range for recent plays (currently only the last 50 plays, regardless of range)
     trend(current, trendGranularity.value),
     playsByHour(current),
   ]);
@@ -248,10 +248,6 @@ const tiles = computed(() => {
 });
 
 const hasData = computed(() => (summary.value?.total_plays ?? 0) > 0);
-
-const lastUpdated = computed(() =>
-  recent.value.length ? recent.value[0].played_at.replace("T", " ").slice(0, 16) + " UTC" : "—"
-);
 
 const seriesColor = computed(() => (dark.value ? "#3987e5" : "#2a78d6"));
 
@@ -430,7 +426,7 @@ const trendTraces = computed(() => [
 
   <ReportPage v-show="page === 'report'" />
 
-  <footer>Last played {{ lastUpdated }}</footer>
+
 </template>
 
 <style scoped>
