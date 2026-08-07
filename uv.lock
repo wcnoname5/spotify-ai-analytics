@@ -2105,6 +2105,7 @@ report = [
     { name = "langchain-google-genai" },
     { name = "langfuse" },
     { name = "langgraph" },
+    { name = "langsmith" },
     { name = "loguru" },
 ]
 
@@ -2117,6 +2118,7 @@ requires-dist = [
     { name = "langchain-google-genai", marker = "extra == 'report'", specifier = ">=4.0" },
     { name = "langfuse", marker = "extra == 'report'", specifier = ">=3.0" },
     { name = "langgraph", marker = "extra == 'report'", specifier = ">=1.0" },
+    { name = "langsmith", marker = "extra == 'report'", specifier = ">=0.1" },
     { name = "loguru", specifier = ">=0.7" },
     { name = "loguru", marker = "extra == 'report'", specifier = ">=0.7" },
     { name = "platformdirs", specifier = ">=4.0" },
