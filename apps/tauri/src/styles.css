@@ -84,8 +84,12 @@ h3 {
   color: var(--ink-2);
   cursor: pointer;
 }
-.btn:hover {
+.btn:hover:not(:disabled) {
   border-color: var(--muted);
+}
+.btn:disabled {
+  color: var(--muted);
+  cursor: default;
 }
 .btn.current {
   color: var(--ink);

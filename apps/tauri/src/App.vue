@@ -90,6 +90,23 @@ const onTheme = (e: MediaQueryListEvent) => (dark.value = e.matches);
 onMounted(() => darkQuery.addEventListener("change", onTheme));
 onUnmounted(() => darkQuery.removeEventListener("change", onTheme));
 
+/** Days spanned by the current range; Infinity for "all" / open-ended custom. */
+const rangeDays = computed(() => {
+  const { current } = toRanges(range.value);
+  if (!current.start || !current.end) return Infinity;
+  return (Date.parse(current.end) - Date.parse(current.start)) / 86_400_000;
+});
+
+function granularityDisabled(g: Granularity) {
+  if (g === "week") return rangeDays.value < 7 * 3;
+  if (g === "month") return rangeDays.value < 30 * 3;
+  return false;
+}
+// Range shrank past the active granularity's threshold: fall back to "day".
+watch(rangeDays, () => {
+  if (granularityDisabled(trendGranularity.value)) trendGranularity.value = "day";
+});
+
 function setPreset(k: RangeKey) {
   customStart.value = "";
   customEnd.value = "";
@@ -395,6 +412,7 @@ const trendTraces = computed(() => [
         <h3>Listening Trend</h3>
         <div>
           <button v-for="g in (['day', 'week', 'month'] as const)" :key="g" class="btn"
+            :disabled="granularityDisabled(g)"
             :class="{ current: trendGranularity === g }" @click="trendGranularity = g">{{ g }}</button>
         </div>
       </div>

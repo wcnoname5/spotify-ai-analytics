@@ -23,11 +23,32 @@ watch(provider, (p) => (model.value = MODELS[p][0]));
 
 const running = ref(false);
 const report = ref("");
-const caption = ref("");
+const caption = ref<captionInfo>({
+  analysisPeriod: "",
+  generated_at: "",
+  model: "",
+  style: "listening_review",
+});
 const error = ref("");
+
+interface captionInfo {
+  analysisPeriod: string;
+  generated_at: string;
+  model: string; // TODO: should be one of the MODELS[provider]
+  style: "listening_review" | "roast"; // TODO: in later it shouln't be hardcoded
+}
 
 const saved = ref(false);
 const pastReports = ref<ReportMeta[]>([]);
+const filterStyle = ref<"all" | "listening_review" | "roast">("all");
+const filterPeriod = ref<"all" | ReportPeriod>("all");
+const filteredReports = computed(() =>
+  pastReports.value.filter(
+    (r) =>
+      (filterStyle.value === "all" || r.style === filterStyle.value) &&
+      (filterPeriod.value === "all" || r.period_type === filterPeriod.value)
+  )
+);
 // params of the currently displayed report (outlive the selects)
 const lastRun = ref<{
   start: string;
@@ -47,6 +68,21 @@ const reportHtml = computed(() =>
   report.value ? DOMPurify.sanitize(marked.parse(report.value, { async: false })) : ""
 );
 
+const STYLE_LABELS: Record<captionInfo["style"], string> = {
+  listening_review: "Listening review",
+  roast: "Roast",
+};
+
+function makeCaption(
+  start: string,
+  end: string,
+  generated_at: string,
+  model: string,
+  style: captionInfo["style"]
+): captionInfo {
+  return { analysisPeriod: `${start} → ${end}`, generated_at, model, style };
+}
+
 async function generate() {
   const { start, end, periodType } = periodRange(period.value);
   if (await reportExistsForPeriod(start, end)) {
@@ -63,7 +99,9 @@ async function generate() {
       style: style.value, start, end, periodType,
       provider: provider.value, model: model.value,
     });
-    caption.value = `${style.value} · ${model.value} · ${start} → ${end}`;
+    caption.value = makeCaption(
+      start, end, new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), model.value, style.value
+    );
     lastRun.value = { start, end, periodType, style: style.value, provider: provider.value, model: model.value };
     saved.value = false;
   } catch (e) {
@@ -104,7 +142,14 @@ async function openReport(meta: ReportMeta) {
   const text = await getReportText(meta.id);
   if (text === null) return;
   report.value = text;
-  caption.value = `分析時間: ${meta.start_date} → ${meta.end_date}\n模型: ${meta.model}\n**分析風格**: ${meta.style}`;
+  // TODO: 要讓上面印出的是html format不是
+  caption.value = {
+    analysisPeriod: `${meta.start_date} → ${meta.end_date}`,
+    generated_at: meta.generated_at,
+    model: meta.model,
+    // revision_count: meta.revision_count,
+    style: meta.style as "listening_review" | "roast"
+  };
   lastRun.value = {
     start: meta.start_date,
     end: meta.end_date,
@@ -150,15 +195,19 @@ async function openReport(meta: ReportMeta) {
           <option v-for="m in MODELS[provider]" :key="m" :value="m">{{ m }}</option>
         </select>
       </label>
-
-      <button class="btn" :disabled="!isTauri || running" @click="generate">
+      <button class="btn btn-primary" :disabled="!isTauri || running" @click="generate">
         {{ running ? "Generating…" : "Generate" }}
       </button>
     </div>
     <p v-if="running">This takes a minute — multiple LLM calls.</p>
     <p v-if="error" class="banner">Report failed: <br> <code>{{ error }}</code></p>
     <template v-if="report">
-      <p class="period">{{ caption }}</p>
+      <div class="caption">
+        <p><b>分析區間: </b>{{ caption.analysisPeriod }}</p>
+        <p><b>分析風格: </b>{{ STYLE_LABELS[caption.style] }}</p>
+        <p><b>模型: </b>{{ caption.model }}</p>
+        <p><b>報告產生時間: </b>{{ new Date(caption.generated_at).toLocaleString() }}</p>
+      </div>
       <hr class="nav-divider" />
 
       <div class="report-html" v-html="reportHtml"></div>
@@ -172,34 +221,107 @@ async function openReport(meta: ReportMeta) {
     </template>
     <template v-if="pastReports.length">
       <h3>Past reports</h3>
-      <ul class="past-reports">
-        <!-- TODO: plain list is ugly in the future is should be a grid or card layout -->
-        <li v-for="r in pastReports" :key="r.id">
-          <a href="#" @click.prevent="openReport(r)">
-            {{ r.start_date }} → {{ r.end_date }} · {{ r.style }} · {{ r.model }}
-          </a>
-        </li>
-      </ul>
+      <div class="filters">
+        <label class="field">
+          <span>Style</span>
+          <select v-model="filterStyle">
+            <!-- TODO: Add more options in the future as needed -->
+            <option value="all">All</option>
+            <option value="listening_review">Listening review</option>
+            <option value="roast">Roast</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Period</span>
+          <select v-model="filterPeriod">
+            <option value="all">All</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="quarterly">Quarterly</option>
+          </select>
+        </label>
+      </div>
+      <div class="report-grid-scroll">
+        <div class="report-grid">
+          <button
+            v-for="r in filteredReports"
+            :key="r.id"
+            class="report-card"
+            @click="openReport(r)"
+          >
+            <div class="report-period">{{ r.start_date }} → {{ r.end_date }}</div>
+            <span class="pill" :class="r.style">{{ STYLE_LABELS[r.style as captionInfo['style']] }}</span>
+            <div class="report-model">{{ r.model }}</div>
+            <div class="report-generated">{{ new Date(r.generated_at).toLocaleString() }}</div>
+          </button>
+          <p v-if="!filteredReports.length" class="muted">No reports match these filters.</p>
+        </div>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.caption {
-  white-space: pre-line;
+.caption p {
+  margin: 0.40rem 0;
 }
-.past-reports {
-  list-style: none;
-  padding: 0;
-  margin: 0.5rem 0 0;
+.report-grid-scroll {
+  max-height: 24rem;
+  overflow-y: auto;
 }
-.past-reports li {
-  padding: 0.25rem 0;
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 220px));
+  gap: 1rem;
+  margin-top: 0.5rem;
 }
-.past-reports a {
-  text-decoration: none;
+.report-card {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
-.past-reports a:hover {
-  text-decoration: underline;
+.report-card:hover {
+  border-color: var(--muted);
+}
+.report-period {
+  font-weight: 600;
+  color: var(--ink);
+}
+.report-model {
+  color: var(--ink-2);
+  font-size: 0.85rem;
+}
+.report-generated {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.pill {
+  align-self: flex-start;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 0.1rem 0.55rem;
+  font-size: 0.75rem;
+}
+.pill.roast { border-color: var(--down); }
+.pill.listening_review { border-color: var(--series); }
+.muted {
+  color: var(--muted);
+}
+.btn-primary {
+  background: var(--series);
+  border-color: var(--series);
+  color: #fff;
+  font-weight: 600;
+}
+.btn-primary:hover:not(:disabled) {
+  border-color: var(--series);
+  opacity: 0.9;
 }
 </style>

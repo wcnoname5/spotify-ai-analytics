@@ -229,10 +229,7 @@ function unusedTracingKeys(): (keyof typeof form)[] {
 }
 
 async function save() {
-  // "None" writes nothing, so `stepDone.tracing` would stay false and the wizard
-  // would sit on this step forever. Declining is a skip, not a stored value —
-  // no `tracing: "none"` field to then have to mean something everywhere else.
-  // `save` is every card's button, so this only fires on the tracing step —
+  // No `tracing: "none"` field to then have to mean something everywhere else.
   // otherwise the default "none" would skip a step never shown.
   if (current.value === "tracing" && tracing.value === "none") skipped.add("tracing");
   const skip = new Set<string>(unusedTracingKeys());
@@ -265,15 +262,13 @@ async function runStep(step: ManualStep) {
   state.output = "";
   try {
     if (step === "oauth") {
-      // No longer a spawned `spotify-mcp reauth`: Rust listens on the callback
-      // port and the flow itself is TS. See lib/oauth.ts.
+      // Rust listens on the callback port and the flow itself is TS. See lib/oauth.ts.
       const { userId } = await authorizeSpotify();
       state.output = `Authorized as ${userId}.`;
     } else if (step === "import") {
       const folder = await pickHistoryFolder();
       if (!folder) return; // cancelled
-      // A full export is ~100k plays over dozens of files and takes minutes, so
-      // this reports per file instead of leaving the button looking stuck.
+      // A full export may take minutes, so this reports per file instead of leaving the button looking stuck.
       const result = await importHistory(folder, (p) => {
         state.output = `${p.file} (${p.fileIndex}/${p.fileCount}) — ${p.inserted} plays imported`;
       });
