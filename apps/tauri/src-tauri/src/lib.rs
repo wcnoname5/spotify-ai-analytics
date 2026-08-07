@@ -123,6 +123,8 @@ async fn cloud_deploy(
         config::write(&[
             format!("WORKER_URL={}", result.worker_url),
             format!("WORKER_AUTH_TOKEN={}", result.auth_token),
+            // A later deploy must reuse this name or it builds a second stack.
+            format!("WORKER_NAME={}", name.trim()),
         ])?;
         log(format!("Saved WORKER_URL to {}", config::config_path().display()));
         Ok(())

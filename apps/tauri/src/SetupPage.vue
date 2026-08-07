@@ -40,6 +40,9 @@ const workerToken = ref("");
 const revealToken = ref(false);
 const copied = ref(false);
 
+// Set by the deploy that created the stack. An update must reuse it to keep original D1 data and token.
+const workerName = ref("");
+
 async function copyToken() {
   await navigator.clipboard.writeText(workerToken.value);
   copied.value = true;
@@ -50,7 +53,8 @@ async function runDeploy(rotate: boolean) {
   deployError.value = "";
   cloudLog.value = [];
   try {
-    await cloudDeploy(cloudName.value.trim() || "spotify-analytics", cfApiToken.value.trim(), rotate);
+    const name = workerName.value || cloudName.value.trim() || "spotify-analytics";
+    await cloudDeploy(name, cfApiToken.value.trim(), rotate);
     cfApiToken.value = ""; // not ours to keep once the deploy is done
     deployOk.value = true;
     await refresh();
@@ -175,6 +179,7 @@ async function refresh() {
     if (cfg.dev) envBadge.value = `DEV · ${cfg.env_file}`;
     workerUrl.value = cfg.worker_url;
     workerToken.value = cfg.worker_auth_token;
+    workerName.value = cfg.worker_name;
     form.WORKER_URL = cfg.worker_url;
     configured.value = cfg.configured;
     if (cfg.configured.langfuse) tracing.value = "langfuse";
@@ -458,37 +463,48 @@ async function runStep(step: ManualStep) {
             <span class="hint">Cloudflare cannot show you this token — back it up with <code>{{ envFile }}</code>.</span>
           </div>
         </template>
-        <!-- Not connected: one credential, one button. -->
-        <template v-else>
+        <!-- One form for both states: deploying and updating are the same call. -->
+        <details class="deploy" :open="!configured.worker">
+          <summary class="hint">
+            {{ configured.worker ? "Update the Worker" : "Deploy to Cloudflare" }}
+          </summary>
+          <p v-if="configured.worker" class="hint">
+            Re-uploads the Worker script — needed after an app update that changed it.
+            Your D1 data, the URL and the token above all stay as they are.
+          </p>
           <!-- WIP: need to reformat UI -->
-          <p class="hint">create one at <a href="https://dash.cloudflare.com" target="_blank">Cloudflare Dashboard</a> → API Tokens, Permissions: enable 
+          <p class="hint">create one at <a href="https://dash.cloudflare.com" target="_blank">Cloudflare Dashboard</a> → API Tokens, Permissions: enable
             <code>[Account] [D1] [Edit]</code> and <code>[Account] [Workers Scripts] [Edit]</code>
           </p>
           <label>Cloudflare API token
             <input v-model="cfApiToken" type="password" placeholder="" />
           </label>
-          <label>Name <input v-model="cloudName" placeholder="spotify-analytics" /></label>
+          <label>Name
+            <input v-if="workerName" :value="workerName" readonly />
+            <input v-else v-model="cloudName" placeholder="spotify-analytics" />
+          </label>
           <div class="step">
             <button class="btn" @click="openUrl(CF_TOKEN_URL)">Get a token ↗</button>
             <button class="btn current" :disabled="deploying" @click="runDeploy(false)">
-              {{ deploying ? "Deploying…" : "Deploy to Cloudflare" }}
+              {{ deploying ? "Deploying…" : configured.worker ? "Update the Worker" : "Deploy to Cloudflare" }}
             </button>
           </div>
-          <p class="hint">
+          <p v-if="!configured.worker" class="hint">
             Takes a few minutes. Creates a D1 database and a Worker in your own
             Cloudflare account.
           </p>
-        </template>
+        </details>
 
         <pre v-if="cloudLog.length" ref="logPane" class="cloud-log">{{ cloudLog.join("\n") }}</pre>
         <p v-if="deployError" class="warn">{{ deployError }}</p>
 
-        <!-- The log ends in wrangler's own output, which does not read as "done".
-             Say so, and say what to press next. -->
+        <!-- The log ends in output that does not read as "done". -->
         <p v-if="deployOk" class="ok-box">
           <span class="ok">✓</span> <strong>Deployment succeeded.</strong>
           Your Worker is live and will sync your listening history every hour, even
-          while this app is closed. Press <strong>Save and continue</strong> below.
+          while this app is closed.
+          <template v-if="!showAll">Press <strong>Save and continue</strong> below.</template>
+          <template v-else>New routes can take a minute to reach every edge.</template>
         </p>
 
         <details v-if="!configured.worker">

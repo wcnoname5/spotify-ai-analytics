@@ -13,6 +13,7 @@ import listReportsSql from "@sql/list_reports.sql?raw";
 import getReportSql from "@sql/get_report.sql?raw";
 import countReportsForPeriodSql from "@sql/count_reports_for_period.sql?raw";
 import insertReportSql from "@sql/insert_report.sql?raw";
+import deleteReportSql from "@sql/delete_report.sql?raw";
 import { getDb } from "./db";
 import type { ReportRow } from "./sync";
 
@@ -147,4 +148,9 @@ export async function saveReportLocal(row: ReportRow): Promise<void> {
     row.provider, row.model, row.generated_at, row.revision_count,
     row.report_text, 0,
   ]);
+}
+
+/** Cache half of a delete — call `deleteReport` in sync.ts, which does D1 first. */
+export async function deleteReportLocal(id: string): Promise<void> {
+  await (await getDb()).execute(deleteReportSql, [id]);
 }

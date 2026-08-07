@@ -10,6 +10,7 @@ import maxReportGeneratedAtSql from "@sql/max_report_generated_at.sql?raw";
 import { fetch } from "@tauri-apps/plugin-http";
 import { getDb } from "./db";
 import { getConfig } from "./config";
+import { deleteReportLocal } from "./queries";
 import type { TrackRow } from "./api";
 
 const EPOCH = "1970-01-01T00:00:00Z";
@@ -229,4 +230,24 @@ export async function syncReports(): Promise<{ pushed: number; pulled: number } 
     console.error("syncReports failed:", e);
     return { offline: true };
   }
+}
+
+/**
+ * Delete a report from D1 first, then locally.
+ *
+ * That order is the whole correctness argument: the pull above uses
+ * MAX(generated_at) as its cursor, so a local-only delete of the newest report
+ * lowers the cursor and the next startup pulls it back from D1. Deliberately
+ * not fail-soft — no tombstone table means an offline delete cannot be replayed
+ * later, so it is refused instead. The caller shows the error.
+ */
+export async function deleteReport(id: string): Promise<void> {
+  const { worker_url, worker_auth_token } = await getConfig();
+  if (!worker_url) throw new Error("Cloud sync is not set up — cannot delete.");
+  const res = await fetch(`${worker_url}/api/reports?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${worker_auth_token}` },
+  });
+  if (!res.ok) throw new Error(`Worker refused the delete (${res.status})`);
+  await deleteReportLocal(id);
 }

@@ -59,6 +59,21 @@ export async function handlePostReport(request: Request, env: Env): Promise<Resp
   return Response.json({ inserted: result.meta.changes ?? 0 });
 }
 
+/**
+ * DELETE /api/reports?id=<uuid> -> { deleted: 0|1 }
+ *
+ * D1 has to be the first half of a delete: the local pull cursor is
+ * MAX(generated_at), so dropping the newest report locally only lowers the
+ * cursor and the next sync pulls it straight back.
+ */
+export async function handleDeleteReport(request: Request, env: Env): Promise<Response> {
+  const id = new URL(request.url).searchParams.get("id");
+  if (!id) return badRequest("Provide 'id'");
+  const result = await env.DB.prepare("DELETE FROM reports WHERE id = ?").bind(id).run();
+  // 0 means D1 never had it; the caller still deletes its local copy.
+  return Response.json({ deleted: result.meta.changes ?? 0 });
+}
+
 /** GET /api/reports?since=<iso> -> { reports: [...] } */
 export async function handleGetReports(request: Request, env: Env): Promise<Response> {
   const since = new URL(request.url).searchParams.get("since");

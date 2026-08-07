@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import insertTrackSql from "@sql/insert_track.sql?raw";
-import { multiRowInsert, syncOnStartup } from "./sync";
+import { deleteReport, multiRowInsert, syncOnStartup } from "./sync";
 import { migrate, statements } from "./migrations";
 
 // The startup sync's collaborators are all Tauri plugins; only the cursor
@@ -155,6 +155,40 @@ describe("syncOnStartup cursor", () => {
     );
     await syncOnStartup();
     expect(tracksUrl()).toContain(encodeURIComponent(LOCAL_MAX));
+  });
+});
+
+describe("deleteReport", () => {
+  // The ordering IS the feature: local-first would let the MAX(generated_at)
+  // pull cursor resurrect the row from D1 on the next startup.
+  beforeEach(() => {
+    dbStub.select.mockReset();
+    dbStub.execute.mockReset();
+    fetchMock.mockReset();
+  });
+
+  it("deletes D1 first, then the local row", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ deleted: 1 }) });
+    await deleteReport("abc");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/api/reports?id=abc");
+    expect((init as { method: string }).method).toBe("DELETE");
+    expect(dbStub.execute).toHaveBeenCalledTimes(1);
+    expect(String(dbStub.execute.mock.calls[0][0])).toMatch(/DELETE FROM reports/i);
+    expect(dbStub.execute.mock.calls[0][1]).toEqual(["abc"]);
+  });
+
+  it("leaves the local row alone when the Worker refuses", async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 502 });
+    await expect(deleteReport("abc")).rejects.toThrow(/502/);
+    expect(dbStub.execute).not.toHaveBeenCalled();
+  });
+
+  it("still drops the local row when D1 never had it", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ deleted: 0 }) });
+    await deleteReport("gone");
+    expect(dbStub.execute).toHaveBeenCalledTimes(1);
   });
 });
 

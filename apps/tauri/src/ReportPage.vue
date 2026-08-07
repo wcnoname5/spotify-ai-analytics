@@ -6,7 +6,7 @@ import DOMPurify from "dompurify";
 import { isTauri } from "./lib/db";
 import { periodRange, type ReportPeriod } from "./lib/period";
 import { listReports, getReportText, reportExistsForPeriod, saveReportLocal, type ReportMeta } from "./lib/queries";
-import { syncReports } from "./lib/sync";
+import { deleteReport, syncReports } from "./lib/sync";
 
 type Provider = "google" | "openai";
 // ponytail: placeholder model lists — swap for real favorites anytime.
@@ -49,6 +49,9 @@ const filteredReports = computed(() =>
       (filterPeriod.value === "all" || r.period_type === filterPeriod.value)
   )
 );
+// id of the displayed report, or null if it was just generated and not saved yet.
+// Separate from lastRun, which is about the *params* and exists before an id does.
+const openId = ref<string | null>(null);
 // params of the currently displayed report (outlive the selects)
 const lastRun = ref<{
   start: string;
@@ -103,6 +106,7 @@ async function generate() {
       start, end, new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), model.value, style.value
     );
     lastRun.value = { start, end, periodType, style: style.value, provider: provider.value, model: model.value };
+    openId.value = null; // not saved yet, so no row to delete
     saved.value = false;
   } catch (e) {
     error.value = String(e);
@@ -113,8 +117,9 @@ async function generate() {
 
 async function saveToDb() {
   if (!lastRun.value || !report.value) return;
+  const id = crypto.randomUUID();
   await saveReportLocal({
-    id: crypto.randomUUID(),
+    id,
     style: lastRun.value.style,
     period_type: lastRun.value.periodType,
     start_date: lastRun.value.start,
@@ -125,6 +130,7 @@ async function saveToDb() {
     revision_count: 0, // ponytail: CLI prints markdown only; thread real count through when it matters
     report_text: report.value,
   }); // synced=0 — survives offline
+  openId.value = id;
   saved.value = true;
   pastReports.value = await listReports();
   syncReports().catch(console.error); // fail-soft push; retried on next startup
@@ -158,7 +164,28 @@ async function openReport(meta: ReportMeta) {
     provider: meta.provider as Provider,
     model: meta.model,
   };
+  openId.value = meta.id;
   saved.value = true; // already persisted
+}
+
+async function removeReport(meta: ReportMeta) {
+  const ok = await invoke<boolean>("confirm_dialog", {
+    title: "Delete report",
+    message: `Delete the ${meta.start_date} → ${meta.end_date} report? This also removes it from the cloud and it is IRREVERSIBLE.`,
+  });
+  if (!ok) return;
+  error.value = "";
+  try {
+    await deleteReport(meta.id); // D1 first — see sync.ts
+    pastReports.value = await listReports();
+    if (openId.value === meta.id) {
+      report.value = "";
+      lastRun.value = null;
+      openId.value = null;
+    }
+  } catch (e) {
+    error.value = String(e);
+  }
 }
 </script>
 
@@ -243,17 +270,21 @@ async function openReport(meta: ReportMeta) {
       </div>
       <div class="report-grid-scroll">
         <div class="report-grid">
-          <button
-            v-for="r in filteredReports"
-            :key="r.id"
-            class="report-card"
-            @click="openReport(r)"
-          >
-            <div class="report-period">{{ r.start_date }} → {{ r.end_date }}</div>
-            <span class="pill" :class="r.style">{{ STYLE_LABELS[r.style as captionInfo['style']] }}</span>
-            <div class="report-model">{{ r.model }}</div>
-            <div class="report-generated">{{ new Date(r.generated_at).toLocaleString() }}</div>
-          </button>
+          <!-- A div, not a button: the delete control has to be a sibling of the
+               open control, and a button inside a button is invalid HTML. -->
+          <div v-for="r in filteredReports" :key="r.id" class="report-card">
+            <button class="report-open" @click="openReport(r)">
+              <div class="report-period">{{ r.start_date }} → {{ r.end_date }}</div>
+              <span class="pill" :class="r.style">{{ STYLE_LABELS[r.style as captionInfo['style']] }}</span>
+              <div class="report-model">{{ r.model }}</div>
+              <div class="report-generated">{{ new Date(r.generated_at).toLocaleString() }}</div>
+            </button>
+            <button
+              class="report-del"
+              :aria-label="`Delete the ${r.start_date} to ${r.end_date} report`"
+              @click="removeReport(r)"
+            >×</button>
+          </div>
           <p v-if="!filteredReports.length" class="muted">No reports match these filters.</p>
         </div>
       </div>
@@ -276,19 +307,48 @@ async function openReport(meta: ReportMeta) {
   margin-top: 0.5rem;
 }
 .report-card {
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+.report-card:hover {
+  border-color: var(--muted);
+}
+.report-open {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: inherit;
   padding: 0.75rem;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
-.report-card:hover {
-  border-color: var(--muted);
+/* ponytail: hover-reveal — a × on every card makes the grid noisy. Keyboard
+   users get it back via :focus-visible. */
+.report-del {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.35rem;
+  background: none;
+  border: 0;
+  padding: 0.1rem 0.25rem;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  opacity: 0;
+}
+.report-card:hover .report-del,
+.report-del:focus-visible {
+  opacity: 1;
+}
+.report-del:hover {
+  color: var(--down);
 }
 .report-period {
   font-weight: 600;

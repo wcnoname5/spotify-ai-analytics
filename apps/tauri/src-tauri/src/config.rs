@@ -141,6 +141,8 @@ pub struct AppConfig {
     spotify_user_id: String,
     worker_url: String,
     worker_auth_token: String,
+    /// Stack name the deploy used. Empty on installs deployed before it was recorded; the next deploy fills it in.
+    worker_name: String,
     configured: ConfiguredFlags,
     /// Config-derived readiness checks. The database-derived ones
     /// (`history_has_data`, `tokens_valid`) are composed in `lib/config.ts`,
@@ -175,6 +177,7 @@ pub fn read() -> AppConfig {
     let fernet_key = !get(&values, "TOKEN_ENCRYPT_KEY").is_empty();
     let worker_url = get(&values, "WORKER_URL");
     let worker_auth_token = get(&values, "WORKER_AUTH_TOKEN");
+    let worker_name = get(&values, "WORKER_NAME");
 
     let mut checks = BTreeMap::new();
     checks.insert("client_id".to_string(), client_id);
@@ -202,6 +205,7 @@ pub fn read() -> AppConfig {
         },
         worker_url,
         worker_auth_token,
+        worker_name,
         checks,
     }
 }

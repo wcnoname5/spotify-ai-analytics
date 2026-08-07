@@ -35,6 +35,8 @@ export interface AppConfig {
   spotify_user_id: string;
   worker_url: string;
   worker_auth_token: string;
+  /** Stack name the deploy used; empty on installs deployed before it was recorded. */
+  worker_name: string;
   configured: ConfiguredFlags;
   /** Config-derived readiness checks. DB-derived ones are added by runDoctor. */
   checks: Record<string, boolean>;
@@ -48,6 +50,7 @@ const BROWSER_FALLBACK: AppConfig = {
   spotify_user_id: "default",
   worker_url: "",
   worker_auth_token: "",
+  worker_name: "",
   configured: {
     client_id: false, gemini: false, openai: false, langfuse: false, langsmith: false, worker: false,
   },

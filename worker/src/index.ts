@@ -10,7 +10,7 @@ import {
   handlePostCursor,
   handlePostTokens,
 } from "./tokens";
-import { handleGetReports, handlePostReport } from "./reports";
+import { handleDeleteReport, handleGetReports, handlePostReport } from "./reports";
 import { runSync } from "./sync";
 
 export interface Env {
@@ -43,6 +43,11 @@ export default {
     }
     if (pathname === "/api/reports" && method === "POST") {
       return handlePostReport(request, env);
+    }
+    // ponytail: id in the query string, not /api/reports/:id — the router is
+    // exact-match and a path param would need a whole new matching style.
+    if (pathname === "/api/reports" && method === "DELETE") {
+      return handleDeleteReport(request, env);
     }
     if (pathname === "/api/tokens" && method === "GET") {
       return handleGetTokens(request, env);
