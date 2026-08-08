@@ -9,22 +9,21 @@ Architecture (full version in `docs/ARCHITECTURE.md`):
 - **Cloudflare D1** is the single source of truth (listening history + encrypted Spotify tokens)
 - **Cloudflare Worker** (TypeScript, `worker/`) is the *only* thing that talks to D1 — Bearer-token gated
 - **Worker cron** (hourly `scheduled()` handler in `worker/src/sync.ts`) pulls recent plays from the Spotify API into D1 directly
-- **Local SQLite** is a pull-only sync cache of D1 (never written to independently); MCP and report generation read it
+- **Local SQLite** is a pull-only sync cache of D1 (never written to independently); report generation reads it
 - **The desktop app owns setup** — config, OAuth, history import, deploy. Python is
-  down to LangGraph report generation and the MCP server.
+  down to LangGraph report generation only.
 
 ---
 
 ## Repo Layout
 
 ```
-packages/core/        # spotify_core: db/ report/ spotify_client/ spotify_utils/
+packages/core/        # spotify_core: db/ report/
 packages/shared-ts/   # TS imported by BOTH worker/ and apps/tauri/ (Fernet, PKCE, row ids, export parsing)
-apps/mcp/             # spotify_mcp: MCP server + Typer CLI (diagnostics + cloud pull only)
 apps/tauri/           # Tauri 2 desktop app (Vite + TS frontend, src-tauri/ Rust shell) — deps separate from worker/
 worker/               # Cloudflare Worker (TS) — migrations live in packages/core, not here
 data/                 # Local SQLite DBs and JSON exports — never commit data/*.db
-tests/                # Pytest suite (tests/core, tests/mcp)
+tests/                # Pytest suite (tests/core)
 ```
 
 ---
@@ -74,17 +73,14 @@ checkout then cannot read or write the database a packaged install uses.
 ```bash
 uv sync                                # install all Python dependencies
 uv run pytest                          # Python tests
-uv run spotify-mcp doctor              # environment readiness
-uv run spotify-mcp cloud pull          # refresh local SQLite cache from D1
 cd apps/tauri && npm test              # vitest: packages/shared-ts + frontend
 cd apps/tauri && npm run tauri dev     # run the app
 cd apps/tauri/src-tauri && cargo test  # Rust unit tests
 cd worker && npm run typecheck         # Worker typecheck (no unit tests by choice)
 ```
 
-Deploying the Worker is the app's job (Setup → Cloud sync → Deploy), not a CLI's.
-`spotify-mcp cloud deploy` still exists but is broken — it looks for a
-`worker/migrations/` directory that no longer exists.
+Setup, history sync, and Worker deploy are all the desktop app's job
+(Setup → Cloud sync → Deploy), not a CLI's.
 
 ---
 

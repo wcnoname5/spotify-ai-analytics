@@ -18,9 +18,10 @@ def setup_logging(
     level: str = "DEBUG",
     stream=sys.stdout,
 ) -> Path:
-    """Configure logging for app, test, or MCP server runs.
+    """Configure logging for app or test runs.
 
-    For MCP stdio servers, pass stream=sys.stderr to avoid corrupting stdout.
+    Pass stream=sys.stderr for a subprocess whose stdout carries data (e.g. the
+    report subprocess emits markdown on stdout).
     """
     from spotify_core import paths
 
@@ -33,12 +34,3 @@ def setup_logging(
     logger.add(log_file, level=level, encoding="utf-8")
     logger.add(stream, level=level)
     return log_file
-
-
-def setup_mcp_logging(log_name: str = "spotify_mcp", level: str = "DEBUG") -> Path:
-    """Set up logging for MCP stdio servers (stream → stderr, never stdout).
-
-    MCP stdio transport uses stdout for protocol messages — writing logs there
-    corrupts the channel. This function always streams to stderr.
-    """
-    return setup_logging(log_name=log_name, level=level, stream=sys.stderr)

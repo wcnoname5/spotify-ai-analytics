@@ -1,8 +1,7 @@
 """Typed exceptions for the local SQLite analytics layer.
 
-Kept separate from spotify_client errors because these failures are about
-local history data — not OAuth tokens — so callers should react differently
-(prompt the user to import history, not to re-authenticate).
+These failures are about local history data — not OAuth tokens — so callers
+should react by prompting the user to import history, not to re-authenticate.
 """
 
 

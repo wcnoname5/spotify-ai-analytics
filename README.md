@@ -88,7 +88,6 @@ npm run tauri dev
 | `worker/` | The Cloudflare Worker (TypeScript) |
 | `packages/shared-ts/` | Code imported by both the worker and the frontend |
 | `packages/core/` | Python: report generation, plus the shared SQL both languages use |
-| `apps/mcp/` | An optional MCP server for Claude Desktop — not part of the app |
 
 ```bash
 cd apps/tauri && npm test              # frontend + shared TS

@@ -1,14 +1,21 @@
 """Local-first report persistence: save with synced=0, push to the Worker,
 pull D1 rows behind a generated_at cursor. Outbox = the unsynced rows
 themselves; INSERT OR IGNORE + uuid ids make every direction idempotent."""
+from importlib.resources import files
 from pathlib import Path
 from typing import Optional, Union
 
 from loguru import logger
 
-from .local_sync import _EPOCH_ISO, _sql
 from .migrations import get_connection, init_history_db
 from .worker_client import WorkerClient
+
+_EPOCH_ISO = "1970-01-01T00:00:00Z"
+
+
+def _sql(name: str) -> str:
+    """Load a query body from db/sql/<name>.sql."""
+    return files("spotify_core.db.sql").joinpath(f"{name}.sql").read_text()
 
 REPORT_COLUMNS = (
     "id", "style", "period_type", "start_date", "end_date",

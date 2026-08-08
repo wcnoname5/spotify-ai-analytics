@@ -8,8 +8,6 @@ from spotify_core.db.queries import (
     get_top_artists,
     get_top_tracks,
     get_listening_summary,
-    get_listening_patterns,
-    get_recent_plays,
 )
 
 
@@ -168,114 +166,6 @@ class TestGetListeningSummary:
         assert summary["avg_mins_per_play"] == 2
 
 
-class TestGetListeningPatterns:
-    def test_returns_expected_keys(self, seeded_db):
-        patterns = get_listening_patterns(seeded_db)
-        for key in ("peak_hour", "peak_day_of_week", "most_active_date", "avg_plays_per_day"):
-            assert key in patterns
-
-    def test_peak_hour(self, seeded_db):
-        patterns = get_listening_patterns(seeded_db)
-        # All plays at T12:00:00Z → hour 12
-        assert patterns["peak_hour"] == 12
-
-    def test_peak_day_of_week(self, seeded_db):
-        patterns = get_listening_patterns(seeded_db)
-        # Jan 11 and Feb 1 are both Thursday → peak
-        assert patterns["peak_day_of_week"] == "Thursday"
-
-    def test_most_active_date_is_valid(self, seeded_db):
-        patterns = get_listening_patterns(seeded_db)
-        assert patterns["most_active_date"] is not None
-        # Should be a YYYY-MM-DD string
-        assert len(patterns["most_active_date"]) == 10
-
-    def test_avg_plays_per_day(self, seeded_db):
-        patterns = get_listening_patterns(seeded_db)
-        # 4 plays across 4 distinct days → 1.0
-        assert patterns["avg_plays_per_day"] == pytest.approx(1.0)
-
-    def test_date_filter_scopes_patterns(self, seeded_db):
-        patterns = get_listening_patterns(seeded_db, end_date="2024-01-31")
-        # Only Jan 10 + Jan 11 → 2 plays / 2 days = 1.0
-        assert patterns["avg_plays_per_day"] == pytest.approx(1.0)
-
-    def test_empty_db_returns_none_values(self, tmp_path):
-        db = str(tmp_path / "empty.db")
-        init_history_db(db)
-        patterns = get_listening_patterns(db)
-        assert patterns["peak_hour"] is None
-        assert patterns["peak_day_of_week"] is None
-        assert patterns["most_active_date"] is None
-        assert patterns["avg_plays_per_day"] is None
-
-
-@pytest.fixture()
-def seeded_db_tw(tmp_path):
-    """DB seeded with TW (+8) country — two plays at T16:00:00Z on 2024-01-10.
-
-    UTC view:  2024-01-10 (Wednesday), hour 16
-    TW local:  2024-01-11 (Thursday),  hour 00
-    """
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed_db(db, [
-        {"id": "1", "track_name": "A", "artist_name": "X",
-         "played_at": "2024-01-10T16:00:00Z", "ms_played": 200_000, "conn_country": "TW"},
-        {"id": "2", "track_name": "B", "artist_name": "X",
-         "played_at": "2024-01-10T16:01:00Z", "ms_played": 150_000, "conn_country": "TW"},
-    ])
-    return db
-
-
-class TestGetListeningPatternsTimezone:
-    def test_peak_hour_uses_local_time(self, seeded_db_tw):
-        patterns = get_listening_patterns(seeded_db_tw)
-        # UTC hour = 16, TW local (+8) = 0
-        assert patterns["peak_hour"] == 0
-
-    def test_peak_day_uses_local_time(self, seeded_db_tw):
-        patterns = get_listening_patterns(seeded_db_tw)
-        # UTC: 2024-01-10 = Wednesday; TW local: 2024-01-11 = Thursday
-        assert patterns["peak_day_of_week"] == "Thursday"
-
-    def test_most_active_date_uses_local_date(self, seeded_db_tw):
-        patterns = get_listening_patterns(seeded_db_tw)
-        # UTC date: 2024-01-10; TW local date: 2024-01-11
-        assert patterns["most_active_date"] == "2024-01-11"
-
-    def test_no_conn_country_falls_back_to_utc(self, seeded_db):
-        # seeded_db has no conn_country — should stay UTC (offset 0)
-        patterns = get_listening_patterns(seeded_db)
-        assert patterns["peak_hour"] == 12  # T12:00:00Z stays at 12
-
-
-class TestGetListeningPatternsMostActiveDateDetail:
-    def test_most_active_date_play_count(self, seeded_db_tw):
-        patterns = get_listening_patterns(seeded_db_tw)
-        # Both plays land on 2024-01-11 local TW — play_count = 2
-        assert patterns["most_active_date_play_count"] == 2
-
-    def test_most_active_date_total_mins(self, seeded_db_tw):
-        patterns = get_listening_patterns(seeded_db_tw)
-        # 200_000 + 150_000 = 350_000 ms = 5 min
-        assert patterns["most_active_date_total_mins"] == 5
-
-    def test_detail_none_when_db_empty(self, tmp_path):
-        db = str(tmp_path / "empty.db")
-        init_history_db(db)
-        patterns = get_listening_patterns(db)
-        assert patterns["most_active_date_play_count"] is None
-        assert patterns["most_active_date_total_mins"] is None
-
-    def test_detail_respects_date_filter(self, seeded_db):
-        # seeded_db: Jan 10, 11 and Feb 1, 10 — all with 1 play each.
-        # Filter to Jan only: most_active_date is one of the Jan dates (1 play).
-        # The detail query must not count Feb plays for that date.
-        patterns = get_listening_patterns(seeded_db, end_date="2024-01-31")
-        assert patterns["most_active_date_play_count"] == 1
-
-
 class TestHistoryNotInitializedError:
     """Analytics queries should raise HistoryNotInitializedError when the DB
     file is missing or the listening_history table has not been created."""
@@ -298,10 +188,6 @@ class TestHistoryNotInitializedError:
             get_top_tracks(db)
         with pytest.raises(HistoryNotInitializedError):
             get_listening_summary(db)
-        with pytest.raises(HistoryNotInitializedError):
-            get_listening_patterns(db)
-        with pytest.raises(HistoryNotInitializedError):
-            get_recent_plays(db)
 
     def test_initialized_empty_db_does_not_raise(self, tmp_path):
         # Empty-but-initialized DB is a valid state — queries should return

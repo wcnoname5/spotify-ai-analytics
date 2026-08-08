@@ -6,12 +6,15 @@ Two decisions explain everything else. Both are forced by constraints outside th
 code, not by preference.
 
 **1. Spotify only ever returns your last ~50 plays.** So something has to collect them
-on a schedule, keep running even when your app isn't up.
-That something is a **Cloudflare Worker** (runs the hourly cron) writing to **D1** (stores the result). It just collect and store data.
+on a schedule and keep running even when your app isn't up. That something is a
+**Cloudflare Worker** (runs the hourly cron) writing to **D1** (stores the result).
+It only collects and stores data.
 
-**2. Spotify's commercial approval is impractical for a hobby app**, so this can't be a service with accounts — every user runs their own copy against their own Cloudflare
-account.
-A download-and-run `.exe` with no runtime dependencies, which is why the app is **Tauri** and why nothing in the shipped path may assume `uv`, Python or Node exists.
+**2. Spotify's commercial approval is impractical for a hobby app**, so this can't be
+a service with accounts — every user runs their own copy against their own Cloudflare
+account. That copy is a download-and-run `.exe` with no runtime dependencies, which is
+why the app is **Tauri** and why nothing in the shipped path may assume `uv`, Python or
+Node exists.
 
 Much of the below is how those two decisions got implemented.
 
@@ -51,7 +54,7 @@ live in the code.
 - **The Worker is D1's only door**, and not by choice: D1 has no public protocol you
   can connect to. Access is only through a binding Cloudflare injects into a Worker,
   so `env.DB` in there is the only handle to the database that exists.
-- **Python ships with nothing.** Reports and MCP both run from a checkout only.
+- **Python ships with nothing.** Report generation runs from a checkout only.
 
 ## Who owns what
 
@@ -64,7 +67,7 @@ manages the two windows. It runs no queries.
 `.exe`.
 Two consequences: 
  - a broken Worker is a **Rust compile error** rather than a failed Deploy on someone's machine
- - the Worker's code is versioned with the app: The user needs to re-deploy the cloudflare if the new version changes the worker's code. 
+ - the Worker's code is versioned with the app: the user must re-deploy the Worker when a new app version changes the Worker's code.
 
 **Frontend TS** (`apps/tauri/src/`) owns everything else: analytics SQL, all Worker
 calls, PKCE, Fernet, export parsing. It reads SQLite via `tauri-plugin-sql` and
@@ -100,7 +103,9 @@ WebView. Config is the third such rule, split by direction: `config.rs` writes,
 
 **Python** is not in the installer. The report graph is a one-shot subprocess whose
 repo root resolves at *compile* time, so it only runs on the machine that built the
-binary. MCP is checkout-only and currently orphaned.
+binary — it is the only surviving Python. The old MCP server (and the Python Spotify
+client behind it) was removed on the `migrate-TS` branch; it is recoverable from the
+`mcp-python-archive` git tag, and any future version will likely be TypeScript.
 
 ## Data flow: one play to a chart
 
@@ -193,7 +198,7 @@ sidecar and a LangGraph.js rewrite open. **How reports ship is undecided.**
 | Keychain | `TOKEN_ENCRYPT_KEY` is plaintext in `config.json` |
 | macOS | `rfd` needs the main thread there; `lib.rs` is marked |
 | Shipping reports | v1 is dashboard-only |
-| MCP | Orphaned; may be folded back in later |
+| MCP | Removed on `migrate-TS` (see `mcp-python-archive` tag); may return later, likely in TS |
 | Report tombstones | A second machine keeps a stale local row, but never pushes it back, so D1 stays correct |
 | Export/API field merge | Both `INSERT OR IGNORE`, first writer wins. Affects `ms_played`/`platform`/`skipped` richness only, never a chart number |
 

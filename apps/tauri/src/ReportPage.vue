@@ -148,7 +148,6 @@ async function openReport(meta: ReportMeta) {
   const text = await getReportText(meta.id);
   if (text === null) return;
   report.value = text;
-  // TODO: 要讓上面印出的是html format不是
   caption.value = {
     analysisPeriod: `${meta.start_date} → ${meta.end_date}`,
     generated_at: meta.generated_at,
