@@ -94,6 +94,8 @@ langchain-google-genai + langsmith + langfuse（選用）+ pydantic + loguru + �
 
 ⚠️ 乾淨環境**不能設 `SPOTIFY_CONFIG`**。設了就會讀 repo 裡的 dev config，等於沒在驗打包路徑。
 
+⚠️ **隔離測試，碰不到你正式那組。** 測試用一個**新的 stack name**（例如 `spotify-analytics-e2e`）＋**另一個 Spotify Client ID**（dashboard 另開一個 app）：D1 是按名字分開的獨立資料庫，正式的 D1／Worker 一個 byte 都不會被動到，正式 cron 測試期間照常每小時收資料、**不會有 history gap**。因為在隔離環境（另一個帳號／VM／config）測，正式 `config.json` 從頭沒被改，測完刪掉測試的 Worker＋D1 即可，**沒有東西要切回來**。
+
 ### 做出安裝檔
 
 ```bash
