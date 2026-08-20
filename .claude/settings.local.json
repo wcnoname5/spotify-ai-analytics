@@ -10,6 +10,10 @@
       "Bash(git show *)"
     ]
   },
+  "skillOverrides": {
+    "python-logging": "off",
+    "api-error-enrichment": "name-only"
+  },
   "hooks": {
     "PreToolUse": [
       {

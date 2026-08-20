@@ -101,7 +101,7 @@ implemented twice and drifting:
 WebView. Config is the third such rule, split by direction: `config.rs` writes,
 `config_file.py` reads.
 
-**Python** is not in the installer. The report graph is a one-shot subprocess whose
+**Python** is not in the installer. The report agent is a one-shot subprocess whose
 repo root resolves at *compile* time, so it only runs on the machine that built the
 binary — it is the only surviving Python. The old MCP server (and the Python Spotify
 client behind it) was removed on the `migrate-TS` branch; it is recoverable from the

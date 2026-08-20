@@ -63,8 +63,18 @@ otherwise            ->  platformdirs config dir / config.json
 
 See `config.example.json`. Tunables with defaults live in `spotify_core/config.py`.
 
-Development: `$env:SPOTIFY_CONFIG="./dev.config.json"; npm run tauri dev` — a
-checkout then cannot read or write the database a packaged install uses.
+Development: set the variable in the *same shell*, using that shell's syntax:
+
+```powershell
+$env:SPOTIFY_CONFIG="./dev.config.json"; npm run tauri dev   # PowerShell
+```
+```bash
+export SPOTIFY_CONFIG="./dev.config.json" && npm run tauri dev   # Git Bash
+```
+
+A checkout then cannot read or write the database a packaged install uses. The
+`$env:` form is a no-op in bash, which silently leaves you on the packaged config
+— `cfg.dev` stays false and the dev-only Report tab never renders.
 
 ---
 

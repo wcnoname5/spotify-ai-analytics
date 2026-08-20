@@ -3,8 +3,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from spotify_core.report.observability import get_trace_url
-from spotify_core.report.prompts import compose_reviewer_system
+from spotify_core.report.prompts import report_struct
 
 _CORE_PYPROJECT = Path(__file__).resolve().parents[2] / "packages" / "core" / "pyproject.toml"
 
@@ -25,12 +24,12 @@ def test_report_extra_declares_langchain():
     assert "langchain" in _dep_names(extras["report"])
 
 
-def test_get_trace_url_none_without_callbacks():
-    assert get_trace_url([]) is None
-
-
-def test_reviewer_rubric_describes_output_fields():
-    rubric = compose_reviewer_system("listening_review", "dummy playbook")
-    assert rubric.strip()
-    assert "approved" in rubric
-    assert "feedback" in rubric
+def test_only_custom_ranges_skip_period_comparison():
+    """The two-playbook split turns on exactly one thing: a custom range must not be
+    compared against a preceding period (it has no aligned one), every calendar type
+    must be. Nothing else distinguishes them."""
+    custom = report_struct("custom")
+    assert "不要與其他區間比較" in custom
+    for period_type in ("weekly", "monthly", "quarterly", "yearly"):
+        assert "對比" in report_struct(period_type)
+        assert report_struct(period_type) != custom

@@ -5,7 +5,6 @@ start_date / end_date arguments. Each tool's docstring is its LLM-facing
 description. The three trend granularities are three separate tools — the LLM
 chooses which to call, guided by their docstrings.
 """
-from loguru import logger
 from langchain_core.tools import BaseTool, tool
 
 from ..db import queries
@@ -50,6 +49,7 @@ def make_report_tools(db_path: str) -> list[BaseTool]:
     def get_daily_activity_pattern(start_date: str, end_date: str) -> list[dict]:
         """Listening volume per weekday and per time-of-day segment (00:00-06:59,
         07:00-12:59, 13:00-18:59, 19:00-23:59) for the date range. Dates are ISO 'YYYY-MM-DD'."""
+        # TODO: consider align to (), use 24 hourly buckets instead of quarter-day segements
         return queries.get_daily_activity_pattern(
             db_path, start_date=start_date, end_date=end_date
         )
@@ -77,6 +77,7 @@ def make_report_tools(db_path: str) -> list[BaseTool]:
         return queries.get_monthly_trend(
             db_path, start_date=start_date, end_date=end_date
         )
+    # TODO: add tools for customized SQL runtimes on requested DB.
 
     tools: list[BaseTool] = [
         get_listening_summary,
@@ -87,5 +88,4 @@ def make_report_tools(db_path: str) -> list[BaseTool]:
         get_weekly_trend,
         get_monthly_trend,
     ]
-    logger.info("make_report_tools: built {} tools", len(tools))
     return tools

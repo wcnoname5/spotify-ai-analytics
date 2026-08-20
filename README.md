@@ -77,8 +77,19 @@ Requires [uv](https://docs.astral.sh/uv/), Node, and Rust.
 ```bash
 uv sync                                # Python dependencies
 cd apps/tauri && npm install
+```
 
-$env:SPOTIFY_CONFIG="./dev.config.json"  # keeps dev data out of your real install
+Then set `SPOTIFY_CONFIG` in the same shell — it keeps dev data out of your real
+install, and it is what enables dev-only UI:
+
+```powershell
+$env:SPOTIFY_CONFIG="./dev.config.json"   # PowerShell
+```
+```bash
+export SPOTIFY_CONFIG="./dev.config.json" # Git Bash
+```
+
+```bash
 npm run tauri dev
 ```
 

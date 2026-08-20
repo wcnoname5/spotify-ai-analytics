@@ -12,14 +12,9 @@ def test_cli_prints_report_to_stdout(monkeypatch, capsys):
         assert kw["style"] == "roast"
         assert kw["period_type"] == "weekly"
         assert kw["model"] == "fake-model"
+        return "# Weekly Roast"
 
-        class R:
-            text = "# Weekly Roast"
-            revision_count = 0
-
-        return R()
-
-    monkeypatch.setattr("spotify_core.report.graph.generate_report", fake_generate)
+    monkeypatch.setattr("spotify_core.report.agent.generate_report", fake_generate)
     monkeypatch.setattr(
         sys, "argv",
         ["report", "--style", "roast", "--start", "2026-07-06",

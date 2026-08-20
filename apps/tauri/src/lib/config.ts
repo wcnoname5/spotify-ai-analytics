@@ -21,7 +21,6 @@ export interface ConfiguredFlags {
   gemini: boolean;
   openai: boolean;
   langfuse: boolean;
-  langsmith: boolean;
   worker: boolean;
 }
 
@@ -52,7 +51,7 @@ const BROWSER_FALLBACK: AppConfig = {
   worker_auth_token: "",
   worker_name: "",
   configured: {
-    client_id: false, gemini: false, openai: false, langfuse: false, langsmith: false, worker: false,
+    client_id: false, gemini: false, openai: false, langfuse: false, worker: false,
   },
   checks: {},
 };

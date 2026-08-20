@@ -20,11 +20,11 @@ def main() -> int:
     args = p.parse_args()
 
     from spotify_core.config import settings
-    from spotify_core.report.graph import generate_report
+    from spotify_core.report.agent import generate_report
     from spotify_core.report.models import build_chat_model
 
     model = build_chat_model(args.provider, args.model or settings.gemini_model)
-    result = generate_report(
+    text = generate_report(
         style=args.style,
         start_date=args.start,
         end_date=args.end,
@@ -32,7 +32,7 @@ def main() -> int:
         model=model,
         period_type=args.period_type,
     )
-    print(result.text)
+    print(text)
 
     if not args.no_save:
         import os
@@ -53,8 +53,10 @@ def main() -> int:
                 "provider": args.provider,
                 "model": args.model or settings.gemini_model,
                 "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "revision_count": result.revision_count,
-                "report_text": result.text,
+                "report_text": text,
+                # Dead column: the app writes 0 too. Kept because the reports table
+                # spans D1, the Worker and the local cache.
+                "revision_count": 0,
             })
         except Exception as exc:  # fail-soft: no local row means nothing to push
             print(f"warning: report save failed ({exc})", file=sys.stderr)

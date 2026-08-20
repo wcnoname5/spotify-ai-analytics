@@ -77,11 +77,10 @@ const savedNotice = ref("");
 const showAll = ref(false);
 
 const configured = ref<ConfiguredFlags>({
-  client_id: false, gemini: false, openai: false, langfuse: false, langsmith: false, worker: false,
+  client_id: false, gemini: false, openai: false, langfuse: false, worker: false,
 });
 
-// Langfuse and LangSmith do the same job; picking one keeps the form short.
-type Tracing = "none" | "langfuse" | "langsmith";
+type Tracing = "none" | "langfuse";
 const tracing = ref<Tracing>("none");
 
 // Secrets are never read back into the form: `config get` reports only whether
@@ -93,8 +92,6 @@ const form = reactive({
   LANGFUSE_PUBLIC_KEY: "",
   LANGFUSE_SECRET_KEY: "",
   LANGFUSE_BASE_URL: "",
-  LANGSMITH_API_KEY: "",
-  LANGSMITH_PROJECT: "",
   WORKER_URL: "",
   WORKER_AUTH_TOKEN: "",
 });
@@ -125,7 +122,7 @@ const CHECK_LABELS: Record<string, string> = {
 
 const checks = computed(() => doctor.value?.checks ?? {});
 const hasLlm = computed(() => configured.value.gemini || configured.value.openai);
-const hasTracing = computed(() => configured.value.langfuse || configured.value.langsmith);
+const hasTracing = computed(() => configured.value.langfuse);
 const allReady = computed(() => doctor.value?.ready === true && hasLlm.value);
 
 // Dependency chain: `worker` must precede `oauth` and `history`,
@@ -183,7 +180,6 @@ async function refresh() {
     form.WORKER_URL = cfg.worker_url;
     configured.value = cfg.configured;
     if (cfg.configured.langfuse) tracing.value = "langfuse";
-    else if (cfg.configured.langsmith) tracing.value = "langsmith";
 
     let report = await runDoctor();
     // Generating the Fernet key takes no input and OAuth refuses to run without
@@ -223,14 +219,10 @@ onMounted(async () => {
   });
 });
 
-/** Keys belonging to the tracing provider the user did not pick. */
+/** Tracing keys to drop when the user opted out. */
 function unusedTracingKeys(): (keyof typeof form)[] {
-  if (tracing.value === "langfuse")
-    return ["LANGSMITH_API_KEY", "LANGSMITH_PROJECT"];
-  if (tracing.value === "langsmith")
-    return ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL"];
-  return ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL",
-          "LANGSMITH_API_KEY", "LANGSMITH_PROJECT"];
+  if (tracing.value === "langfuse") return [];
+  return ["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL"];
 }
 
 async function save() {
@@ -241,9 +233,6 @@ async function save() {
   const values = Object.fromEntries(
     Object.entries(form).filter(([k, v]) => v.trim() !== "" && !skip.has(k))
   ) as Record<string, string>;
-  // LangSmith only traces when the flag is on; setting the key alone does nothing.
-  if (tracing.value === "langsmith" && values.LANGSMITH_API_KEY)
-    values.LANGSMITH_TRACING = "true";
   // Nothing to write is a normal case -- the cloud deploy already saved its own
   // values -- but returning silently made the button look broken. Always give
   // the press an effect.
@@ -412,24 +401,18 @@ async function runStep(step: ManualStep) {
         </div>
       </div>
 
-      <!-- Optional tracing: Langfuse or LangSmith  -->
+      <!-- Optional tracing: Langfuse -->
       <div v-if="need('tracing')" class="card">
         <h3>Tracing <span class="hint">(optional)</span></h3>
         <div class="step">
           <label class="inline"><input type="radio" value="none" v-model="tracing" /> None</label>
           <label class="inline"><input type="radio" value="langfuse" v-model="tracing" /> Langfuse</label>
-          <label class="inline"><input type="radio" value="langsmith" v-model="tracing" /> LangSmith</label>
         </div>
 
         <template v-if="tracing === 'langfuse'">
           <label>Public key <input v-model="form.LANGFUSE_PUBLIC_KEY" type="password" :placeholder="configured.langfuse ? 'set — leave blank to keep' : ''" /></label>
           <label>Secret key <input v-model="form.LANGFUSE_SECRET_KEY" type="password" :placeholder="configured.langfuse ? 'set — leave blank to keep' : ''" /></label>
           <label>Base URL <input v-model="form.LANGFUSE_BASE_URL" placeholder="https://cloud.langfuse.com" /></label>
-        </template>
-
-        <template v-else-if="tracing === 'langsmith'">
-          <label>API key <input v-model="form.LANGSMITH_API_KEY" type="password" :placeholder="configured.langsmith ? 'set — leave blank to keep' : ''" /></label>
-          <label>Project <input v-model="form.LANGSMITH_PROJECT" placeholder="spotify-ai-analytics" /></label>
         </template>
         <div v-if="!showAll" class="step">
           <button class="btn current" @click="save">Save and continue</button>

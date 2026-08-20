@@ -19,13 +19,10 @@
   "GEMINI_API_KEY": "",
   "OPENAI_API_KEY": "",
 
-  "_comment_tracing": "Optional. Langfuse needs all three keys or none. LangSmith needs LANGSMITH_TRACING=true as well as the key; set LANGSMITH_ENDPOINT only if your region differs from the default.",
+  "_comment_tracing": "Optional. All three keys or none.",
   "LANGFUSE_PUBLIC_KEY": "",
   "LANGFUSE_SECRET_KEY": "",
   "LANGFUSE_BASE_URL": "",
-  "LANGSMITH_TRACING": "",
-  "LANGSMITH_API_KEY": "",
-  "LANGSMITH_PROJECT": "",
 
   "LOG_LEVEL": "INFO"
 }

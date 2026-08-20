@@ -1,11 +1,7 @@
 """LLM provider factory for the report graph.
 
-build_chat_model dispatches on a provider name and returns a LangChain
-BaseChatModel. Google is the only implemented provider in v1; OpenAI and
-Anthropic are skeletons with a final signature so enabling them later is a
-localized change.
+build_chat_model dispatches on a provider name and returns a LangChain BaseChatModel.
 """
-from loguru import logger
 from langchain_core.language_models import BaseChatModel
 
 
@@ -22,24 +18,21 @@ def build_chat_model(provider: str, model: str) -> BaseChatModel:
     """
     from spotify_core.config import settings
 
-    logger.debug("build_chat_model: provider={} model={}", provider, model)
     if provider == "google":
         if not settings.gemini_api_key:
             raise ValueError(
-                "GEMINI_API_KEY is not set. Run `spotify-mcp setup` to configure LLM keys."
+                "GEMINI_API_KEY is not set."
             )
         from langchain_google_genai import ChatGoogleGenerativeAI
-        logger.info("build_chat_model: ChatGoogleGenerativeAI model={}", model)
         return ChatGoogleGenerativeAI(
             model=model, temperature=settings.temperature, google_api_key=settings.gemini_api_key
         )
     if provider == "openai":
         if not settings.openai_api_key:
             raise ValueError(
-                "OPENAI_API_KEY is not set. Run `spotify-mcp setup` to configure LLM keys."
+                "OPENAI_API_KEY is not set."
             )
         from langchain_openai import ChatOpenAI
-        logger.info("build_chat_model: ChatOpenAI model={}", model)
         return ChatOpenAI(model=model, temperature=settings.temperature, api_key=settings.openai_api_key)
     if provider == "anthropic":
         # TODO: implement the Anthropic provider branch (ChatAnthropic).

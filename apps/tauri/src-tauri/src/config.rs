@@ -59,6 +59,11 @@ fn platform_config_dir() -> PathBuf {
         .join(APP_DIRS[1])
 }
 
+/// True when `SPOTIFY_CONFIG` is set to something non-empty.
+fn override_is_set() -> bool {
+    std::env::var("SPOTIFY_CONFIG").is_ok_and(|v| !v.trim().is_empty())
+}
+
 /// The active config file. See the module docs for the resolution rule.
 pub fn config_path() -> PathBuf {
     match std::env::var("SPOTIFY_CONFIG") {
@@ -87,6 +92,10 @@ type Values = BTreeMap<String, String>;
 fn load_values() -> Values {
     let path = config_path();
     let Ok(text) = std::fs::read_to_string(&path) else {
+        // A missing default path is first-run; a missing explicit one is a mistake.
+        if override_is_set() {
+            eprintln!("config: SPOTIFY_CONFIG is set but {} cannot be read", path.display());
+        }
         return Values::new();
     };
     // A corrupt file must not brick the app into an unopenable state: an empty
@@ -121,7 +130,6 @@ pub struct ConfiguredFlags {
     gemini: bool,
     openai: bool,
     langfuse: bool,
-    langsmith: bool,
     worker: bool,
 }
 
@@ -185,8 +193,9 @@ pub fn read() -> AppConfig {
 
     AppConfig {
         env_file: config_path().display().to_string(),
-        // `dev` now means exactly "running against a non-default config file".
-        dev: std::env::var("SPOTIFY_CONFIG").is_ok_and(|v| !v.trim().is_empty()),
+        // Requires the file to exist: a typo'd path must not enable dev-only UI
+        // on top of an empty config, where every dev feature fails for want of keys.
+        dev: override_is_set() && config_path().exists(),
         history_db_path: history_db_path(&values).display().to_string(),
         spotify_client_id,
         spotify_user_id: {
@@ -200,7 +209,6 @@ pub fn read() -> AppConfig {
             langfuse: !get(&values, "LANGFUSE_PUBLIC_KEY").is_empty()
                 && !get(&values, "LANGFUSE_SECRET_KEY").is_empty()
                 && !get(&values, "LANGFUSE_BASE_URL").is_empty(),
-            langsmith: !get(&values, "LANGSMITH_API_KEY").is_empty(),
             worker: !worker_url.is_empty() && !worker_auth_token.is_empty(),
         },
         worker_url,
@@ -252,10 +260,25 @@ pub fn write(pairs: &[String]) -> Result<String, String> {
         if key.is_empty() {
             return Err(format!("expected KEY=VALUE, got {pair:?}"));
         }
-        values.insert(key.to_string(), value.trim().to_string());
+        let value = value.trim();
+        let value = if key == "WORKER_URL" { normalize_worker_url(value) } else { value.to_string() };
+        values.insert(key.to_string(), value);
     }
     save_values(&values)?;
     Ok(config_path().display().to_string())
+}
+
+/// Add the scheme when missing and drop a trailing slash.
+///
+/// Every caller builds requests as `${worker_url}/api/...`, so a scheme-less value
+/// resolves relative to the app origin and fails the Tauri HTTP scope check.
+fn normalize_worker_url(raw: &str) -> String {
+    let trimmed = raw.trim().trim_end_matches('/');
+    if trimmed.is_empty() || trimmed.contains("://") {
+        trimmed.to_string()
+    } else {
+        format!("https://{trimmed}")
+    }
 }
 
 /// Generate `TOKEN_ENCRYPT_KEY` if absent. Returns whether one was created.
@@ -381,6 +404,34 @@ mod tests {
         assert!(!cfg.configured.client_id);
         assert!(!cfg.configured.worker);
         assert_eq!(cfg.worker_url, "");
+        // A path that does not resolve must not count as dev, or the Report tab
+        // renders over an empty config and dies for want of GEMINI_API_KEY.
+        assert!(!cfg.dev);
+    }
+
+    #[test]
+    fn worker_url_is_stored_with_a_scheme_and_no_trailing_slash() {
+        let dir = tmpdir();
+        let _env = Env::with(Some(&dir.join("worker.config.json")));
+
+        write(&["WORKER_URL=w.workers.dev".into()]).unwrap();
+        assert_eq!(read().worker_url, "https://w.workers.dev");
+
+        write(&["WORKER_URL=https://w.workers.dev/".into()]).unwrap();
+        assert_eq!(read().worker_url, "https://w.workers.dev");
+
+        // Not every value gets a scheme bolted on.
+        write(&["SPOTIFY_CLIENT_ID=abc".into()]).unwrap();
+        assert_eq!(read().spotify_client_id, "abc");
+    }
+
+    #[test]
+    fn an_existing_override_is_dev() {
+        let dir = tmpdir();
+        let target = dir.join("dev.config.json");
+        std::fs::write(&target, "{}").unwrap();
+        let _env = Env::with(Some(&target));
+        assert!(read().dev);
     }
 
     #[test]
