@@ -6,14 +6,8 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-// ponytail: the last spawn in the app, and dev-only. The report is out of scope
-// for the first release (`ReportPage` is hidden unless the app is running against
-// a dev config). It goes when the report backend is settled — a PyInstaller
-// sidecar or LangGraph.js — and `repo_root()` goes with it.
-//
-// `run_setup_step` and its `spotify-mcp` runner used to be here too. Every step
-// it dispatched (oauth, import, sync) is now in the app or on the Worker, so the
-// list shrank to nothing rather than being replaced.
+// ponytail: the report (pyhton) last spawn in the app, and dev-only by now.
+// consider a sidecar or migrate to JS if a report is needed to packaged to users.
 const REPORT_CMD: &[&str] = &["uv", "run", "python", "-m", "spotify_core.report"];
 
 /// Repo root, resolved at *compile* time — so anything using this only works on
@@ -209,13 +203,15 @@ async fn generate_report(
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let repo_root = repo_root();
+        // Handed over path directly to Python
+        let db_path = config::history_db().display().to_string();
         let out = Command::new(REPORT_CMD[0])
             .args(&REPORT_CMD[1..])
             .args([
                 "--style", &style, "--start", &start, "--end", &end,
                 "--period-type", &period_type,
                 "--provider", &provider, "--model", &model,
-                "--no-save",
+                "--db", &db_path,
             ])
             .current_dir(&repo_root)
             .env("PYTHONUTF8", "1")

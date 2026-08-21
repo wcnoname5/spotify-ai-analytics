@@ -177,6 +177,12 @@ fn history_db_path(values: &Values) -> PathBuf {
     }
 }
 
+/// The resolved `history.db`. `read()` exposes it only as a private field of a
+/// `Serialize` payload; the report subprocess needs the value.
+pub fn history_db() -> PathBuf {
+    history_db_path(&load_values())
+}
+
 pub fn read() -> AppConfig {
     let values = load_values();
 

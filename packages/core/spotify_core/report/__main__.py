@@ -2,6 +2,9 @@
 
 Contract (spawned by the Tauri Rust backend): report markdown on stdout only,
 diagnostics on stderr, non-zero exit on failure.
+
+Nothing is persisted here — the app writes reports (`queries.ts::saveReportLocal`,
+pushed by `sync.ts::syncReports`). A headless run prints and exits.
 """
 import argparse
 import sys
@@ -16,7 +19,6 @@ def main() -> int:
     p.add_argument("--db", default=None, help="history.db path (default: settings)")
     p.add_argument("--provider", default="google")
     p.add_argument("--model", default=None, help="default: settings.gemini_model")
-    p.add_argument("--no-save", action="store_true", help="skip local save + push (throwaway run)")
     args = p.parse_args()
 
     from spotify_core.config import settings
@@ -33,43 +35,6 @@ def main() -> int:
         period_type=args.period_type,
     )
     print(text)
-
-    if not args.no_save:
-        import os
-        import uuid
-        from datetime import datetime, timezone
-
-        from spotify_core.db.report_store import push_unsynced, save_report_local
-        from spotify_core.db.worker_client import WorkerClient
-
-        db_path = str(args.db or settings.history_db_path)
-        try:
-            save_report_local(db_path, {
-                "id": str(uuid.uuid4()),
-                "style": args.style,
-                "period_type": args.period_type,
-                "start_date": args.start,
-                "end_date": args.end,
-                "provider": args.provider,
-                "model": args.model or settings.gemini_model,
-                "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "report_text": text,
-                # Dead column: the app writes 0 too. Kept because the reports table
-                # spans D1, the Worker and the local cache.
-                "revision_count": 0,
-            })
-        except Exception as exc:  # fail-soft: no local row means nothing to push
-            print(f"warning: report save failed ({exc})", file=sys.stderr)
-        else:
-            worker_url = os.environ.get("WORKER_URL")
-            worker_token = os.environ.get("WORKER_AUTH_TOKEN")
-            if worker_url and worker_token:
-                try:
-                    with WorkerClient(worker_url, worker_token) as worker:
-                        push_unsynced(db_path, worker)
-                except Exception as exc:  # fail-soft: row stays synced=0, retried next sync
-                    print(f"warning: report push failed ({exc})", file=sys.stderr)
-
     return 0
 
 
