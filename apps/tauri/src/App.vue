@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import PlotChart from "./components/PlotChart.vue";
 import ReportPage from "./ReportPage.vue";
+import TimelinePage from "./TimelinePage.vue";
 import { getConfig } from "./lib/config";
 import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
@@ -35,18 +36,13 @@ const RANGES: { key: RangeKey; label: string }[] = [
   { key: "all", label: "All time" },
 ];
 
-const page = ref<"dashboard" | "report">("dashboard");
+const page = ref<"dashboard" | "timeline" | "report">("dashboard");
 
 /** Setup now lives in its own window (Rust get-or-creates it). */
 const openSetup = () => invoke("open_setup_window").catch(console.error);
 
 /** Which .env this session resolved to — empty unless it is a non-default one. */
 const envBadge = ref("");
-
-/**
- * pontytail :Gates the Report tab in current production builds. deletes it when report is ready to ship.
- */
-const isDev = ref(false);
 
 // The main window starts hidden. An unconfigured environment shows only the
 // Setup window; a configured one reveals the dashboard. 
@@ -57,8 +53,7 @@ onMounted(async () => {
   try {
     const cfg = await getConfig();
     configured = cfg.configured.client_id;
-    isDev.value = cfg.dev;
-    if (cfg.dev) envBadge.value = `DEV · ${cfg.env_file}`;
+   if (cfg.dev) envBadge.value = `DEV · ${cfg.env_file}`;
   } catch (e) {
     console.error("first-run check failed:", e);
   }
@@ -317,15 +312,12 @@ const trendTraces = computed(() => [
     <button v-if="isTauri" class="btn gear" title="Setup" aria-label="Setup" @click="openSetup">⚙</button>
   </header>
 
-  <!-- ponytail: Reports are dev-only until the Python backend ships, and a one-item nav is
-       just noise, so the whole bar goes with them. `page` stays "dashboard". -->
-  <template v-if="isDev">
-    <nav class="filters">
-      <button class="btn nav-btn" :class="{ current: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
-      <button class="btn nav-btn" :class="{ current: page === 'report' }" @click="page = 'report'">Report</button>
-    </nav>
-    <hr class="nav-divider" />
-  </template>
+  <nav class="filters">
+    <button class="btn nav-btn" :class="{ current: page === 'dashboard' }" @click="page = 'dashboard'">Dashboard</button>
+    <button class="btn nav-btn" :class="{ current: page === 'timeline' }" @click="page = 'timeline'">Timeline</button>
+    <button class="btn nav-btn" :class="{ current: page === 'report' }" @click="page = 'report'">Report</button>
+  </nav>
+  <hr class="nav-divider" />
 
   <div v-show="page === 'dashboard'">
   <div class="filters">
@@ -452,10 +444,9 @@ const trendTraces = computed(() => [
   </div>
   </div>
 
-  <!--ponytail: v-if, not v-show: keeps the component and its listReports() query from ever
-       mounting in a packaged build. -->
-  <ReportPage v-if="isDev" v-show="page === 'report'" />
-
+  <!-- v-if: timeline's query only runs once the tab is actually opened. -->
+  <TimelinePage v-if="page === 'timeline'" :dark="dark" />
+  <ReportPage v-if="page === 'report'" />
 
 </template>
 

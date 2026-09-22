@@ -8,6 +8,7 @@ import trendDailySql from "@sql/trend_daily.sql?raw";
 import trendWeeklySql from "@sql/trend_weekly.sql?raw";
 import trendMonthlySql from "@sql/trend_monthly.sql?raw";
 import playsByHourSql from "@sql/plays_by_hour.sql?raw";
+import listeningTimelineSql from "@sql/listening_timeline.sql?raw";
 import dataRangeSql from "@sql/data_range.sql?raw";
 import listReportsSql from "@sql/list_reports.sql?raw";
 import getReportSql from "@sql/get_report.sql?raw";
@@ -15,6 +16,8 @@ import countReportsForPeriodSql from "@sql/count_reports_for_period.sql?raw";
 import insertReportSql from "@sql/insert_report.sql?raw";
 import deleteReportSql from "@sql/delete_report.sql?raw";
 import { getDb } from "./db";
+// The row shape lives with the layout code that consumes it, not here.
+import type { TimelinePlay } from "./gantt";
 import type { ReportRow } from "./sync";
 
 export interface Range {
@@ -116,6 +119,12 @@ export interface PlaysByHour {
 export async function playsByHour(range: Range): Promise<PlaysByHour[]> {
   const db = await getDb();
   return db.select<PlaysByHour[]>(playsByHourSql, [range.start, range.end, tzModifier()]);
+}
+
+/** One row per play with a derived start — the Gantt timeline's input. */
+export async function listeningTimeline(range: Range): Promise<TimelinePlay[]> {
+  const db = await getDb();
+  return db.select<TimelinePlay[]>(listeningTimelineSql, [range.start, range.end, tzModifier()]);
 }
 
 /** Global min/max played_at — drives the date inputs' min/max validation. */
