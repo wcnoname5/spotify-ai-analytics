@@ -1,8 +1,6 @@
-// Authorization Code with PKCE, the flow Spotify requires (Implicit Grant was
-// removed in Nov 2025). WebCrypto only — this has to run in a WebView.
+// Authorization Code with PKCE, WebCrypto only, has to run in a WebView.
 //
-// Redirect URI is always http://127.0.0.1:<port>/callback, never `localhost`:
-// Spotify stopped accepting `localhost` in Nov 2025.
+// Redirect URI is always http://127.0.0.1:<port>/callback
 
 const AUTHORIZE_URL = "https://accounts.spotify.com/authorize";
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
@@ -14,9 +12,7 @@ export const CALLBACK_PORT = 8888;
 export const redirectUri = (port: number = CALLBACK_PORT) =>
   `http://127.0.0.1:${port}/callback`;
 
-/** Scopes the app actually uses: recently-played for sync, the rest for the
- *  MCP playback tools. Asking for more than this would be asking the user to
- *  approve capabilities that do not exist. */
+// first is for sync, others are legacies from MCP tools
 export const SCOPES = [
   "user-read-recently-played",
   "user-read-playback-state",
@@ -24,7 +20,7 @@ export const SCOPES = [
   "user-read-currently-playing",
 ].join(" ");
 
-/** base64url without padding — what RFC 7636 specifies for both values. */
+/** base64url without padding: what RFC 7636 specifies for both values. */
 function b64urlNoPad(bytes: Uint8Array): string {
   let raw = "";
   for (const b of bytes) raw += String.fromCharCode(b);
