@@ -1,4 +1,4 @@
-"""LLM provider factory for the report graph.
+"""LLM provider factory for the report agent.
 
 build_chat_model dispatches on a provider name and returns a LangChain BaseChatModel.
 """
@@ -9,12 +9,11 @@ def build_chat_model(provider: str, model: str) -> BaseChatModel:
     """Return a chat model for the given provider.
 
     Args:
-        provider: One of "google", "openai", "anthropic".
+        provider: One of "google", "openai".
         model: Provider-specific model name, e.g. "gemini-2.5-flash".
 
     Raises:
         ValueError: Unknown provider, or the provider's API key is missing.
-        NotImplementedError: provider is "openai" or "anthropic" (v1 skeletons).
     """
     from spotify_core.config import settings
 
@@ -34,7 +33,4 @@ def build_chat_model(provider: str, model: str) -> BaseChatModel:
             )
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(model=model, temperature=settings.temperature, api_key=settings.openai_api_key)
-    if provider == "anthropic":
-        # TODO: implement the Anthropic provider branch (ChatAnthropic).
-        raise NotImplementedError("Anthropic provider is not implemented yet.")
     raise ValueError(f"Unknown LLM provider: {provider!r}")

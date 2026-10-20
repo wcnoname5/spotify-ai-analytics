@@ -1,90 +1,35 @@
 """Tests for packages/core/spotify_core/db."""
-import pytest
 import sqlite3
-from pathlib import Path
-from spotify_core.db.migrations import init_db, init_history_db, get_connection
-from spotify_core.db.schema import ALL_DDL, SPOTIFY_TOKENS_DDL, HISTORY_DDL
+
+import pytest
+
+from spotify_core.db.migrations import get_connection
+from spotify_core.db.schema import all_ddl
 
 
-@pytest.mark.unit
-def test_init_db_creates_file(tmp_path):
-    """init_db creates the DB file and parent directory."""
-    db_path = tmp_path / "subdir" / "test.db"
-    assert not db_path.exists()
-    init_db(db_path)
-    assert db_path.exists()
+def test_migrations_create_the_tables(history_db):
+    with get_connection(history_db()) as conn:
+        def cols(table):
+            return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+        assert {"id", "track_id", "track_name", "artist_name", "album_name",
+                "played_at", "ms_played", "source"} <= cols("listening_history")
+        assert {"user_id", "access_token", "refresh_token", "expires_at", "scopes"} <= cols("spotify_tokens")
+        assert {"key", "value"} <= cols("sync_state")
 
 
-@pytest.mark.unit
-def test_init_db_idempotent(tmp_path):
-    """Calling init_db twice does not raise (IF NOT EXISTS semantics)."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    init_db(db_path)  # second call must not raise
+def test_migrations_are_rerunnable(history_db):
+    """cloudflare.rs re-applies every migration on each deploy, which is only
+    safe while every statement is `IF NOT EXISTS`."""
+    db = history_db()
+    with sqlite3.connect(db) as conn:
+        for ddl in all_ddl():
+            conn.execute(ddl)
 
 
-@pytest.mark.unit
-def test_listening_history_table_created(tmp_path):
-    """listening_history table exists with correct columns after init."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    with get_connection(db_path) as conn:
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(listening_history)")}
-    expected = {"id", "track_id", "track_name", "artist_name", "album_name",
-                "played_at", "ms_played", "source"}
-    assert expected.issubset(cols)
-
-
-@pytest.mark.unit
-def test_spotify_tokens_table_created(tmp_path):
-    """spotify_tokens table exists with correct columns after init."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    with get_connection(db_path) as conn:
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(spotify_tokens)")}
-    expected = {"user_id", "access_token", "refresh_token", "expires_at", "scopes"}
-    assert expected.issubset(cols)
-
-
-@pytest.mark.unit
-def test_insert_and_read_listening_history(tmp_path):
-    """Can insert a row and read it back from listening_history."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    with get_connection(db_path) as conn:
-        conn.execute(
-            "INSERT INTO listening_history (id, track_id, track_name, artist_name, played_at, source) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            ("hash123", "track001", "Test Song", "Test Artist", "2024-01-15T08:30:00", "api")
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM listening_history WHERE id = ?", ("hash123",)).fetchone()
-    assert row["track_name"] == "Test Song"
-    assert row["source"] == "api"
-
-
-@pytest.mark.unit
-def test_insert_and_read_spotify_tokens(tmp_path):
-    """Can insert a token row and read it back from spotify_tokens."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    with get_connection(db_path) as conn:
-        conn.execute(
-            "INSERT INTO spotify_tokens (user_id, access_token, refresh_token, expires_at) "
-            "VALUES (?, ?, ?, ?)",
-            ("user1", "encrypted_access", "encrypted_refresh", "2024-12-31T23:59:59")
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM spotify_tokens WHERE user_id = ?", ("user1",)).fetchone()
-    assert row["access_token"] == "encrypted_access"
-
-
-@pytest.mark.unit
-def test_source_constraint(tmp_path):
+def test_source_constraint(history_db):
     """source column CHECK constraint rejects invalid values."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    with get_connection(db_path) as conn:
+    with get_connection(history_db()) as conn:
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute(
                 "INSERT INTO listening_history (id, track_id, played_at, source) VALUES (?, ?, ?, ?)",
@@ -92,53 +37,13 @@ def test_source_constraint(tmp_path):
             )
 
 
-@pytest.mark.unit
-def test_get_connection_row_factory(tmp_path):
+def test_get_connection_row_factory(history_db):
     """get_connection sets row_factory so columns are accessible by name."""
-    db_path = tmp_path / "test.db"
-    init_db(db_path)
-    conn = get_connection(db_path)
+    db = history_db([{"id": "h3", "track_id": "t3", "played_at": "2024-01-01T00:00:00Z", "ms_played": 0}])
+    conn = get_connection(db)
     try:
-        conn.execute(
-            "INSERT INTO listening_history (id, track_id, played_at) VALUES (?, ?, ?)",
-            ("h3", "t3", "2024-01-01T00:00:00")
-        )
-        conn.commit()
         row = conn.execute("SELECT id, track_id FROM listening_history").fetchone()
         assert row["id"] == "h3"
         assert row["track_id"] == "t3"
     finally:
         conn.close()
-
-
-@pytest.mark.unit
-def test_history_ddl_contains_sync_state(tmp_path):
-    """HISTORY_DDL creates sync_state table."""
-    db_path = tmp_path / "test.db"
-    with sqlite3.connect(db_path) as conn:
-        for ddl in HISTORY_DDL:
-            conn.execute(ddl)
-    with sqlite3.connect(db_path) as conn:
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(sync_state)")}
-    assert {"key", "value"}.issubset(cols)
-
-
-@pytest.mark.unit
-def test_init_history_db_creates_tables(tmp_path):
-    """init_history_db creates listening_history and sync_state."""
-    db_path = tmp_path / "history.db"
-    init_history_db(db_path)
-    with sqlite3.connect(db_path) as conn:
-        tables = {row[0] for row in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )}
-    assert "listening_history" in tables
-    assert "sync_state" in tables
-
-
-@pytest.mark.unit
-def test_init_history_db_idempotent(tmp_path):
-    """Calling init_history_db twice does not raise."""
-    db_path = tmp_path / "history.db"
-    init_history_db(db_path)
-    init_history_db(db_path)

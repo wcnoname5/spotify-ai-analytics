@@ -1,13 +1,13 @@
 [project]
 name = "spotify-analytics-core"
 version = "0.2.0"
-description = "Core analytics, agent, and Spotify client library for the Spotify AI Analytics project."
+description = "Listening-history analytics queries and LLM report agent for the Spotify AI Analytics project."
 readme = "README.md"
 license = { text = "MIT" }
 license-files = ["LICENSE"]
 authors = [{ name = "WC Chang" }]
 requires-python = ">=3.12"
-keywords = ["spotify", "analytics", "mcp", "listening-history"]
+keywords = ["spotify", "analytics", "listening-history"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
@@ -19,22 +19,19 @@ classifiers = [
 dependencies = [
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
-    "httpx>=0.27",
-    "python-dotenv>=1.0",
     "platformdirs>=4.0",
     "loguru>=0.7",
 ]
 
 [project.optional-dependencies]
 report = [
-    "langgraph>=1.0",
     "langchain-core>=1.0",
     # langfuse.langchain.CallbackHandler does a bare `import langchain`, so the
     # meta-package is required at runtime — langchain-core alone is not enough.
     "langchain>=1.0",
     "langchain-google-genai>=4.0",
+    "langchain-openai>=1.0",
     "langfuse>=3.0",
-    "loguru>=0.7",
 ]
 
 [project.urls]

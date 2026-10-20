@@ -1,3 +1,3 @@
 # spotify-analytics-core
 
-Core analytics, agent, database, and Spotify client library for Spotify AI Analytics.
+Listening-history analytics queries and the LLM report agent for Spotify AI Analytics.

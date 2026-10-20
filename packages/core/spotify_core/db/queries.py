@@ -1,7 +1,6 @@
 """SQL-backed analytics queries against history.db.
 
-All functions take a db_path and return plain Python structures —
-no Polars or in-memory data loading required.
+All functions take a db_path and return plain Python structures.
 
 Query bodies live in packages/core/spotify_core/db/sql/*.sql (shared with the
 Tauri dashboard's TS data layer) — this module only loads, binds params, and
@@ -27,7 +26,7 @@ def _ensure_history_db(db_path: str) -> None:
     """Raise HistoryNotInitializedError if the file or listening_history table is missing."""
     if not os.path.exists(db_path):
         raise HistoryNotInitializedError(
-            f"History DB not found at {db_path}. Run import_history_from_json or sync_history first."
+            f"History DB not found at {db_path}. Import or sync history in the app first."
         )
     conn = get_connection(db_path)
     try:
@@ -38,7 +37,7 @@ def _ensure_history_db(db_path: str) -> None:
         conn.close()
     if row is None:
         raise HistoryNotInitializedError(
-            f"listening_history table missing in {db_path}. Run import_history_from_json or sync_history first."
+            f"listening_history table missing in {db_path}. Import or sync history in the app first."
         )
 
 
@@ -135,7 +134,6 @@ def get_top_tracks(
         conn.close()
 
 
-# Day of Week Map
 _DOW_MAP = {
     "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday",
     "4": "Thursday", "5": "Friday", "6": "Saturday",
@@ -144,64 +142,15 @@ _DOW_MAP = {
 # Stacking order for the daily-activity time segments.
 _SEGMENT_ORDER = {"00:00-06:59": 0, "07:00-12:59": 1, "13:00-18:59": 2, "19:00-23:59": 3}
 
-# Country code → UTC offset in hours. Fractional-offset countries (e.g. IN +5:30) are
-# approximated to the nearest integer. Multi-timezone countries (US, CA, RU, AU) use
-# their most-populated timezone as a rough default.
-_COUNTRY_UTC_OFFSET: dict[str, int] = {
-    # Asia-Pacific
-    "TW": 8, "CN": 8, "HK": 8, "SG": 8, "MY": 8, "PH": 8, "BN": 8,
-    "JP": 9, "KR": 9,
-    "TH": 7, "VN": 7, "ID": 7, "CX": 7,
-    "IN": 5,  # IST is +5:30; approximated
-    "PK": 5, "UZ": 5,
-    "NP": 6,  # +5:45 approximated
-    "AU": 10, "NZ": 12,
-    # Middle East
-    "AE": 4, "OM": 4, "MU": 4,
-    "SA": 3, "IQ": 3, "KW": 3, "QA": 3, "BH": 3, "YE": 3, "JO": 3, "KE": 3,
-    "IR": 4,  # +3:30 approximated
-    "TR": 3,
-    # Europe (standard offsets; DST not accounted for)
-    "GB": 0, "IE": 0, "PT": 0, "IS": 0,
-    "FR": 1, "DE": 1, "IT": 1, "ES": 1, "NL": 1, "BE": 1, "LU": 1,
-    "AT": 1, "CH": 1, "SE": 1, "NO": 1, "DK": 1, "PL": 1, "CZ": 1,
-    "SK": 1, "HU": 1, "HR": 1, "SI": 1, "RS": 1, "BA": 1, "ME": 1, "AL": 1,
-    "FI": 2, "EE": 2, "LV": 2, "LT": 2, "GR": 2, "RO": 2, "BG": 2, "UA": 2,
-    "CY": 2, "IL": 2, "EG": 2, "ZA": 2,
-    "RU": 3,  # Moscow time (Russia spans many zones)
-    # Americas
-    "US": -5, "CA": -5,  # Eastern; both span multiple zones
-    "MX": -6,
-    "CO": -5, "PE": -5, "EC": -5,
-    "VE": -4, "BO": -4, "PY": -4, "CL": -3,
-    "BR": -3, "AR": -3, "UY": -3,
-    # Africa
-    "NG": 1, "MA": 1, "GH": 0, "ET": 3,
-}
 
+def _tz_modifier() -> str:
+    """SQLite datetime modifier for this machine's UTC offset, e.g. '+8 hours'.
 
-def _detect_tz_offset(conn) -> int:
-    """Return the UTC offset (hours) inferred from the most common conn_country.
-
-    Looks across all records with a non-NULL conn_country. Returns 0 (UTC) when
-    no country data is present or the country is not in the lookup table.
+    Same rule as `tzModifier()` in apps/tauri/src/lib/queries.ts, so the report
+    and the dashboard bucket plays into the same local days and hours.
     """
-    row = conn.execute(
-        "SELECT conn_country, COUNT(*) AS cnt "
-        "FROM listening_history WHERE conn_country IS NOT NULL "
-        "GROUP BY conn_country ORDER BY cnt DESC LIMIT 1"
-    ).fetchone()
-    if not row:
-        # if no records have a conn_country, default to UTC with no offset
-        logger.debug("No conn_country data found; defaulting to UTC with offset 0")
-        return 0
-    offset = _COUNTRY_UTC_OFFSET.get(row["conn_country"], 0)
-    return offset
-
-
-def _tz_modifier(offset: int) -> str:
-    """Return a SQLite datetime modifier string, e.g. '+8 hours' or '-5 hours'."""
-    return f"+{offset} hours" if offset >= 0 else f"{offset} hours"
+    offset = datetime.now().astimezone().utcoffset().total_seconds() / 3600
+    return f"{'+' if offset >= 0 else ''}{offset:g} hours"
 
 
 def get_listening_summary(
@@ -272,15 +221,12 @@ def _grouped_trend(
 
     conn = get_connection(db_path)
     try:
-        offset = _detect_tz_offset(conn)
-        tz_mod = _tz_modifier(offset)
-        rows = conn.execute(_sql(sql_name), (start_date, end_widened, tz_mod)).fetchall()
-        result = [
+        rows = conn.execute(_sql(sql_name), (start_date, end_widened, _tz_modifier())).fetchall()
+        return [
             {label_key: r["bucket"], "total_mins": r["total_mins"] or 0,
              "play_count": r["play_count"]}
             for r in rows
         ]
-        return result
     except Exception:
         logger.exception("_grouped_trend failed: db_path={} key={}", db_path, label_key)
         raise
@@ -315,7 +261,6 @@ def get_weekly_trend(
         List of {"week_label": "YYYY-MM-DD", "total_mins": int, "play_count": int},
         ordered by week ascending.
     """
-
     return _grouped_trend(db_path, start_date, end_date, "trend_weekly", "week_label")
 
 
@@ -340,9 +285,9 @@ def get_daily_activity_pattern(
 ) -> list[dict]:
     """Per-weekday, per-time-segment listening volume from history.db.
 
-    Timestamps are shifted to local time (offset inferred from conn_country)
-    before grouping. Time segments are local hour-of-day ranges 00:00-06:59,
-    07:00-12:59, 13:00-18:59, 19:00-23:59.
+    Timestamps are shifted to this machine's local time before grouping. Time
+    segments are local hour-of-day ranges 00:00-06:59, 07:00-12:59,
+    13:00-18:59, 19:00-23:59.
 
     Args:
         db_path: Path to history.db.
@@ -360,9 +305,7 @@ def get_daily_activity_pattern(
 
     conn = get_connection(db_path)
     try:
-        offset = _detect_tz_offset(conn)
-        tz_mod = _tz_modifier(offset)
-        rows = conn.execute(_sql("activity_pattern"), (start_date, end_widened, tz_mod)).fetchall()
+        rows = conn.execute(_sql("activity_pattern"), (start_date, end_widened, _tz_modifier())).fetchall()
         result = []
         for r in rows:
             dow = r["dow"]  # '0'..'6', 0 = Sunday

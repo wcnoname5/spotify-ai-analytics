@@ -30,11 +30,6 @@ def test_openai_missing_key_raises(monkeypatch):
         build_chat_model("openai", "gpt-5.4-mini")
 
 
-def test_anthropic_skeleton_raises():
-    with pytest.raises(NotImplementedError):
-        build_chat_model("anthropic", "claude-sonnet-4-6")
-
-
 def test_unknown_provider_raises():
     with pytest.raises(ValueError, match="Unknown LLM provider"):
         build_chat_model("groq", "whatever")

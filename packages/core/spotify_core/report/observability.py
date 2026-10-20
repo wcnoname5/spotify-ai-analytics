@@ -1,5 +1,4 @@
-"""Optional Langfuse tracing for the report agent.
-"""
+"""Optional Langfuse tracing for the report agent."""
 import uuid
 from contextlib import contextmanager
 
@@ -10,13 +9,12 @@ from loguru import logger
 def langfuse_session(style: str = "", period_type: str = ""):
     """Group one report run into a Langfuse session; yield the callbacks list.
 
-    A fresh UUID session_id is propagated to all childrens via `propagate_attributes`.
-     Yields [] when Langfuse is off.
+    A fresh UUID session_id is propagated to all children via `propagate_attributes`.
+    Yields [] when Langfuse is off.
     """
     from spotify_core.config import settings
 
     if not settings.langfuse_configured:
-        # silently skip tracing if no key configured
         yield []
         return
     try:

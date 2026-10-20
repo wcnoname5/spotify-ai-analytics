@@ -1,4 +1,3 @@
--- Hand-maintained since scripts/gen_d1_migration.py was retired. Keep in step with schema.sql.
 CREATE TABLE IF NOT EXISTS listening_history (
     id           TEXT PRIMARY KEY,
     track_id     TEXT NOT NULL,

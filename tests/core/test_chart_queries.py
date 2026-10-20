@@ -1,6 +1,12 @@
 """Tests for the dashboard chart queries in db/queries.py."""
-from spotify_core.db.migrations import init_history_db, get_connection
+import re
+import sqlite3
+
+import pytest
+
+from spotify_core.db import queries
 from spotify_core.db.queries import (
+    _tz_modifier,
     get_daily_activity_pattern,
     get_daily_trend,
     get_weekly_trend,
@@ -8,28 +14,27 @@ from spotify_core.db.queries import (
 )
 
 
-def _seed(db_path: str, rows: list[dict]) -> None:
-    """Insert minimal listening_history rows for chart-query tests."""
-    conn = get_connection(db_path)
-    with conn:
-        for r in rows:
-            conn.execute(
-                "INSERT OR IGNORE INTO listening_history "
-                "(id, track_id, track_name, artist_name, played_at, ms_played, source) "
-                "VALUES (?, ?, ?, ?, ?, ?, 'json_import')",
-                (
-                    r["id"], r.get("track_id", r["id"]),
-                    r.get("track_name", "T"), r.get("artist_name", "A"),
-                    r["played_at"], r["ms_played"],
-                ),
-            )
-    conn.close()
+@pytest.fixture(autouse=True)
+def _utc(monkeypatch):
+    """Pin local time to UTC so bucket assertions don't depend on the machine's zone."""
+    monkeypatch.setattr(queries, "_tz_modifier", lambda: "+0 hours")
 
 
-def test_daily_activity_pattern_buckets(tmp_path):
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed(db, [
+def test_tz_modifier_is_a_valid_sqlite_modifier():
+    mod = _tz_modifier()
+    assert re.fullmatch(r"[+-]\d+(\.\d+)? hours", mod)
+    with sqlite3.connect(":memory:") as conn:
+        assert conn.execute("SELECT datetime('2024-01-01T00:00:00Z', ?)", (mod,)).fetchone()[0]
+
+
+def test_buckets_follow_the_local_offset(history_db, monkeypatch):
+    db = history_db([{"id": "1", "played_at": "2024-01-08T20:00:00Z", "ms_played": 60_000}])
+    monkeypatch.setattr(queries, "_tz_modifier", lambda: "+8 hours")
+    assert get_daily_trend(db) == [{"date": "2024-01-09", "total_mins": 1, "play_count": 1}]
+
+
+def test_daily_activity_pattern_buckets(history_db):
+    db = history_db([
         {"id": "1", "played_at": "2024-01-08T03:00:00Z", "ms_played": 60_000},   # Monday, 00:00-06:59
         {"id": "2", "played_at": "2024-01-08T09:00:00Z", "ms_played": 120_000},  # Monday, 07:00-12:59
         {"id": "3", "played_at": "2024-01-14T20:00:00Z", "ms_played": 180_000},  # Sunday, 19:00-23:59
@@ -45,10 +50,8 @@ def test_daily_activity_pattern_buckets(tmp_path):
     assert sun["weekday_idx"] == 6
 
 
-def test_daily_activity_pattern_date_filter(tmp_path):
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed(db, [
+def test_daily_activity_pattern_date_filter(history_db):
+    db = history_db([
         {"id": "1", "played_at": "2024-01-08T03:00:00Z", "ms_played": 60_000},
         {"id": "2", "played_at": "2024-02-08T03:00:00Z", "ms_played": 60_000},
     ])
@@ -56,16 +59,12 @@ def test_daily_activity_pattern_date_filter(tmp_path):
     assert sum(r["total_mins"] for r in rows) == 1
 
 
-def test_daily_activity_pattern_empty_db(tmp_path):
-    db = str(tmp_path / "empty.db")
-    init_history_db(db)
-    assert get_daily_activity_pattern(db) == []
+def test_daily_activity_pattern_empty_db(history_db):
+    assert get_daily_activity_pattern(history_db()) == []
 
 
-def test_daily_trend(tmp_path):
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed(db, [
+def test_daily_trend(history_db):
+    db = history_db([
         {"id": "1", "played_at": "2024-01-08T03:00:00Z", "ms_played": 60_000},
         {"id": "2", "played_at": "2024-01-08T09:00:00Z", "ms_played": 120_000},
         {"id": "3", "played_at": "2024-01-09T09:00:00Z", "ms_played": 90_000},
@@ -77,10 +76,8 @@ def test_daily_trend(tmp_path):
     ]
 
 
-def test_daily_trend_date_filter(tmp_path):
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed(db, [
+def test_daily_trend_date_filter(history_db):
+    db = history_db([
         {"id": "1", "played_at": "2024-01-08T09:00:00Z", "ms_played": 60_000},
         {"id": "2", "played_at": "2024-02-08T09:00:00Z", "ms_played": 90_000},
     ])
@@ -88,16 +85,12 @@ def test_daily_trend_date_filter(tmp_path):
     assert rows == [{"date": "2024-01-08", "total_mins": 1, "play_count": 1}]
 
 
-def test_daily_trend_empty_db(tmp_path):
-    db = str(tmp_path / "empty.db")
-    init_history_db(db)
-    assert get_daily_trend(db) == []
+def test_daily_trend_empty_db(history_db):
+    assert get_daily_trend(history_db()) == []
 
 
-def test_weekly_trend(tmp_path):
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed(db, [
+def test_weekly_trend(history_db):
+    db = history_db([
         {"id": "1", "played_at": "2024-01-08T09:00:00Z", "ms_played": 60_000},
         {"id": "2", "played_at": "2024-02-08T09:00:00Z", "ms_played": 120_000},
     ])
@@ -108,16 +101,12 @@ def test_weekly_trend(tmp_path):
     assert {r["total_mins"] for r in rows} == {1, 2}
 
 
-def test_weekly_trend_empty_db(tmp_path):
-    db = str(tmp_path / "empty.db")
-    init_history_db(db)
-    assert get_weekly_trend(db) == []
+def test_weekly_trend_empty_db(history_db):
+    assert get_weekly_trend(history_db()) == []
 
 
-def test_monthly_trend(tmp_path):
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed(db, [
+def test_monthly_trend(history_db):
+    db = history_db([
         {"id": "1", "played_at": "2024-01-08T09:00:00Z", "ms_played": 60_000},
         {"id": "2", "played_at": "2024-01-20T09:00:00Z", "ms_played": 40_000},
         {"id": "3", "played_at": "2024-02-08T09:00:00Z", "ms_played": 120_000},
@@ -129,7 +118,5 @@ def test_monthly_trend(tmp_path):
     ]
 
 
-def test_monthly_trend_empty_db(tmp_path):
-    db = str(tmp_path / "empty.db")
-    init_history_db(db)
-    assert get_monthly_trend(db) == []
+def test_monthly_trend_empty_db(history_db):
+    assert get_monthly_trend(history_db()) == []

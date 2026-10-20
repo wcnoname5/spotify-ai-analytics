@@ -11,7 +11,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from .observability import langfuse_session
-from .prompts import report_system_prompt, report_struct
+from .prompts import report_system_prompt
 from .tools import make_report_tools
 
 # Hard cap that guarantees the agent terminates.
@@ -35,7 +35,7 @@ def generate_report(
         end_date: ISO "YYYY-MM-DD" range end.
         db_path: Path to history.db.
         model: The chat model that writes the article.
-        period_type: "weekly", "monthly", "quarterly", "yearly", or "custom".
+        period_type: "weekly", "monthly", or "quarterly".
 
     Raises:
         ModelCallLimitExceededError: The agent spent its whole call budget without
@@ -51,16 +51,13 @@ def generate_report(
     agent = create_agent(
         model,
         make_report_tools(db_path),
-        # raise error instead of return ToolMessage warning exceed tool calls
         middleware=[ModelCallLimitMiddleware(
             run_limit=_MAX_MODEL_CALLS, exit_behavior="error",
         )],
     )
 
     messages = [
-        SystemMessage(content=report_system_prompt(
-            playbook=report_struct(period_type), style=style,
-        )),
+        SystemMessage(content=report_system_prompt(style)),
         HumanMessage(content=(
             f"請分析使用者從 {start_date} 到 {end_date} 的歌曲聆聽資料，"
             f"依照系統提示的分析框架呼叫工具並寫出文章。"
@@ -81,7 +78,6 @@ def generate_report(
         "",
     )
     if not text:
-        # raise error instead of retunring half-written article
         raise RuntimeError(
             f"report agent produced no prose after {len(out)} messages "
             f"(model call limit is {_MAX_MODEL_CALLS})"

@@ -1,9 +1,7 @@
-"""Tests for db/queries.py SQL analytics layer (Stage 6)."""
+"""Tests for the db/queries.py SQL analytics layer."""
 import sqlite3
 import pytest
-from spotify_core.db.errors import HistoryDBError, HistoryNotInitializedError
-from spotify_core.db.migrations import init_history_db
-from spotify_core.db.migrations import get_connection
+from spotify_core.db.errors import HistoryNotInitializedError
 from spotify_core.db.queries import (
     get_top_artists,
     get_top_tracks,
@@ -11,31 +9,9 @@ from spotify_core.db.queries import (
 )
 
 
-def _seed_db(db_path: str, rows: list[dict]) -> None:
-    """Insert test rows into listening_history."""
-    conn = get_connection(db_path)
-    with conn:
-        for r in rows:
-            conn.execute(
-                "INSERT OR IGNORE INTO listening_history "
-                "(id, track_id, track_name, artist_name, album_name, played_at, ms_played, source, conn_country) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    r["id"], r.get("track_id", r["id"]),
-                    r.get("track_name"), r.get("artist_name"),
-                    r.get("album_name"), r["played_at"],
-                    r.get("ms_played"), r.get("source", "json_import"),
-                    r.get("conn_country"),
-                ),
-            )
-    conn.close()
-
-
 @pytest.fixture()
-def seeded_db(tmp_path):
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed_db(db, [
+def seeded_db(history_db):
+    return history_db([
         {"id": "1", "track_name": "Song A", "artist_name": "Artist X",
          "played_at": "2024-01-10T12:00:00Z", "ms_played": 200_000},
         {"id": "2", "track_name": "Song B", "artist_name": "Artist X",
@@ -46,7 +22,6 @@ def seeded_db(tmp_path):
          "track_id": "1",  # duplicate track_id — same track replayed
          "played_at": "2024-02-10T12:00:00Z", "ms_played": 200_000},
     ])
-    return db
 
 
 class TestGetTopArtists:
@@ -77,11 +52,8 @@ class TestGetTopArtists:
         assert "Artist Y" not in artists
         assert artists["Artist X"] == 5
 
-    def test_empty_db(self, tmp_path):
-        db = str(tmp_path / "empty.db")
-        init_history_db(db)
-        results = get_top_artists(db)
-        assert results == []
+    def test_empty_db(self, history_db):
+        assert get_top_artists(history_db()) == []
 
 
 class TestGetTopTracks:
@@ -101,10 +73,8 @@ class TestGetTopTracks:
         names = [r["track_name"] for r in results]
         assert "Song B" not in names  # Song B played Jan 11
 
-    def test_empty_db(self, tmp_path):
-        db = str(tmp_path / "empty.db")
-        init_history_db(db)
-        assert get_top_tracks(db) == []
+    def test_empty_db(self, history_db):
+        assert get_top_tracks(history_db()) == []
 
 
 class TestGetListeningSummary:
@@ -117,10 +87,8 @@ class TestGetListeningSummary:
         assert summary["earliest_played_at"] == "2024-01-10T12:00:00Z"
         assert summary["latest_played_at"] == "2024-02-10T12:00:00Z"
 
-    def test_empty_db(self, tmp_path):
-        db = str(tmp_path / "empty.db")
-        init_history_db(db)
-        summary = get_listening_summary(db)
+    def test_empty_db(self, history_db):
+        summary = get_listening_summary(history_db())
         assert summary["total_plays"] == 0
         assert summary["earliest_played_at"] is None
 
@@ -147,10 +115,8 @@ class TestGetListeningSummary:
         # All plays >= 150k ms — no skips
         assert summary["skip_rate"] == pytest.approx(0.0)
 
-    def test_skip_rate_with_short_plays(self, tmp_path):
-        db = str(tmp_path / "history.db")
-        init_history_db(db)
-        _seed_db(db, [
+    def test_skip_rate_with_short_plays(self, history_db):
+        db = history_db([
             {"id": "1", "track_name": "Full", "artist_name": "A",
              "played_at": "2024-01-10T12:00:00Z", "ms_played": 200_000},
             {"id": "2", "track_name": "Skip", "artist_name": "A",
@@ -170,9 +136,6 @@ class TestHistoryNotInitializedError:
     """Analytics queries should raise HistoryNotInitializedError when the DB
     file is missing or the listening_history table has not been created."""
 
-    def test_subclass_of_history_db_error(self):
-        assert issubclass(HistoryNotInitializedError, HistoryDBError)
-
     def test_missing_db_file_raises(self, tmp_path):
         db = str(tmp_path / "nope.db")
         with pytest.raises(HistoryNotInitializedError):
@@ -188,10 +151,3 @@ class TestHistoryNotInitializedError:
             get_top_tracks(db)
         with pytest.raises(HistoryNotInitializedError):
             get_listening_summary(db)
-
-    def test_initialized_empty_db_does_not_raise(self, tmp_path):
-        # Empty-but-initialized DB is a valid state — queries should return
-        # empty/None results, not raise HistoryNotInitializedError.
-        db = str(tmp_path / "empty.db")
-        init_history_db(db)
-        assert get_top_artists(db) == []

@@ -1,4 +1,3 @@
--- Copied from packages/core/spotify_core/db/sql/schema.sql (reports table).
 CREATE TABLE IF NOT EXISTS reports (
     id             TEXT PRIMARY KEY,           -- uuid4, minted by whoever saves; makes push idempotent
     style          TEXT NOT NULL,

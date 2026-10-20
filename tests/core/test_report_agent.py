@@ -4,7 +4,6 @@ import pytest
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain_core.messages import AIMessage
 
-from spotify_core.db.migrations import get_connection, init_history_db
 from spotify_core.report.agent import generate_report
 
 
@@ -16,24 +15,9 @@ def _disable_langfuse_tracing(monkeypatch):
     monkeypatch.setattr("spotify_core.config.settings.langfuse_base_url", None)
 
 
-def _seed(db_path, rows):
-    conn = get_connection(db_path)
-    with conn:
-        for r in rows:
-            conn.execute(
-                "INSERT OR IGNORE INTO listening_history "
-                "(id, track_id, track_name, artist_name, played_at, ms_played, source) "
-                "VALUES (?, ?, ?, ?, ?, ?, 'json_import')",
-                (r["id"], r["id"], "T", "A", r["played_at"], r["ms_played"]),
-            )
-    conn.close()
-
-
-def _history_db(tmp_path):
-    db = str(tmp_path / "history.db")
-    init_history_db(db)
-    _seed(db, [{"id": "1", "played_at": "2024-01-08T09:00:00Z", "ms_played": 60_000}])
-    return db
+@pytest.fixture
+def db(history_db):
+    return history_db([{"id": "1", "played_at": "2024-01-08T09:00:00Z", "ms_played": 60_000}])
 
 
 def _tool_call(call_id, name, args):
@@ -61,8 +45,7 @@ class FakeChatModel:
 _RANGE = {"start_date": "2024-01-01", "end_date": "2024-01-31"}
 
 
-def test_calls_tools_then_returns_the_article(tmp_path):
-    db = _history_db(tmp_path)
+def test_calls_tools_then_returns_the_article(db):
     model = FakeChatModel([
         AIMessage(content="", tool_calls=[
             _tool_call("c1", "get_top_artists", _RANGE)
@@ -74,10 +57,9 @@ def test_calls_tools_then_returns_the_article(tmp_path):
     ) == "# 收聽回顧\n你聽了 A。"
 
 
-def test_model_call_cap_fails_loudly(tmp_path):
+def test_model_call_cap_fails_loudly(db):
     """Burning the whole call budget without finishing the article is a failure, not
     a half-written report to salvage — the app would save whatever we returned."""
-    db = _history_db(tmp_path)
     model = FakeChatModel([
         AIMessage(content="草稿", tool_calls=[
             _tool_call(f"c{i}", "get_top_artists", _RANGE)
@@ -88,10 +70,9 @@ def test_model_call_cap_fails_loudly(tmp_path):
         generate_report(style="roast", db_path=db, model=model, **_RANGE)
 
 
-def test_no_prose_raises(tmp_path):
+def test_no_prose_raises(db):
     """An empty article must fail loudly — the CLI would otherwise print nothing
     and the caller would save an empty report row."""
-    db = _history_db(tmp_path)
     model = FakeChatModel([AIMessage(content="")])
     with pytest.raises(RuntimeError, match="no prose"):
         generate_report(style="roast", db_path=db, model=model, **_RANGE)

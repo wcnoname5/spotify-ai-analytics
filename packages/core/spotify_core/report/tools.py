@@ -1,4 +1,4 @@
-"""LangChain @tool wrappers around db/queries.py for the report drafter.
+"""LangChain @tool wrappers around db/queries.py for the report agent.
 
 make_report_tools(db_path) binds db_path via closure; the LLM only supplies the
 start_date / end_date arguments. Each tool's docstring is its LLM-facing
@@ -11,7 +11,7 @@ from ..db import queries
 
 
 def make_report_tools(db_path: str) -> list[BaseTool]:
-    """Build the drafter's data tools, each bound to db_path via closure."""
+    """Build the agent's data tools, each bound to db_path via closure."""
     @tool
     def get_listening_summary(start_date: str, end_date: str) -> dict:
         """Overall listening stats for the date range: total plays, listening
@@ -19,6 +19,7 @@ def make_report_tools(db_path: str) -> list[BaseTool]:
         return queries.get_listening_summary(
             db_path, start_date=start_date, end_date=end_date
         )
+
     @tool
     def get_top_artists(
         start_date: str,

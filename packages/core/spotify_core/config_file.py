@@ -9,24 +9,14 @@ Path rule, identical to config.rs:
     $SPOTIFY_CONFIG set -> that path
     otherwise           -> <platformdirs user_config_dir("spotify-mcp")>/config.json
 
-This replaced a `.env` file plus `pydantic-settings`' env_file loading. Two
-things made that wrong:
-
-- The location depended on a `DEV` key read from ``Path.cwd()/.env``, so which
-  config a process used depended on the directory it was launched from.
-- ``.env`` had two writers (a shell script and ``env_file.upsert``), which is
-  how the same key ended up with different values in two files.
-
 Writes are deliberately *not* implemented here: the app writes config, Python
-reads it. The one exception is the OAuth step, which still has to record
-SPOTIFY_USER_ID — see :func:`upsert`.
+reads it.
 """
 from __future__ import annotations
 
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 import platformdirs
 
@@ -55,29 +45,6 @@ def read() -> dict[str, str]:
     if not isinstance(data, dict):
         return {}
     return {str(k): str(v) for k, v in data.items() if v is not None}
-
-
-def read_key(key: str) -> Optional[str]:
-    """A single value, process env first, then the file. None when unset."""
-    val = os.environ.get(key)
-    if val is not None and val.strip():
-        return val.strip()
-    val = read().get(key)
-    return val.strip() if val and val.strip() else None
-
-
-def upsert(key: str, value: str) -> None:
-    """Set one key, leaving every other key (including unknown ones) untouched.
-
-    Only for values Python is the one to discover — SPOTIFY_USER_ID, which comes
-    back from Spotify during OAuth. Everything the *user* enters is written by
-    the app, so this stays a narrow exception rather than a second writer.
-    """
-    target = path()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    values = read()
-    values[key] = value
-    target.write_text(json.dumps(values, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def load_into_env() -> None:

@@ -1,6 +1,4 @@
-"""Prompt templates for the report agent.
-
-"""
+"""Prompt templates for the report agent."""
 
 _SHARED_RULES = """\
 你正在為使用者撰寫一篇個人歌曲聆聽分析文章。
@@ -58,28 +56,6 @@ _PERIOD_PLAYBOOK = """\
 """
 
 
-_CUSTOM_PLAYBOOK = """\
-分析範圍：使用者自訂區間，可能不對齊日曆邊界（週、月、季、年）。
-這是一份「彙總式」分析：只描繪這段區間本身的樣貌，不要與其他區間比較，也不要嘗試對齊到
-完整週/月/季。
-
-必要工具（缺一不可）：
-- `get_listening_summary(start_date, end_date)` — 整體量級
-- `get_top_artists(start_date, end_date)` — 主角藝人
-- `get_top_tracks(start_date, end_date)` — 主角曲目
-- `get_daily_activity_pattern(start_date, end_date)` — 時段與週幾習慣
-
-建議補充工具（可不呼叫）：
-- 一個趨勢工具（依上面的區間長度規則選擇）— 看區間內的節奏
-
-文章必須涵蓋的段落（順序可調，但都要寫到）：
-1. **量級總覽**：總播放、總時長、活躍天數；不需要與其他區間比較。
-2. **主角榜**：top artists + top tracks，量化各自撐起的比重。
-3. **行為節奏**：慣常活躍時段與星期幾；若有趨勢資料，指出區間內哪段時間聽得多/少。
-4. **收尾觀點**：用一句到一段話描繪這段區間的聆聽輪廓，必須有資料依據。
-"""
-
-
 _STYLE_VOICE: dict[str, str] = {
     "listening_review": (
         "語氣平衡、誠懇，像一篇用心的月報。客觀指出觀察，但不冷冰冰；"
@@ -92,13 +68,7 @@ _STYLE_VOICE: dict[str, str] = {
 }
 
 
-def report_struct(period_type: str) -> str:
-    """The analysis framework for this run.
-    """
-    return _CUSTOM_PLAYBOOK if period_type == "custom" else _PERIOD_PLAYBOOK
-
-
-def report_system_prompt(playbook: str, style: str) -> str:
+def report_system_prompt(style: str) -> str:
     """Compose the system prompt from shared rules, playbook, and style."""
     voice = _STYLE_VOICE[style]
-    return "\n\n".join([_SHARED_RULES, playbook, f"風格指引：{voice}"])
+    return "\n\n".join([_SHARED_RULES, _PERIOD_PLAYBOOK, f"風格指引：{voice}"])
