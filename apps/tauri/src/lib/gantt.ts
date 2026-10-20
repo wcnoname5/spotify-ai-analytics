@@ -132,6 +132,13 @@ export const colorOf = (slot: number, theme: Theme) => HUES[theme][slot];
 export const hhmm = (secs: number) =>
   `${String(Math.floor(secs / 3600) % 24).padStart(2, "0")}:${String(Math.floor(secs / 60) % 60).padStart(2, "0")}`;
 
+/**
+ * Seconds-into-day as a naive date string on 1970-01-01. Plotly runs *numbers*
+ * on a date axis through `new Date(ms)` in the viewer's timezone (cleanDate ->
+ * ms2DateTimeLocal), shifting everything by the UTC offset; strings stay naive.
+ */
+export const dayTime = (secs: number) => new Date(secs * 1000).toISOString().slice(0, 19).replace("T", " ");
+
 /** y is negated so the oldest day sits at the top — Plotly's y grows upward. */
 const laneY = (lane: number) => -lane;
 
@@ -143,10 +150,9 @@ export function ganttTraces(g: Gantt, theme: Theme) {
       return {
         type: "bar" as const,
         orientation: "h" as const,
-        // ms on a date axis: Plotly reads numbers as epoch ms in UTC, so day 0
-        // of 1970 stands in for "a day" and its ticks read as local wall time.
+        // 1970-01-01 stands in for "a day"; x is a duration in ms, base a dayTime.
         x: bars.map((b) => b.width * 1000),
-        base: bars.map((b) => b.base * 1000),
+        base: bars.map((b) => dayTime(b.base)),
         y: bars.map((b) => laneY(b.lane)),
         width: 0.62,
         marker: { color },
@@ -180,7 +186,7 @@ export function ganttLayout(g: Gantt, theme: Theme) {
     // Drag zooms time only (y is fixed); double-click resets to the full day.
     xaxis: {
       type: "date" as const,
-      range: [0, DAY_SECONDS * 1000],
+      range: [dayTime(0), dayTime(DAY_SECONDS)],
       tickformat: "%H:%M",
       gridcolor: grid,
       linecolor: axis,

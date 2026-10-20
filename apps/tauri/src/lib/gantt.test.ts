@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildGantt, windowDays, type TimelinePlay } from "./gantt";
+import { buildGantt, dayTime, windowDays, type TimelinePlay } from "./gantt";
 
 const play = (
   started_local: string,
@@ -21,6 +21,15 @@ describe("windowDays", () => {
     expect(windowDays(new Date(2026, 2, 2), 4)).toEqual([
       "2026-02-27", "2026-02-28", "2026-03-01", "2026-03-02",
     ]);
+  });
+});
+
+describe("dayTime", () => {
+  // Numbers on a Plotly date axis get shifted by the viewer's UTC offset;
+  // these naive strings must not depend on the timezone at all.
+  it("is a timezone-naive wall time on 1970-01-01", () => {
+    expect(dayTime(11 * 3600 + 35 * 60)).toBe("1970-01-01 11:35:00");
+    expect(dayTime(86_400)).toBe("1970-01-02 00:00:00");
   });
 });
 
