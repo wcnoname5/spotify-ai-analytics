@@ -1,7 +1,6 @@
 //! Standing up the user's own Cloudflare backend, over the REST API.
 //!
-//! This replaced `spotify-mcp cloud deploy`, which drove `npx wrangler`. 
-//! Since for user they don't need to install Node or pyhton 
+//! No wrangler: packaged users have neither Node nor Python.
 //!
 //! The Worker script is bundled at compile time (see build.rs) and embedded, so
 //! the only thing that leaves this machine is HTTPS to api.cloudflare.com.
@@ -366,7 +365,6 @@ pub struct DeployResult {
 /// `existing_token` is reused when present. Minting a new one on every deploy
 /// silently 401s every other machine pointing at this Worker, so rotation has to
 /// be something the user asks for.
-#[allow(clippy::too_many_arguments)]
 pub fn deploy(
     api_token: String,
     name: &str,

@@ -1,24 +1,5 @@
-export interface Env {
-  DB: D1Database;
-  AUTH_TOKEN: string;
-}
-
-interface TrackRow {
-  id: string;
-  track_id: string;
-  track_name?: string | null;
-  artist_name?: string | null;
-  album_name?: string | null;
-  played_at: string;
-  ms_played?: number | null;
-  source?: string | null;
-  platform?: string | null;
-  conn_country?: string | null;
-  reason_start?: string | null;
-  reason_end?: string | null;
-  shuffle?: number | null;
-  skipped?: number | null;
-}
+import type { TrackRow } from "../../packages/shared-ts/export";
+import type { Env } from "./index";
 
 const COLUMNS = [
   "id",
@@ -61,15 +42,14 @@ const ISO_RE = /^\d{4}-\d{2}-\d{2}T/;
 /**
  * Rows per page.
  *
- * This used to be unbounded. A user who imported a full Spotify export has
- * ~100k rows in D1, and `.all()` materialises the whole result set in Worker
- * memory (128 MB) before serialising it — so the first sync on a new machine
- * either OOMed the Worker or took minutes. 5000 rows is a few MB of JSON.
+ * A full Spotify export is ~100k rows, and `.all()` materialises the whole
+ * result set in Worker memory (128 MB) before serialising it. 5000 rows is a
+ * few MB of JSON.
  */
 const PAGE_SIZE = 5000;
 
 /**
- * GET /api/tracks?since=<iso>[&since_id=<id>] or ?from=<iso>&to=<iso>
+ * GET /api/tracks?since=<iso>[&since_id=<id>]
  *   -> { tracks: [...], next_since?: <iso>, next_id?: <id> }
  *
  * When `next_since` comes back there may be more; pass both cursor values to the
@@ -94,34 +74,21 @@ export async function handleGetTracks(
   const url = new URL(request.url);
   const since = url.searchParams.get("since");
   const sinceId = url.searchParams.get("since_id");
-  const from = url.searchParams.get("from");
-  const to = url.searchParams.get("to");
-
-  let statement;
-  if (since !== null) {
-    if (!ISO_RE.test(since)) return badRequest("Invalid 'since' (ISO-8601 expected)");
-    statement =
-      sinceId !== null
-        ? env.DB.prepare(
-            "SELECT * FROM listening_history " +
-              "WHERE played_at > ? OR (played_at = ? AND id > ?) " +
-              "ORDER BY played_at ASC, id ASC LIMIT ?"
-          ).bind(since, since, sinceId, PAGE_SIZE)
-        : env.DB.prepare(
-            "SELECT * FROM listening_history WHERE played_at >= ? " +
-              "ORDER BY played_at ASC, id ASC LIMIT ?"
-          ).bind(since, PAGE_SIZE);
-  } else if (from !== null && to !== null) {
-    if (!ISO_RE.test(from) || !ISO_RE.test(to)) {
-      return badRequest("Invalid 'from'/'to' (ISO-8601 expected)");
-    }
-    statement = env.DB.prepare(
-      "SELECT * FROM listening_history WHERE played_at >= ? AND played_at <= ? " +
-        "ORDER BY played_at ASC, id ASC LIMIT ?"
-    ).bind(from, to, PAGE_SIZE);
-  } else {
-    return badRequest("Provide 'since' or 'from'/'to' query params");
+  if (since === null || !ISO_RE.test(since)) {
+    return badRequest("Provide 'since' (ISO-8601)");
   }
+
+  const statement =
+    sinceId !== null
+      ? env.DB.prepare(
+          "SELECT * FROM listening_history " +
+            "WHERE played_at > ? OR (played_at = ? AND id > ?) " +
+            "ORDER BY played_at ASC, id ASC LIMIT ?"
+        ).bind(since, since, sinceId, PAGE_SIZE)
+      : env.DB.prepare(
+          "SELECT * FROM listening_history WHERE played_at >= ? " +
+            "ORDER BY played_at ASC, id ASC LIMIT ?"
+        ).bind(since, PAGE_SIZE);
 
   const { results } = await statement.all<{ played_at: string; id: string }>();
   const last = results.length === PAGE_SIZE ? results[results.length - 1] : undefined;

@@ -18,7 +18,6 @@ import {
   setConfig,
   type ConfiguredFlags,
   type DoctorReport,
-  type SetupStep,
 } from "./lib/config";
 import { authorizeSpotify } from "./lib/oauth";
 import { importHistory, syncRecentPlays } from "./lib/historyImport";
@@ -67,7 +66,7 @@ async function runDeploy(rotate: boolean) {
 
 const doctor = ref<DoctorReport | null>(null);
 const envFile = ref("");
-/** Which .env this session resolved to — empty unless it is a non-default one. */
+/** Which config file this session resolved to — empty unless it is a non-default one. */
 const envBadge = ref("");
 
 /** Reveals the dashboard and closes this window (Rust owns both windows). */
@@ -83,7 +82,7 @@ const configured = ref<ConfiguredFlags>({
 type Tracing = "none" | "langfuse";
 const tracing = ref<Tracing>("none");
 
-// Secrets are never read back into the form: `config get` reports only whether
+// Secrets are never read back into the form: getConfig() reports only whether
 // each is set. Blank therefore means "leave as-is", not "clear it".
 const form = reactive({
   SPOTIFY_CLIENT_ID: "",
@@ -98,10 +97,7 @@ const form = reactive({
 
 // keygen is not a step: it needs no decision from the user, so it runs
 // automatically (see refresh) rather than being something they must remember.
-//
-// `oauth` is not a SetupStep: SetupStep is the list of steps that still spawn
-// Python, and OAuth left it when the flow moved to lib/oauth.ts.
-type ManualStep = SetupStep | "oauth";
+type ManualStep = "oauth" | "import" | "sync";
 type StepState = { running: boolean; ok: boolean | null; output: string };
 const steps = reactive<Record<ManualStep, StepState>>({
   oauth: { running: false, ok: null, output: "" },
@@ -334,7 +330,6 @@ async function runStep(step: ManualStep) {
           </template>
           <li v-if="!hasLlm"><span class="pending">○</span> LLM API key (needed for reports)</li>
         </ul>
-        <p v-for="w in doctor?.warnings ?? []" :key="w" class="warn">{{ w }}</p>
       </div>
 
       <div v-if="need('client_id')" class="card">
@@ -455,7 +450,6 @@ async function runStep(step: ManualStep) {
             Re-uploads the Worker script — needed after an app update that changed it.
             Your D1 data, the URL and the token above all stay as they are.
           </p>
-          <!-- WIP: need to reformat UI -->
           <p class="hint">create one at <a href="https://dash.cloudflare.com" target="_blank">Cloudflare Dashboard</a> → API Tokens, Permissions: enable
             <code>[Account] [D1] [Edit]</code> and <code>[Account] [Workers Scripts] [Edit]</code>
           </p>
@@ -530,11 +524,6 @@ h3 { margin: 0;margin-bottom: 0.0rem; font-size: 1rem; }
 /* The global .card margin is sized for the dashboard; here the flex gap does it. */
 div.card {padding: 0.6rem 0.8rem; margin-bottom: 0.8rem; border: 1px solid var(--border);}
 .card { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.6rem 0.8rem; }
-.env-badge {
-  margin-right: auto; font-size: 0.7rem; font-family: monospace; color: var(--muted);
-  border: 1px solid var(--border); border-radius: 999px; padding: 0.15rem 0.5rem;
-  max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 .checks { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.3rem; }
 .ok { color: var(--series); font-weight: 700; }
 .pending { color: var(--muted); }

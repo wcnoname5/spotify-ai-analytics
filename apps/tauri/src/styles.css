@@ -231,10 +231,19 @@ details > summary {
   transition: opacity 0.15s;
 }
 
-footer {
-  margin-top: 2rem;
+/* Which config file a dev session resolved to (App header, Setup page). */
+.env-badge {
+  margin-right: auto;
+  font-size: 0.7rem;
+  font-family: monospace;
   color: var(--muted);
-  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .filters:has(.field) {

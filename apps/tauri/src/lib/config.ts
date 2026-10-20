@@ -1,11 +1,6 @@
 // Runtime config, read from the Rust side (src-tauri/src/config.rs), which owns
 // the config file and its path resolution.
 //
-// This used to spawn `uv run spotify-mcp config get` -- ~1.7s per read, and
-// impossible in a packaged build, which has no `uv` and no repo checkout. The
-// resolution rule is now a single environment variable (SPOTIFY_CONFIG), so
-// there is one implementation and it cannot depend on the launch directory.
-//
 // Changes written by setConfig apply on restart: rebuilding the DB handle and
 // sync client mid-session is not worth it for a value edited a few times ever.
 import { invoke } from "@tauri-apps/api/core";
@@ -58,7 +53,7 @@ const BROWSER_FALLBACK: AppConfig = {
 
 let configPromise: Promise<AppConfig> | null = null;
 
-/** Memoized runtime config. One spawn per app session. */
+/** Memoized runtime config. One read per app session. */
 export function getConfig(): Promise<AppConfig> {
   if (!configPromise) {
     configPromise = (async () => {
@@ -77,18 +72,16 @@ export function getConfig(): Promise<AppConfig> {
 }
 
 /**
- * Forget the memoized config, so the next getConfig() re-reads the .env.
+ * Forget the memoized config, so the next getConfig() re-reads the file.
  *
- * Required after anything that writes the .env from *outside* this module --
- * `cloud deploy` writes WORKER_URL/WORKER_AUTH_TOKEN from Python, and without
- * this the UI keeps serving the config captured at app start and never notices
- * the Worker exists.
+ * Required after anything that writes the config from Rust -- keygen and the
+ * cloud deploy -- or the UI keeps serving the config captured at app start.
  */
-export function invalidateConfig(): void {
+function invalidateConfig(): void {
   configPromise = null;
 }
 
-/** Upsert KEY=VALUE pairs into the resolved .env. Takes effect on restart. */
+/** Upsert KEY=VALUE pairs into the config file. Takes effect on restart. */
 export async function setConfig(values: Record<string, string>): Promise<void> {
   const pairs = Object.entries(values).map(([k, v]) => `${k}=${v}`);
   if (!pairs.length) return;
@@ -101,20 +94,11 @@ export async function setConfig(values: Record<string, string>): Promise<void> {
 export interface DoctorReport {
   ready: boolean;
   checks: Record<string, boolean>;
-  actions_needed: string[];
-  message: string;
-  warnings: string[];
 }
 
 /**
- * Environment readiness.
- *
- * This used to be a second ~1.7s Python spawn (`spotify-mcp doctor --json`).
- * The config-derived half now rides along in getConfig(); the two DB-derived
- * checks are queried here, through the SQLite handle the dashboard already has.
- *
- * `dbs_initialized` is gone as a check: getDb() applies the schema on open, so
- * it could only ever report true by the time anything could ask.
+ * Environment readiness: getConfig()'s config-derived checks plus the two that
+ * need the database or the Worker.
  */
 export async function runDoctor(): Promise<DoctorReport> {
   const cfg = await getConfig();
@@ -129,34 +113,11 @@ export async function runDoctor(): Promise<DoctorReport> {
     history_has_data: historyHasData,
   };
 
-  const actions_needed: string[] = [];
-  if (!checks.client_id) actions_needed.push("Enter your Spotify Client ID above.");
-  if (!checks.fernet_key) actions_needed.push("Generate an encryption key.");
-  if (!checks.tokens_valid) actions_needed.push("Authorize Spotify.");
-  // Non-blocking: an empty dashboard is a valid state to finish setup in, since
-  // the Spotify export takes days to arrive.
-  if (!checks.history_has_data) actions_needed.push("Import or fetch some listening history.");
-
-  const blocking = actions_needed.filter((a) => !a.startsWith("Import or fetch"));
-  return {
-    ready: blocking.length === 0,
-    checks,
-    actions_needed,
-    message: actions_needed.length ? `${actions_needed.length} action(s) required.` : "All set.",
-    // The old warnings were all about two .env files disagreeing. There is one
-    // config file now, at one resolved path, so the condition cannot arise.
-    warnings: [],
-  };
+  // history_has_data is not required: an empty dashboard is a valid state to
+  // finish setup in, since the Spotify export takes days to arrive.
+  const ready = !!(checks.client_id && checks.fernet_key && checks.tokens_valid);
+  return { ready, checks };
 }
-
-/**
- * The Setup page's actionable steps.
- *
- * None of them spawn Python any more: `oauth` is lib/oauth.ts, `import` is
- * lib/historyImport.ts, and `sync` is a Worker call. `runSetupStep` and the Rust
- * command behind it are gone with the last of them.
- */
-export type SetupStep = "import" | "sync";
 
 /**
  * Whether D1 already holds a token row for the configured user.
@@ -183,9 +144,9 @@ async function hasStoredTokens(cfg: AppConfig): Promise<boolean> {
 }
 
 /** Create TOKEN_ENCRYPT_KEY if absent. Never rotates an existing one. */
-export async function keygen(): Promise<{ created: boolean }> {
+export async function keygen(): Promise<void> {
   try {
-    return JSON.parse(await invoke<string>("keygen")) as { created: boolean };
+    await invoke("keygen");
   } finally {
     invalidateConfig();
   }

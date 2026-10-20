@@ -34,8 +34,8 @@ const error = ref("");
 interface captionInfo {
   analysisPeriod: string;
   generated_at: string;
-  model: string; // TODO: should be one of the MODELS[provider]
-  style: "listening_review" | "roast"; // TODO: in later it shouln't be hardcoded
+  model: string;
+  style: "listening_review" | "roast";
 }
 
 const saved = ref(false);
@@ -152,7 +152,6 @@ async function openReport(meta: ReportMeta) {
     analysisPeriod: `${meta.start_date} → ${meta.end_date}`,
     generated_at: meta.generated_at,
     model: meta.model,
-    // revision_count: meta.revision_count,
     style: meta.style as "listening_review" | "roast"
   };
   lastRun.value = {
@@ -251,7 +250,6 @@ async function removeReport(meta: ReportMeta) {
         <label class="field">
           <span>Style</span>
           <select v-model="filterStyle">
-            <!-- TODO: Add more options in the future as needed -->
             <option value="all">All</option>
             <option value="listening_review">Listening review</option>
             <option value="roast">Roast</option>

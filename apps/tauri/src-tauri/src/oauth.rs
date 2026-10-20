@@ -1,9 +1,7 @@
 //! The loopback half of the Spotify OAuth flow.
 //!
 //! Spotify redirects to `http://127.0.0.1:8888/callback?code=…&state=…` after the
-//! user authorizes, so something local has to be listening. That used to be
-//! Python's `http.server` inside `wizard/oauth_step.py`, reached by spawning
-//! `uv run spotify-mcp reauth`.
+//! user authorizes, so something local has to be listening.
 //!
 //! Only the listening happens here. Building the authorize URL, checking `state`,
 //! exchanging the code and encrypting the tokens are in TS

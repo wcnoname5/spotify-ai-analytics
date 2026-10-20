@@ -1,4 +1,4 @@
-import type { Env } from "./tracks";
+import type { Env } from "./index";
 
 export interface ReportRow {
   id: string;

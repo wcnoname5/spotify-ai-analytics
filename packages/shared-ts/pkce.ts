@@ -12,13 +12,8 @@ export const CALLBACK_PORT = 8888;
 export const redirectUri = (port: number = CALLBACK_PORT) =>
   `http://127.0.0.1:${port}/callback`;
 
-// first is for sync, others are legacies from MCP tools
-export const SCOPES = [
-  "user-read-recently-played",
-  "user-read-playback-state",
-  "user-modify-playback-state",
-  "user-read-currently-playing",
-].join(" ");
+// The cron reads recently-played; GET /v1/me (the user id) needs no scope.
+export const SCOPES = "user-read-recently-played";
 
 /** base64url without padding: what RFC 7636 specifies for both values. */
 function b64urlNoPad(bytes: Uint8Array): string {

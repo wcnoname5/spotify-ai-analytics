@@ -1,7 +1,5 @@
-// Spotify authorization, end to end, from the desktop app.
-//
-// This replaced `spotify-mcp reauth` (a spawned Python process running
-// `wizard/oauth_step.py`). The parts are split by what each layer can do:
+// Spotify authorization, end to end, from the desktop app. The parts are
+// split by what each layer can do:
 //
 //   Rust   — listens on 127.0.0.1:8888 and opens the browser (src-tauri/src/oauth.rs)
 //   shared — builds the authorize URL, exchanges the code, encrypts the tokens
@@ -97,18 +95,12 @@ export async function authorizeSpotify(): Promise<{ userId: string }> {
     );
   }
 
-  // The Worker cron reads SPOTIFY_USER_ID to find the row it just wrote.
+  // hasStoredTokens (lib/config.ts) looks the row up by this id.
   await invoke("set_config", { pairs: [`SPOTIFY_USER_ID=${userId}`] });
   return { userId };
 }
 
-/**
- * The authorizing account's Spotify id, used as the `spotify_tokens` primary key.
- *
- * Worth one extra call: the old flow keyed every row as "default", so a token
- * row and a configured SPOTIFY_USER_ID could disagree, and the only symptom was
- * a cron sync that silently found no tokens.
- */
+/** The authorizing account's Spotify id, used as the `spotify_tokens` primary key. */
 async function currentUserId(accessToken: string): Promise<string> {
   const res = await fetch("https://api.spotify.com/v1/me", {
     headers: { Authorization: `Bearer ${accessToken}` },

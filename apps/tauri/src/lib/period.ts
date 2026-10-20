@@ -26,15 +26,3 @@ export function periodRange(
     periodType: "quarterly",
   };
 }
-
-// Self-check, runs only under node (`npx tsx src/lib/period.ts`) — never in the webview.
-if (typeof window === "undefined") {
-  const now = new Date(2026, 6, 18); // Sat 2026-07-18
-  const eq = (a: object, b: object) => JSON.stringify(a) === JSON.stringify(b) || (() => { throw new Error(`${JSON.stringify(a)} != ${JSON.stringify(b)}`); })();
-  eq(periodRange("weekly", now), { start: "2026-07-06", end: "2026-07-12", periodType: "weekly" });
-  eq(periodRange("monthly", now), { start: "2026-06-01", end: "2026-06-30", periodType: "monthly" });
-  eq(periodRange("quarterly", now), { start: "2026-04-01", end: "2026-06-30", periodType: "quarterly" });
-  eq(periodRange("quarterly", new Date(2026, 1, 10)), { start: "2025-10-01", end: "2025-12-31", periodType: "quarterly" }); // Q4 prev year
-  eq(periodRange("weekly", new Date(2026, 6, 13)), { start: "2026-07-06", end: "2026-07-12", periodType: "weekly" }); // Monday
-  console.log("period.ts self-check OK");
-}

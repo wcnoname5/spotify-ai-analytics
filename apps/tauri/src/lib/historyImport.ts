@@ -1,11 +1,5 @@
-// Importing a Spotify data export into D1.
-//
-// This replaced `spotify-mcp import-history`, which read the export with Polars
-// (156 MB of dependencies to parse JSON) and wrote to the *local* SQLite. That
-// was backwards: local SQLite is a disposable mirror of D1, so an import that
-// only landed there was lost on any machine change.
-//
-// Rows go to the Worker; the normal startup sync pulls them back down.
+// Importing a Spotify data export into D1. Rows go to the Worker, not the local
+// SQLite (a disposable mirror of D1); the normal startup sync pulls them back down.
 import { fetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
 import { parseExportFile, type TrackRow } from "@shared/export";
@@ -106,10 +100,8 @@ const basename = (path: string) => path.split(/[\\/]/).pop() ?? path;
  *
  * Offered right after authorizing, because Spotify takes days to send the full
  * export and the hourly cron may be up to an hour away — otherwise a new user's
- * first sight of the dashboard is an empty one.
- *
- * This used to be `spotify-mcp sync`, which needed the Spotify tokens on this
- * machine. They live only in D1 now, so the Worker is the only thing that can.
+ * first sight of the dashboard is an empty one. The tokens live only in D1, so
+ * the Worker is the only thing that can do the fetching.
  */
 export async function syncRecentPlays(): Promise<{ inserted: number }> {
   const cfg = await getConfig();

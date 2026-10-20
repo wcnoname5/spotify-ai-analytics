@@ -3,13 +3,9 @@
 // this cron decrypts them with. See packages/shared-ts/README.md.
 import { fernetDecrypt, fernetEncrypt } from "../../packages/shared-ts/fernet";
 import { playRowId, playedAtIso } from "../../packages/shared-ts/rowid";
+import type { Env } from "./index";
+import { UPSERT_TOKEN_SQL } from "./tokens";
 import { INSERT_SQL } from "./tracks";
-
-export interface SyncEnv {
-  DB: D1Database;
-  SPOTIFY_CLIENT_ID: string;
-  TOKEN_ENCRYPT_KEY: string;
-}
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
 const RECENTLY_PLAYED_URL = "https://api.spotify.com/v1/me/player/recently-played";
@@ -22,10 +18,10 @@ interface RefreshResponse {
   scope?: string;
 }
 
-/** Python's token_store accepts isoformat (tz-aware, "+00:00" or "Z") or legacy naive "YYYY-MM-DD HH:MM:SS" (UTC). */
+/** New rows are `toISOString()`; older rows may be naive "YYYY-MM-DD HH:MM:SS" (UTC) or carry microseconds. */
 function parseExpiresAt(raw: string): number {
   let s = raw.includes("T") ? raw : raw.replace(" ", "T");
-  s = s.replace(/(\.\d{3})\d+/, "$1"); // Python microseconds -> ms for Date.parse
+  s = s.replace(/(\.\d{3})\d+/, "$1"); // microseconds -> ms for Date.parse
   if (!/Z$|[+-]\d{2}:\d{2}$/.test(s)) s += "Z";
   return Date.parse(s);
 }
@@ -34,7 +30,7 @@ function parseExpiresAt(raw: string): number {
  * anything else runs — Spotify rotates refresh tokens on use, and losing the
  * new one strands every later cron run in invalid_grant. */
 async function refreshAndStore(
-  env: SyncEnv,
+  env: Env,
   userId: string,
   refreshToken: string
 ): Promise<{ accessToken: string; refreshToken: string }> {
@@ -51,15 +47,7 @@ async function refreshAndStore(
   const tok = (await resp.json()) as RefreshResponse;
   const newRefresh = tok.refresh_token ?? refreshToken;
   const expiresAt = new Date(Date.now() + tok.expires_in * 1000).toISOString();
-  await env.DB.prepare(
-    `INSERT INTO spotify_tokens (user_id, access_token, refresh_token, expires_at, scopes)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       access_token = excluded.access_token,
-       refresh_token = excluded.refresh_token,
-       expires_at = excluded.expires_at,
-       scopes = excluded.scopes`
-  )
+  await env.DB.prepare(UPSERT_TOKEN_SQL)
     .bind(
       userId,
       await fernetEncrypt(tok.access_token, env.TOKEN_ENCRYPT_KEY),
@@ -82,7 +70,7 @@ interface ParsedRow {
   playedAtMs: number;
 }
 
-/** Port of pipeline.parse_api_item. The row id comes from shared-ts/rowid so a
+/** One recently-played item -> a listening_history row. The row id comes from shared-ts/rowid so a
  * play imported from the data export and the same play seen by this cron collide
  * on INSERT OR IGNORE instead of being counted twice. */
 async function parseApiItem(item: Record<string, any>): Promise<ParsedRow | null> {
@@ -109,7 +97,7 @@ export interface SyncResult {
   cursorMs: number;
 }
 
-export async function runSync(env: SyncEnv): Promise<SyncResult> {
+export async function runSync(env: Env): Promise<SyncResult> {
   // One deployment serves one Spotify account, and the deploy runs before OAuth
   // learns its id — so take the newest row rather than a configured user id.
   const row = await env.DB.prepare(

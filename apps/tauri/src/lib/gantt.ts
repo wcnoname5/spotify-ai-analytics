@@ -30,7 +30,7 @@ export interface Gantt {
 const DAY_SECONDS = 86_400;
 
 /** Hue slots to cycle through*/
-export const HUE_SLOTS = 8;
+const HUE_SLOTS = 8;
 
 export const localDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -125,11 +125,9 @@ const INK = {
 export type Theme = "light" | "dark";
 
 /** Row pitch in px — also what the chart's height is derived from. */
-export const ROW_PX = 22;
+const ROW_PX = 22;
 
-export const colorOf = (slot: number, theme: Theme) => HUES[theme][slot];
-
-export const hhmm = (secs: number) =>
+const hhmm = (secs: number) =>
   `${String(Math.floor(secs / 3600) % 24).padStart(2, "0")}:${String(Math.floor(secs / 60) % 60).padStart(2, "0")}`;
 
 /**

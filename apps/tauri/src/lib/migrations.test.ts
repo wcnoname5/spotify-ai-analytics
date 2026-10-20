@@ -8,6 +8,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import insertTrackSql from "@sql/insert_track.sql?raw";
 import { migrate, migrations, statements } from "./migrations";
 
 /** The subset of @tauri-apps/plugin-sql's Database that migrate() uses. */
@@ -56,6 +57,10 @@ describe("statements()", () => {
       CREATE TABLE b (y TEXT);
     `;
     expect(statements(sql)).toEqual(["CREATE TABLE a (x TEXT)", "CREATE TABLE b (y TEXT)"]);
+  });
+
+  it("handles the shared insert file without mangling it", () => {
+    expect(statements(insertTrackSql)).toHaveLength(1);
   });
 
   it("ignores trailing whitespace and empty statements", () => {

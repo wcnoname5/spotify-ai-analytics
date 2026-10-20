@@ -6,21 +6,18 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
-// ponytail: the report (pyhton) last spawn in the app, and dev-only by now.
-// consider a sidecar or migrate to JS if a report is needed to packaged to users.
+// ponytail: the app's last Python spawn. The Report tab is visible to everyone, so a
+// packaged user hitting this gets "failed to spawn 'uv'" — ship a sidecar or a JS
+// port before reports are meant for packaged users.
 const REPORT_CMD: &[&str] = &["uv", "run", "python", "-m", "spotify_core.report"];
 
 /// Repo root, resolved at *compile* time — so anything using this only works on
-/// the machine that built it. Reachable only from `generate_report` below, which
-/// is hidden outside a dev config; never from a path a packaged user can take.
+/// the machine that built it. Reachable only from `generate_report` below.
 fn repo_root() -> PathBuf {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
 /// Effective runtime config as a JSON string; the frontend parses it.
-///
-/// Reads the config file directly. This used to spawn `uv run spotify-mcp config
-/// get`, which cost ~1.7s on every call and could not work in a packaged build.
 #[tauri::command]
 fn get_config() -> Result<String, String> {
     serde_json::to_string(&config::read()).map_err(|e| e.to_string())
@@ -30,17 +27,15 @@ fn get_config() -> Result<String, String> {
 /// this build does not know about — are left untouched.
 /// Callers must tell the user changes apply on restart.
 #[tauri::command]
-fn set_config(pairs: Vec<String>) -> Result<String, String> {
-    let env_file = config::write(&pairs)?;
-    Ok(serde_json::json!({ "env_file": env_file, "written": pairs.len() }).to_string())
+fn set_config(pairs: Vec<String>) -> Result<(), String> {
+    config::write(&pairs)
 }
 
 /// Generate `TOKEN_ENCRYPT_KEY` if absent; never rotates an existing one.
 /// The key itself is not returned — it would land in the caller's log.
 #[tauri::command]
-fn keygen() -> Result<String, String> {
-    let created = config::ensure_fernet_key()?;
-    Ok(serde_json::json!({ "created": created }).to_string())
+fn keygen() -> Result<(), String> {
+    config::ensure_fernet_key().map(drop)
 }
 
 /// The Fernet key, for the frontend to encrypt tokens with before they are sent
@@ -71,10 +66,8 @@ async fn await_oauth_callback(authorize_url: String, port: u16) -> Result<String
 
 /// Stand up the user's Cloudflare backend, streaming progress to the Setup page.
 ///
-/// Calls Cloudflare's REST API directly (see cloudflare.rs). It used to spawn
-/// `spotify-mcp cloud deploy`, which drove `npx wrangler` — fine from a checkout,
-/// impossible for the external users this step exists for, who have neither
-/// Python nor Node.
+/// Calls Cloudflare's REST API directly (see cloudflare.rs): packaged users have
+/// neither Python nor Node.
 ///
 /// Progress goes out as `cloud-log` events rather than a return value: the deploy
 /// takes minutes and a button frozen that long reads as a hang.
@@ -185,12 +178,6 @@ async fn pick_history_folder() -> Result<Option<String>, String> {
     .await
     .map_err(|e| e.to_string())?
 }
-
-// `doctor` used to be a command here, spawning `spotify-mcp doctor --json`.
-// It is gone: the config-derived checks ride along in `get_config`'s `checks`
-// field (one file read instead of a second ~1.7s process), and the two
-// database-derived checks are composed in `lib/config.ts`, which already holds
-// an open SQLite handle for the dashboard.
 
 #[tauri::command]
 async fn generate_report(
@@ -344,7 +331,6 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             generate_report,
             export_report_md,

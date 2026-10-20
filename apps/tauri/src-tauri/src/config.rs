@@ -1,8 +1,5 @@
-//! Config storage: a flat JSON file, read and written here and nowhere else.
-//!
-//! This replaced a `.env` file that was read/written by Python and reached from
-//! Rust by spawning `uv run spotify-mcp config get` (~1.7s per read, and
-//! impossible in a packaged build, which has no `uv` and no repo checkout).
+//! Config storage: a flat JSON file, written here and nowhere else
+//! (`spotify_core/config_file.py` only reads it).
 //!
 //! # Where the file lives
 //!
@@ -15,11 +12,7 @@
 //!
 //! Development sets `SPOTIFY_CONFIG=./dev.config.json`; a packaged install never
 //! has the variable, so it always lands in the platform dir. The two cannot
-//! contaminate each other.
-//!
-//! The predecessor resolved this by reading a `DEV` key out of `Path.cwd()/.env`,
-//! so *which config a process used depended on the directory it was launched
-//! from* — the "twin .env" class of bug. Nothing here looks at the cwd.
+//! contaminate each other. Nothing here looks at the cwd.
 //!
 //! # Storage shape
 //!
@@ -37,8 +30,8 @@ use serde::Serialize;
 ///
 /// The segment really is repeated: platformdirs defaults `appauthor` to
 /// `appname` on Windows, giving `%LOCALAPPDATA%\spotify-mcp\spotify-mcp`. It is
-/// kept verbatim rather than tidied because the existing `.env` and `history.db`
-/// already live there, and `spotify_core/paths.py` still has to agree with this.
+/// kept verbatim rather than tidied because existing installs' `config.json` and
+/// `history.db` already live there, and `spotify_core/config_file.py` has to agree.
 const APP_DIRS: [&str; 2] = ["spotify-mcp", "spotify-mcp"];
 
 const CONFIG_FILE: &str = "config.json";
@@ -53,7 +46,7 @@ fn platform_config_dir() -> PathBuf {
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")));
 
     // A machine with neither variable is not a machine we can guess for; the cwd
-    // is at least somewhere writable, and doctor will report the odd path.
+    // is at least somewhere writable, and Setup shows the resolved path.
     base.unwrap_or_else(|| PathBuf::from("."))
         .join(APP_DIRS[0])
         .join(APP_DIRS[1])
@@ -114,7 +107,7 @@ fn save_values(values: &Values) -> Result<(), String> {
 
 fn get(values: &Values, key: &str) -> String {
     // Process env wins, so a shell can override any single key without editing
-    // the file — the one precedence rule the .env version had that is worth keeping.
+    // the file.
     std::env::var(key)
         .ok()
         .or_else(|| values.get(key).cloned())
@@ -161,9 +154,6 @@ pub struct AppConfig {
 /// Resolve `history.db`: an explicit `HISTORY_DB_PATH` wins, relative values
 /// resolve against the data dir (not the cwd, so the result does not depend on
 /// where the app was launched from), and absent means the default location.
-///
-/// This precedence is the only reason the old `config get` subcommand existed
-/// (`spotify_core/config.py`'s `resolve_path`). It lives here now.
 fn history_db_path(values: &Values) -> PathBuf {
     let raw = get(values, "HISTORY_DB_PATH");
     if raw.is_empty() {
@@ -256,7 +246,7 @@ pub fn fernet_key_value() -> Option<String> {
 
 /// Upsert `KEY=VALUE` pairs, leaving every other key (including ones this build
 /// does not know about) untouched.
-pub fn write(pairs: &[String]) -> Result<String, String> {
+pub fn write(pairs: &[String]) -> Result<(), String> {
     let mut values = load_values();
     for pair in pairs {
         let Some((key, value)) = pair.split_once('=') else {
@@ -270,8 +260,7 @@ pub fn write(pairs: &[String]) -> Result<String, String> {
         let value = if key == "WORKER_URL" { normalize_worker_url(value) } else { value.to_string() };
         values.insert(key.to_string(), value);
     }
-    save_values(&values)?;
-    Ok(config_path().display().to_string())
+    save_values(&values)
 }
 
 /// Add the scheme when missing and drop a trailing slash.
@@ -302,7 +291,7 @@ pub fn ensure_fernet_key() -> Result<bool, String> {
 }
 
 /// A Fernet key: 32 random bytes, base64url with padding — the format
-/// `cryptography.fernet.Fernet.generate_key()` produces and `worker/src/fernet.ts`
+/// `cryptography.fernet.Fernet.generate_key()` produces and `packages/shared-ts/fernet.ts`
 /// expects (first 16 bytes sign, last 16 encrypt).
 fn fernet_key() -> Result<String, String> {
     let mut bytes = [0u8; 32];

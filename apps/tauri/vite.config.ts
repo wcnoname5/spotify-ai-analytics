@@ -5,9 +5,9 @@ import vue from "@vitejs/plugin-vue";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
-// Config is no longer baked in at build time — the app reads it at runtime via
-// `spotify-mcp config get` (see src/lib/config.ts). That kept the auth token out
-// of the bundle and lets the Setup page change settings without a rebuild.
+// Config is read at runtime from the Rust side (see src/lib/config.ts), never
+// baked in at build time: that keeps the auth token out of the bundle and lets
+// the Setup page change settings without a rebuild.
 // https://vite.dev/config/
 export default defineConfig(async () => {
   return {

@@ -66,11 +66,8 @@ describe("buildAuthRequest", () => {
 
   it("requests only scopes the app uses", async () => {
     const scope = new URL((await buildAuthRequest("c")).url).searchParams.get("scope");
-    expect(scope).toContain("user-read-recently-played");
-    // Anything beyond playback + recently-played would be asking the user to
-    // approve capabilities that do not exist.
-    expect(scope).not.toContain("playlist");
-    expect(scope).not.toContain("user-follow");
+    // Anything more asks the user to approve capabilities nothing uses.
+    expect(scope).toBe("user-read-recently-played");
   });
 });
 

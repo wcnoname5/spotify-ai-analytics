@@ -6,7 +6,6 @@ import PlotChart from "./components/PlotChart.vue";
 import ReportPage from "./ReportPage.vue";
 import TimelinePage from "./TimelinePage.vue";
 import { getConfig } from "./lib/config";
-import { sampleRecentPlays, sampleStats } from "./lib/api";
 import { isTauri } from "./lib/db";
 import { syncOnStartup, syncReports } from "./lib/sync";
 import {
@@ -41,7 +40,7 @@ const page = ref<"dashboard" | "timeline" | "report">("dashboard");
 /** Setup now lives in its own window (Rust get-or-creates it). */
 const openSetup = () => invoke("open_setup_window").catch(console.error);
 
-/** Which .env this session resolved to — empty unless it is a non-default one. */
+/** Which config this session resolved to — empty unless it is a non-default one. */
 const envBadge = ref("");
 
 // The main window starts hidden. An unconfigured environment shows only the
@@ -53,7 +52,7 @@ onMounted(async () => {
   try {
     const cfg = await getConfig();
     configured = cfg.configured.client_id;
-   if (cfg.dev) envBadge.value = `DEV · ${cfg.env_file}`;
+    if (cfg.dev) envBadge.value = `DEV · ${cfg.env_file}`;
   } catch (e) {
     console.error("first-run check failed:", e);
   }
@@ -70,7 +69,6 @@ const today = new Date();
 const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 const maxDate = ref(todayStr); // latest played_at date, set on mount (Tauri only)
 const loading = ref(false);
-const usingSample = ref(false);
 const offlineNotice = ref<"unconfigured" | "error" | null>(null);
 const loadFailedNotice = ref(false);
 const loadFailedDetail = ref("");
@@ -146,7 +144,7 @@ async function loadFromDb(current: Range, previous: Range, isAll: boolean) {
     listeningSummary(current),
     topArtists(current, 20),
     topTracks(current, 20),
-    recentPlays(50, current.start, current.end), // TODO: support custom range for recent plays (currently only the last 50 plays, regardless of range)
+    recentPlays(50, current.start, current.end),
     trend(current, trendGranularity.value),
     playsByHour(current),
   ]);
@@ -159,28 +157,12 @@ async function loadFromDb(current: Range, previous: Range, isAll: boolean) {
   prevSummary.value = isAll ? null : await listeningSummary(previous);
 }
 
-function loadFromSample(current: Range, previous: Range, isAll: boolean) {
-  const data = sampleStats(current, 20, trendGranularity.value);
-  summary.value = data.summary;
-  artists.value = data.topArtists;
-  tracks.value = data.topTracks;
-  daily.value = data.dailyTrend;
-  hours.value = data.playsByHour;
-  recent.value = sampleRecentPlays(50);
-  prevSummary.value = isAll ? null : sampleStats(previous, 20, trendGranularity.value).summary;
-}
-
 async function load() {
+  if (!isTauri) return; // no local cache outside the desktop app
   loading.value = true;
   const { current, previous, isAll } = toRanges(range.value);
   try {
-    if (isTauri) {
-      usingSample.value = false;
-      await loadFromDb(current, previous, isAll);
-    } else {
-      usingSample.value = true;
-      loadFromSample(current, previous, isAll);
-    }
+    await loadFromDb(current, previous, isAll);
   } catch (e) {
     console.error("Failed to load dashboard data:", e);
     loadFailedNotice.value = true;
@@ -191,10 +173,9 @@ async function load() {
 }
 
 async function refreshTrend() {
+  if (!isTauri) return;
   const { current } = toRanges(range.value);
-  daily.value = usingSample.value
-    ? sampleStats(current, 20, trendGranularity.value).dailyTrend
-    : await trend(current, trendGranularity.value);
+  daily.value = await trend(current, trendGranularity.value);
 }
 
 onMounted(async () => {
@@ -341,18 +322,15 @@ const trendTraces = computed(() => [
     </div>
   </div>
 
-  <p v-if="usingSample && !loadFailedNotice" class="banner">
-    Showing <strong>sample data</strong> — the browser build always shows sample data. Run
-    <code>npm run tauri dev</code> for real data from the local cache.
+  <p v-if="!isTauri" class="banner">
+    The dashboard is only available in the desktop app (<code>npm run tauri dev</code>).
   </p>
   <p v-if="loadFailedNotice" class="banner">
-    Could not load real data — showing <strong>sample data</strong> instead. Check the console for
-    details.
+    Could not load data from the local cache. Check the console for details.
     <code v-if="loadFailedDetail">{{ loadFailedDetail }}</code>
   </p>
   <p v-if="offlineNotice === 'unconfigured'" class="banner">
-    Data not synced — no Worker configured. Set WORKER_URL / WORKER_AUTH_TOKEN in the repo root
-    .env and restart the dev server.
+    Data not synced — no Worker configured. Set one up in Setup (⚙) → Cloud sync.
   </p>
   <p v-if="offlineNotice === 'error'" class="banner">
     Data not synced (sync failed) — showing last cached data.
@@ -453,10 +431,4 @@ const trendTraces = computed(() => [
 <style scoped>
 .app-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .gear { font-size: 1.15rem; line-height: 1; padding: 0.3rem 0.55rem; }
-/* Which .env this session resolved to — the twin-.env question, answered on screen. */
-.env-badge {
-  margin-right: auto; font-size: 0.7rem; font-family: monospace; color: var(--muted);
-  border: 1px solid var(--border); border-radius: 999px; padding: 0.15rem 0.5rem;
-  max-width: 28rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 </style>

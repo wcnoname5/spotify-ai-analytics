@@ -1,6 +1,4 @@
-export interface Env {
-  AUTH_TOKEN: string;
-}
+import type { Env } from "./index";
 
 /**
  * Guards a request with a static Bearer token.

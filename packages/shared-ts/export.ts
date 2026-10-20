@@ -2,9 +2,7 @@
 //
 // The export is a folder of `Streaming_History_Audio_*.json`, each an array of
 // records with different field names from the Web API's recently-played
-// response — `ts` not `played_at`, `spotify_track_uri` not `track.uri`. This
-// replaced the Polars + Pydantic path in `packages/dataloader`, which pulled in
-// 156 MB of dependencies to read JSON.
+// response — `ts` not `played_at`, `spotify_track_uri` not `track.uri`.
 //
 // The row id comes from shared-ts/rowid, so a play that appears in both the
 // export and the API collides on INSERT OR IGNORE rather than being counted
@@ -29,22 +27,23 @@ export interface ExportRecord {
   skipped?: boolean | null;
 }
 
-/** A row shaped for `POST /api/tracks`. Matches worker/src/tracks.ts's TrackRow. */
+/** A listening_history row on the wire: `POST /api/tracks` in, `GET /api/tracks`
+ *  out. Optional because the Worker requires only id, track_id and played_at. */
 export interface TrackRow {
   id: string;
   track_id: string;
-  track_name: string | null;
-  artist_name: string | null;
-  album_name: string | null;
-  played_at: string;
-  ms_played: number | null;
-  source: "json_import";
-  platform: string | null;
-  conn_country: string | null;
-  reason_start: string | null;
-  reason_end: string | null;
-  shuffle: number | null;
-  skipped: number | null;
+  track_name?: string | null;
+  artist_name?: string | null;
+  album_name?: string | null;
+  played_at: string; // ISO-8601 UTC
+  ms_played?: number | null;
+  source?: string | null;
+  platform?: string | null;
+  conn_country?: string | null;
+  reason_start?: string | null;
+  reason_end?: string | null;
+  shuffle?: number | null;
+  skipped?: number | null;
 }
 
 /** SQLite has no boolean type; the column is INTEGER, as Python's int() gave. */

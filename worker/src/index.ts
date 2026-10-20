@@ -4,12 +4,7 @@ import {
   handleGetTracksCount,
   handlePostTracks,
 } from "./tracks";
-import {
-  handleGetCursor,
-  handleGetTokens,
-  handlePostCursor,
-  handlePostTokens,
-} from "./tokens";
+import { handleGetTokens, handlePostTokens } from "./tokens";
 import { handleDeleteReport, handleGetReports, handlePostReport } from "./reports";
 import { runSync } from "./sync";
 
@@ -54,16 +49,9 @@ export default {
     if (pathname === "/api/tokens" && method === "POST") {
       return handlePostTokens(request, env);
     }
-    if (pathname === "/api/cursor" && method === "GET") {
-      return handleGetCursor(request, env);
-    }
-    if (pathname === "/api/cursor" && method === "POST") {
-      return handlePostCursor(request, env);
-    }
     // The same work the hourly cron does, on demand. The app offers it right
     // after authorizing so a new user is not looking at an empty dashboard until
-    // the next tick. It replaced a local `spotify-mcp sync`, which needed a copy
-    // of the tokens on the user's machine.
+    // the next tick.
     if (pathname === "/api/sync" && method === "POST") {
       try {
         return Response.json(await runSync(env));

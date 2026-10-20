@@ -1,13 +1,6 @@
-// Schema versioning for the local SQLite cache.
-//
-// Before this, db.ts re-ran `schema.sql`'s `CREATE TABLE IF NOT EXISTS` on every
-// open. That works exactly once: it creates a missing database and then does
-// nothing forever. Ship a v1.1 that adds a column and every already-installed
-// user keeps the v1 schema, silently, because IF NOT EXISTS has no opinion about
-// tables that exist but are wrong.
-//
-// `PRAGMA user_version` is a 4-byte integer SQLite stores in the database header.
-// It costs no table, no bookkeeping, and it is the standard way to do this.
+// Schema versioning for the local SQLite cache, tracked in `PRAGMA user_version`
+// (a 4-byte integer in the database header). `CREATE TABLE IF NOT EXISTS` alone
+// would never upgrade a table that exists but is out of date.
 //
 // The migrations are the same numbered files applied to D1
 // (packages/core/spotify_core/db/sql/migrations/), so local and remote cannot

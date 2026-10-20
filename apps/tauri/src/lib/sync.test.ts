@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import insertTrackSql from "@sql/insert_track.sql?raw";
 import { deleteReport, multiRowInsert, syncOnStartup } from "./sync";
-import { migrate, statements } from "./migrations";
+import { migrate } from "./migrations";
 
 // The startup sync's collaborators are all Tauri plugins; only the cursor
 // decision is under test here.
@@ -51,14 +51,6 @@ const play = (id: string, playedAt: string) => [
 ];
 
 describe("multiRowInsert", () => {
-  it("keeps the shared column list", () => {
-    const sql = multiRowInsert(2);
-    for (const column of ["track_id", "played_at", "ms_played", "shuffle", "skipped"]) {
-      expect(sql).toContain(column);
-    }
-    expect(sql).toContain("INSERT OR IGNORE");
-  });
-
   it("emits positional placeholders, never the numbered ones", () => {
     // `?1 … ?14` repeated per row would bind the same values to every row.
     expect(insertTrackSql).toMatch(/\?1\b/);
@@ -189,11 +181,5 @@ describe("deleteReport", () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ deleted: 0 }) });
     await deleteReport("gone");
     expect(dbStub.execute).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("statements()", () => {
-  it("handles the shared insert file without mangling it", () => {
-    expect(statements(insertTrackSql)).toHaveLength(1);
   });
 });

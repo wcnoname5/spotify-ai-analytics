@@ -1,16 +1,12 @@
 [package]
 name = "spotify-analytics"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Personal Spotify listening analytics"
+authors = ["wcnoname5"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+# `_lib` keeps the lib name distinct from the bin's (rust-lang/cargo#8519).
 name = "spotify_analytics_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -29,7 +25,6 @@ tauri-plugin-http = "2.5.9"
 # Leaving it out of the first release means every later update is a manual
 # reinstall, forever.
 tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
 rfd = "0.15"
 # Only for the Fernet key in config.rs. A full crypto crate would be a heavier
 # dependency for one call to the OS RNG.

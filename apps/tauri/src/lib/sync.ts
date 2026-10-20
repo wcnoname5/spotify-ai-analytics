@@ -11,7 +11,7 @@ import { fetch } from "@tauri-apps/plugin-http";
 import { getDb } from "./db";
 import { getConfig } from "./config";
 import { deleteReportLocal } from "./queries";
-import type { TrackRow } from "./api";
+import type { TrackRow } from "@shared/export";
 
 const EPOCH = "1970-01-01T00:00:00Z";
 
