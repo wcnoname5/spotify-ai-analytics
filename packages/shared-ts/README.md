@@ -7,12 +7,14 @@ must not exist twice.
 | module | why it is shared |
 |---|---|
 | `fernet.ts` | The Worker cron decrypts tokens the desktop app encrypted. A second implementation that disagreed by one byte would produce tokens one side cannot read — and the failure would surface hours later, in a cron run. |
+| `rowid.ts` | `listening_history.id`. The cron and an export import must compute the same id for the same play, or every chart counts it twice. |
+| `export.ts` | Spotify data-export parsing (frontend only), built on `rowid.ts` so imported rows dedupe against cron rows. |
 | `pkce.ts` | Only the desktop app needs it today. It lives here because it is the other half of the same OAuth flow, and splitting the flow across two conventions is how the halves drift. |
 
 ## How each side imports it
 
-- **Worker**: relative import (`../../packages/shared-ts/fernet`). Wrangler's
-  bundler follows it; there is no build step to configure.
+- **Worker**: relative import (`../../packages/shared-ts/fernet`). `apps/tauri/src-tauri/build.rs`
+  bundles it with esbuild; there is no alias to configure.
 - **Frontend**: the `@shared` alias in `apps/tauri/vite.config.ts`, mirrored in
   `tsconfig.json` `paths` so `vue-tsc` agrees with Vite.
 

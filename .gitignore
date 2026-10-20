@@ -222,7 +222,7 @@ __marimo__/
 
 # Git worktrees
 .worktrees/
-.claude/worktrees/
+.claude/
 
 # Project specific
 # Vector database and user data

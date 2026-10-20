@@ -38,7 +38,7 @@ You do not need Python, Node, or any developer tooling installed.
 
 The app uses it once to deploy, then discards it. It is never written to disk.
 
-**(Highly Recommendded) Your Spotify data export:** Spotify will email you your full listening
+**(Highly recommended) Your Spotify data export:** Spotify will email you your full listening
 history if you request it under *Privacy Settings → Download your data* (it takes a few days).
 Import it and your charts go back years instead of starting from today.
 
@@ -62,11 +62,10 @@ because your database is the only place tokens are allowed to live.
   activity patterns by hour, and totals for any date range.
 - **Hourly sync that runs without you.** Your worker collects plays on a schedule, so
   closing the app for a week costs you nothing.
-- **AI listening reports** *(optional)* — a weekly, monthly, or quarterly writeup of
-  what you've been listening to, generated with Gemini or OpenAI. Add an API key in
-  Setup to enable it. Reports are saved and can be re-read or exported as Markdown.
-
-The app updates itself when a new release is published.
+- **AI listening reports** *(preview, developers only)* — a weekly, monthly, or quarterly
+  writeup generated with Gemini or OpenAI. Generating one still needs a source checkout
+  with `uv` (see Development); the installer cannot run it yet. Reports are saved and
+  can be re-read or exported as Markdown.
 
 ---
 
@@ -80,7 +79,7 @@ cd apps/tauri && npm install
 ```
 
 Then set `SPOTIFY_CONFIG` in the same shell — it keeps dev data out of your real
-install, and it is what enables dev-only UI:
+install:
 
 ```powershell
 $env:SPOTIFY_CONFIG="./dev.config.json"   # PowerShell
@@ -109,7 +108,7 @@ uv run pytest                          # Python
 
 **Read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before changing anything** — it
 covers the system boundaries and, more importantly, the invariants that previous bugs
-were made of. [`CLAUDE.md`](CLAUDE.md) has the working conventions.
+were made of. [`AGENTS.md`](AGENTS.md) has the working conventions.
 
 ---
 

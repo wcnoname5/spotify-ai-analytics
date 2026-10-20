@@ -94,7 +94,7 @@ implemented twice and drifting:
 
 | Where | Alias | Covers | Shared by |
 |---|---|---|---|
-| `packages/shared-ts/` | `@shared` | Fernet, PKCE, `listening_history.id`, export parsing | Worker + frontend |
+| `packages/shared-ts/` | `@shared` (frontend; the Worker imports by relative path) | Fernet, PKCE, `listening_history.id`, export parsing | Worker (Fernet, id) + frontend |
 | `packages/core/spotify_core/db/sql/` | `@sql` | migrations, analytics SQL | frontend + Python |
 
 `shared-ts` is web-standard APIs only — the same code runs in a Worker isolate and a
@@ -105,8 +105,8 @@ WebView. Config is the third such rule, split by direction: `config.rs` writes,
 repo root resolves at *compile* time, so it only runs on the machine that built the
 binary — it is the only surviving Python. It reads the cache and never writes it;
 Rust passes `--db`, so the path rule stays in `config.rs`. The old MCP server (and the Python Spotify
-client behind it) was removed on the `migrate-TS` branch; it is recoverable from the
-`mcp-python-archive` git tag, and any future version will likely be TypeScript.
+client behind it) was removed in `7e6e09b`; it is recoverable from that commit's
+parent, and any future version will likely be TypeScript.
 
 ## Data flow: one play to a chart
 
@@ -142,7 +142,7 @@ Each came from a real bug. Where a test enforces it, the test is the authority.
 
 | Rule | Why | Test |
 |---|---|---|
-| One implementation of `listening_history.id` | Two meant the same play, via cron and via export, counted twice in every chart | ✅ `rowid.test.ts` |
+| One implementation of `listening_history.id` | Two meant the same play, via cron and via export, counted twice in every chart | ✅ `export.test.ts` |
 | Every ingress is `INSERT OR IGNORE` on that hash | Makes re-import and re-sync consequence-free — why no "did I already import this?" state exists anywhere | ✅ `sync.test.ts` |
 | Pull cursor is `(played_at, id)`, never `played_at` | Two plays in the same second across a page boundary were skipped **permanently** | ❌ Worker untested by choice |
 | Startup compares row counts, not just the cursor | The cursor only moves forward, so rows *older* than local max never arrive — exactly what "fetch 50 now, import the export next week" produces | ✅ `sync.test.ts` |
@@ -198,8 +198,8 @@ sidecar and a LangGraph.js rewrite open. **How reports ship is undecided.**
 |---|---|
 | Keychain | `TOKEN_ENCRYPT_KEY` is plaintext in `config.json` |
 | macOS | `rfd` needs the main thread there; `lib.rs` is marked |
-| Shipping reports | v1 is dashboard-only |
-| MCP | Removed on `migrate-TS` (see `mcp-python-archive` tag); may return later, likely in TS |
+| Shipping reports | The Report tab is visible to everyone but only works from a checkout (it spawns `uv`) |
+| MCP | Removed in `7e6e09b`; may return later, likely in TS |
 | Report tombstones | A second machine keeps a stale local row, but never pushes it back, so D1 stays correct |
 | Export/API field merge | Both `INSERT OR IGNORE`, first writer wins. Affects `ms_played`/`platform`/`skipped` richness only, never a chart number |
 
@@ -210,11 +210,12 @@ sidecar and a LangGraph.js rewrite open. **How reports ship is undecided.**
 ```bash
 git ls-files packages/shared-ts packages/core/spotify_core/db/sql   # the shared set
 grep -n "pathname ===" worker/src/index.ts                          # the real routes
-grep -n "crons" worker/wrangler.toml                                # the cron schedule
+grep -n "const CRON" apps/tauri/src-tauri/src/cloudflare.rs        # the cron schedule
 grep -rn "CREATE TABLE" packages/core/spotify_core/db/sql/migrations/
 grep -n "generate_handler!" -A 20 apps/tauri/src-tauri/src/lib.rs   # Rust's surface
 cd apps/tauri && npm test                                           # the invariants above
+cd apps/tauri/src-tauri && cargo test                               # ensure_fernet_key
 ```
 
-Conventions are in `CLAUDE.md`. Release and E2E procedures are in `shipping-v1.md`,
+Conventions are in `AGENTS.md`. Release and E2E procedures are in `shipping-v1.md`,
 which is temporary.
