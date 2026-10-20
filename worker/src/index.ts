@@ -18,7 +18,6 @@ export interface Env {
   AUTH_TOKEN: string;
   SPOTIFY_CLIENT_ID: string;
   TOKEN_ENCRYPT_KEY: string;
-  SPOTIFY_USER_ID?: string;
 }
 
 export default {

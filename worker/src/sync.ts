@@ -9,7 +9,6 @@ export interface SyncEnv {
   DB: D1Database;
   SPOTIFY_CLIENT_ID: string;
   TOKEN_ENCRYPT_KEY: string;
-  SPOTIFY_USER_ID?: string;
 }
 
 const TOKEN_URL = "https://accounts.spotify.com/api/token";
@@ -111,13 +110,13 @@ export interface SyncResult {
 }
 
 export async function runSync(env: SyncEnv): Promise<SyncResult> {
-  const userId = env.SPOTIFY_USER_ID ?? "default";
+  // One deployment serves one Spotify account, and the deploy runs before OAuth
+  // learns its id — so take the newest row rather than a configured user id.
   const row = await env.DB.prepare(
-    "SELECT access_token, refresh_token, expires_at FROM spotify_tokens WHERE user_id = ?"
-  )
-    .bind(userId)
-    .first<{ access_token: string; refresh_token: string; expires_at: string }>();
-  if (!row) throw new Error(`No token row for user '${userId}' — run spotify-mcp reauth + spotify-mcp cloud seed`);
+    "SELECT user_id, access_token, refresh_token, expires_at FROM spotify_tokens ORDER BY rowid DESC LIMIT 1"
+  ).first<{ user_id: string; access_token: string; refresh_token: string; expires_at: string }>();
+  if (!row) throw new Error("No Spotify tokens in D1 — run Setup → Authorize Spotify");
+  const userId = row.user_id;
 
   let accessToken = await fernetDecrypt(row.access_token, env.TOKEN_ENCRYPT_KEY);
   let refreshToken = await fernetDecrypt(row.refresh_token, env.TOKEN_ENCRYPT_KEY);
